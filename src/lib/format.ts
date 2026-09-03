@@ -1,33 +1,33 @@
-// Formatting helpers — Indonesian locale, Rupiah currency
+// Formatting helpers — Indonesian locale, Rupiah currency.
+// Grouping/decimal symbols are hardcoded ("." thousands, "," decimals) instead
+// of relying on Intl.NumberFormat: ICU versions disagree on currency symbol
+// spacing ("Rp150.000" vs "Rp 150.000") and this keeps output deterministic
+// across runtimes (bun tests, CI, browsers).
 
-const rupiahFormatter = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-  maximumFractionDigits: 0,
-})
-
-const plainNumberFormatter = new Intl.NumberFormat("id-ID", {
-  maximumFractionDigits: 0,
-})
-
-export function formatRupiah(amount: number): string {
-  return rupiahFormatter.format(amount)
+function formatIdNumber(value: number, maxFractionDigits = 0): string {
+  const rounded = Number(value.toFixed(maxFractionDigits))
+  const [intPart, decPart] = String(rounded).split(".")
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+  return decPart ? `${grouped},${decPart}` : grouped
 }
 
-/** "+Rp40.000.000" / "-Rp3.000.000" */
+export function formatRupiah(amount: number): string {
+  return `Rp${formatIdNumber(amount)}`
+}
+
 export function formatSignedRupiah(amount: number): string {
-  const sign = amount > 0 ? "+" : ""
-  return `${sign}${rupiahFormatter.format(amount)}`
+  const sign = amount > 0 ? "+" : amount < 0 ? "-" : ""
+  return `${sign}Rp${formatIdNumber(Math.abs(amount))}`
 }
 
 /** Compact display: Rp45M style used in PRD examples (§34–35) → "Rp45 jt" */
 export function formatCompactRupiah(amount: number): string {
   const abs = Math.abs(amount)
   const sign = amount < 0 ? "-" : ""
-  if (abs >= 1_000_000_000) return `${sign}Rp${trim(plainNumberFormatter.format(round(abs / 1_000_000_000, 1)))} M`
-  if (abs >= 1_000_000) return `${sign}Rp${trim(plainNumberFormatter.format(round(abs / 1_000_000, 1)))} jt`
-  if (abs >= 1_000) return `${sign}Rp${plainNumberFormatter.format(round(abs / 1_000, 0))} rb`
-  return `${sign}Rp${plainNumberFormatter.format(abs)}`
+  if (abs >= 1_000_000_000) return `${sign}Rp${trim(formatIdNumber(round(abs / 1_000_000_000, 1), 1))} M`
+  if (abs >= 1_000_000) return `${sign}Rp${trim(formatIdNumber(round(abs / 1_000_000, 1), 1))} jt`
+  if (abs >= 1_000) return `${sign}Rp${formatIdNumber(round(abs / 1_000, 0))} rb`
+  return `${sign}Rp${formatIdNumber(abs)}`
 }
 
 function round(value: number, digits: number) {
@@ -50,7 +50,7 @@ export function parseAmountInput(value: string): number {
 /** Format while typing: "1500000" → "1.500.000" */
 export function formatNumberInput(value: number | string): string {
   const parsed = typeof value === "number" ? value : parseAmountInput(value)
-  return parsed === 0 ? "" : plainNumberFormatter.format(parsed)
+  return parsed === 0 ? "" : formatIdNumber(parsed)
 }
 
 /** Alias used by the custom fields */
