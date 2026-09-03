@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- router config module, not a component file */
 import { lazy } from "react"
 import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 

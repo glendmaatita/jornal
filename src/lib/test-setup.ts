@@ -5,8 +5,9 @@ import { appendFileSync } from "node:fs"
 const memoryStorage = new Map<string, string>()
 
 const storeCallbackLog = process.env.STORE_CALLBACK_LOG ?? ""
-const wrapArrayMethod = <K extends keyof Array<any>>(name: K) => {
-  const original = Array.prototype[name] as unknown as Function
+type ArrayCallbackMethod = "map" | "filter" | "find" | "findIndex" | "some"
+const wrapArrayMethod = (name: ArrayCallbackMethod) => {
+  const original = Array.prototype[name] as unknown as (...args: unknown[]) => unknown
   Object.defineProperty(Array.prototype, name, {
     configurable: true,
     writable: true,
