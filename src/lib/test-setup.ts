@@ -20,7 +20,7 @@ const wrapArrayMethod = <K extends keyof Array<any>>(name: K) => {
             .replace(/\s+/g, " ")
             .replace(/^function\s*/u, "function ")
             .slice(0, 120)
-          if (storeCallbackLog) appendFileSync(storeCallbackLog, `${name}:${snippet}\n`)
+          if (storeCallbackLog) appendFileSync(storeCallbackLog, `${String(name)}:${snippet}\n`)
         }
       }
       return original.apply(this, args as never)

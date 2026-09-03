@@ -46,7 +46,7 @@ import {
   KEYS,
   updateReserve as patchReserve,
 } from "./store"
-import type { NewTransaction } from "./types"
+import type { NewTransaction, Transaction } from "./types"
 
 function makeInput(partial: Partial<NewTransaction> = {}): NewTransaction {
   return {
@@ -398,7 +398,15 @@ describe("settings & misc", () => {
         updatedAt: "2026-01-01T00:00:00Z",
       },
     ]
-    const currentTransactions = [makeInput({ id: "t1", transactionDate: "2026-01-02", classification: "REVENUE" })]
+    const currentTransactions: Transaction[] = [
+      {
+        ...makeInput({ transactionDate: "2026-01-02", classification: "REVENUE" }),
+        id: "t1",
+        businessId: "b1",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+    ]
     const currentReserves = [
       {
         id: "r1",

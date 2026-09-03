@@ -1,14 +1,16 @@
-import { useEffect } from "react"
-import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
+import { Suspense, lazy } from "react"
+import { Link, Outlet, useRouterState } from "@tanstack/react-router"
 import { BarChart3, Home as HomeIcon, Plus, ReceiptText, Settings, Wallet } from "lucide-react"
 
 import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
-import { useFinancialEvents } from "@/lib/queries"
-import { isOnboarded, processRecurringRules } from "@/lib/store"
-import { initializePocketBaseSync } from "@/lib/pocketbase-sync"
-import { CHANGED_EVENT } from "@/lib/types"
 import { cn } from "@/lib/utils"
+
+// Deferred below the first paint: PocketBase sync + recurring rules pull in
+// the store/query/tax graph, which is not needed to render the shell.
+const DeferredEffects = lazy(() =>
+  import("@/components/deferred-effects").then((m) => ({ default: m.DeferredEffects })),
+)
 
 const tabs = [
   { to: "/", label: "Home", icon: HomeIcon, exact: true },
@@ -18,25 +20,8 @@ const tabs = [
 ] as const
 
 export function AppShell() {
-  const navigate = useNavigate()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const { canInstall, install } = useInstallPrompt()
-  useFinancialEvents()
-
-  // Onboarding gate: first run goes to profile setup (§66 item 1–3)
-  useEffect(() => {
-    if (!isOnboarded() && pathname !== "/onboarding") {
-      void navigate({ to: "/onboarding", replace: true })
-    }
-  }, [pathname, navigate])
-
-  useEffect(() => {
-    void (async () => {
-      await initializePocketBaseSync()
-      processRecurringRules()
-      window.dispatchEvent(new CustomEvent(CHANGED_EVENT))
-    })()
-  }, [])
 
   return (
     <div className="min-h-dvh pb-[calc(76px+env(safe-area-inset-bottom))]">
@@ -73,11 +58,16 @@ export function AppShell() {
       </header>
 
       <main className="mx-auto max-w-[600px] px-5 pt-5">
-        <Outlet />
+        <Suspense fallback={<div className="t12 py-10 text-center">Memuat…</div>}>
+          <Outlet />
+        </Suspense>
       </main>
 
       <BottomNav pathname={pathname} />
       <PwaStatus />
+      <Suspense fallback={null}>
+        <DeferredEffects />
+      </Suspense>
     </div>
   )
 }

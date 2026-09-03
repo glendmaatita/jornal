@@ -118,7 +118,7 @@ export function DateField({
           aria-haspopup="dialog"
           aria-expanded={open}
         >
-          <span className={cn("text-[15px]", !value && "text-[var(--placeholder)]")}>
+          <span className={cn("text-[15px]", !value && "text-[#6b7280]")}>
             {value ? formatDateShort(value) : "Pilih tanggal"}
           </span>
           <CalendarDays className={cn("size-4 shrink-0", open ? "text-[#16579d]" : "text-muted-foreground")} aria-hidden="true" />

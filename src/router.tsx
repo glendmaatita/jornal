@@ -1,19 +1,33 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router"
+import { lazy } from "react"
+import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 
 import { AppShell } from "@/components/app-shell"
-import { HomePage } from "@/pages/home-page"
-import { InsightsPage } from "@/pages/insights-page"
 import { OnboardingPage } from "@/pages/onboarding-page"
-import { SafeToSpendPage } from "@/pages/safe-to-spend-page"
-import { ForecastPage } from "@/pages/forecast-page"
-import { SettingsPage } from "@/pages/settings-page"
-import { TaxPage } from "@/pages/tax-page"
-import { TransactionDetailPage } from "@/pages/transaction-detail-page"
-import { TransactionFormPage } from "@/pages/transaction-form-page"
-import { TransactionsPage } from "@/pages/transactions-page"
+import { isOnboarded } from "@/lib/store"
+
+const HomePage = lazy(() => import("@/pages/home-page").then((m) => ({ default: m.HomePage })))
+const InsightsPage = lazy(() => import("@/pages/insights-page").then((m) => ({ default: m.InsightsPage })))
+const SafeToSpendPage = lazy(() => import("@/pages/safe-to-spend-page").then((m) => ({ default: m.SafeToSpendPage })))
+const ForecastPage = lazy(() => import("@/pages/forecast-page").then((m) => ({ default: m.ForecastPage })))
+const SettingsPage = lazy(() => import("@/pages/settings-page").then((m) => ({ default: m.SettingsPage })))
+const TaxPage = lazy(() => import("@/pages/tax-page").then((m) => ({ default: m.TaxPage })))
+const TransactionDetailPage = lazy(() =>
+  import("@/pages/transaction-detail-page").then((m) => ({ default: m.TransactionDetailPage })),
+)
+const TransactionFormPage = lazy(() =>
+  import("@/pages/transaction-form-page").then((m) => ({ default: m.TransactionFormPage })),
+)
+const TransactionsPage = lazy(() => import("@/pages/transactions-page").then((m) => ({ default: m.TransactionsPage })))
 
 const rootRoute = createRootRoute({
   component: AppShell,
+  // Onboarding gate before any route component loads, so the redirect does
+  // not pay for lazy chunks of the originally matched route (§66 item 1–3)
+  beforeLoad: ({ location }) => {
+    if (!isOnboarded() && location.pathname !== "/onboarding") {
+      throw redirect({ to: "/onboarding", replace: true })
+    }
+  },
 })
 
 const indexRoute = createRoute({
