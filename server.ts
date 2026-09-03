@@ -44,6 +44,22 @@ const server = Bun.serve({
       return Response.json({ status: "ok" })
     }
 
+    // Reverse proxy /pb/* to the PocketBase instance managed by supervisord,
+    // so the SPA can reach it same-origin (no separate ingress needed).
+    if (url.pathname === "/pb" || url.pathname.startsWith("/pb/")) {
+      const pocketBaseOrigin = process.env.POCKETBASE_INTERNAL_URL ?? "http://127.0.0.1:8090"
+      const pathAndQuery = `${url.pathname.replace(/^\/pb/, "") || "/"}${url.search}`
+      const upstream = await fetch(new URL(pathAndQuery, pocketBaseOrigin), {
+        method: request.method,
+        headers: request.headers,
+        body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
+      })
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: upstream.headers,
+      })
+    }
+
     const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, "") || "index.html"
     const requestedPath = resolve(distDirectory, relativePath)
 

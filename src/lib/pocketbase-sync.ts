@@ -58,9 +58,9 @@ export function resetPocketBaseSyncStateForTests() {
 /** Read lazily so tests can toggle the endpoint at runtime. */
 function configuredUrl(): string {
   if (testUrlOverride !== null) return testUrlOverride
-  return typeof import.meta !== "undefined" && "env" in import.meta
-    ? ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_POCKETBASE_URL?.trim() ?? "")
-    : ""
+  // Must be a direct import.meta.env.VITE_* access: Vite only statically
+  // replaces that exact expression at build time, so the URL gets baked in.
+  return import.meta.env.VITE_POCKETBASE_URL?.trim() ?? ""
 }
 
 let syncQueued = false
