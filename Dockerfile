@@ -8,6 +8,10 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 FROM dependencies AS build
+# Baked into the SPA at build time (Vite inlines import.meta.env.VITE_*).
+# Override with --build-arg for non-prod images.
+ARG VITE_POCKETBASE_URL=https://pb.jornal.glendmaatita.com
+ENV VITE_POCKETBASE_URL=${VITE_POCKETBASE_URL}
 COPY . .
 RUN bun run build
 
