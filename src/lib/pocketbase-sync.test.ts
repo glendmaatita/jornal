@@ -5,7 +5,7 @@ import { resetStorage, localStorageShim } from "./test-setup"
 import {
   hydrateFromPocketBase,
   initializePocketBaseSync,
-  resetPocketBaseSyncStateForTests,
+  resetPocketBaseSyncState,
   schedulePocketBaseSync,
   setPocketBaseUrl,
   syncToPocketBase,
@@ -41,7 +41,7 @@ beforeEach(async () => {
   setPocketBaseUrl(null)
   calls = []
   respond = () => ({ status: 200, body: { items: [], totalPages: 1 } })
-  resetPocketBaseSyncStateForTests()
+  resetPocketBaseSyncState()
   resetStorage()
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -268,7 +268,7 @@ describe("initializePocketBaseSync", () => {
   })
 
   test("returns false when hydration throws (after state reset)", async () => {
-    resetPocketBaseSyncStateForTests()
+    resetPocketBaseSyncState()
     setEnv("http://pb.test")
     respond = () => ({ status: 500, body: {} })
     expect(await initializePocketBaseSync()).toBe(false)

@@ -4,7 +4,9 @@ import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/
 
 import { AppShell } from "@/components/app-shell"
 import { OnboardingPage } from "@/pages/onboarding-page"
+import { LoginPage } from "@/pages/login-page"
 import { isOnboarded } from "@/lib/store"
+import { pb } from "@/lib/pb"
 
 const HomePage = lazy(() => import("@/pages/home-page").then((m) => ({ default: m.HomePage })))
 const InsightsPage = lazy(() => import("@/pages/insights-page").then((m) => ({ default: m.InsightsPage })))
@@ -20,11 +22,25 @@ const TransactionFormPage = lazy(() =>
 )
 const TransactionsPage = lazy(() => import("@/pages/transactions-page").then((m) => ({ default: m.TransactionsPage })))
 
-const rootRoute = createRootRoute({
+const rootRoute = createRootRoute({})
+
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: LoginPage,
+})
+
+// Pathless authenticated layout: everything below requires a logged-in tenant.
+const appLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "_app",
   component: AppShell,
-  // Onboarding gate before any route component loads, so the redirect does
-  // not pay for lazy chunks of the originally matched route (§66 item 1–3)
   beforeLoad: ({ location }) => {
+    if (!pb.authStore.isValid) {
+      throw redirect({ to: "/login", replace: true })
+    }
+    // Onboarding gate before any route component loads, so the redirect does
+    // not pay for lazy chunks of the originally matched route (§66 item 1–3)
     if (!isOnboarded() && location.pathname !== "/onboarding") {
       throw redirect({ to: "/onboarding", replace: true })
     }
@@ -32,25 +48,25 @@ const rootRoute = createRootRoute({
 })
 
 const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/",
   component: HomePage,
 })
 
 const onboardingRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/onboarding",
   component: OnboardingPage,
 })
 
 const addRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/add",
   component: TransactionFormPage,
 })
 
 const transactionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/transactions",
   component: TransactionsPage,
   validateSearch: (search: Record<string, unknown>): { filter?: string } => ({
@@ -59,7 +75,7 @@ const transactionsRoute = createRoute({
 })
 
 const transactionDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/transactions/$transactionId",
   component: function TransactionDetailRoute() {
     const { transactionId } = transactionDetailRoute.useParams()
@@ -68,53 +84,56 @@ const transactionDetailRoute = createRoute({
 })
 
 const transactionEditRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/transactions/$transactionId/edit",
   component: TransactionFormPage,
 })
 
 const taxRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/tax",
   component: TaxPage,
 })
 
 const insightsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/insights",
   component: InsightsPage,
 })
 
 const safeToSpendRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/safe-to-spend",
   component: SafeToSpendPage,
 })
 
 const forecastRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/forecast",
   component: ForecastPage,
 })
 
 const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => appLayoutRoute,
   path: "/settings",
   component: SettingsPage,
 })
 
 const routeTree = rootRoute.addChildren([
-  indexRoute,
-  onboardingRoute,
-  addRoute,
-  transactionsRoute,
-  transactionDetailRoute,
-  transactionEditRoute,
-  taxRoute,
-  insightsRoute,
-  safeToSpendRoute,
-  forecastRoute,
-  settingsRoute,
+  loginRoute,
+  appLayoutRoute.addChildren([
+    indexRoute,
+    onboardingRoute,
+    addRoute,
+    transactionsRoute,
+    transactionDetailRoute,
+    transactionEditRoute,
+    taxRoute,
+    insightsRoute,
+    safeToSpendRoute,
+    forecastRoute,
+    settingsRoute,
+  ]),
 ])
 
 export const router = createRouter({

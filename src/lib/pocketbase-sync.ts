@@ -1,5 +1,6 @@
 import type { Account, AppSettings, BusinessProfile, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
 import { KEYS } from "./store"
+import { pb } from "./pb"
 
 type EntityName =
   | "profile"
@@ -40,7 +41,14 @@ interface PocketBaseRecord {
 }
 
 const COLLECTION = "jornal_records"
-const BUSINESS_ID = "local"
+
+/**
+ * Every tenant (PocketBase user) owns their records: business_id = user id.
+ * Falls back to "local" for unit tests / unauthenticated local-only usage.
+ */
+function businessId(): string {
+  return pb.authStore.isValid ? (pb.authStore.record?.id ?? "local") : "local"
+}
 
 let testUrlOverride: string | null = null
 
@@ -50,7 +58,7 @@ export function setPocketBaseUrl(url: string | null) {
 }
 
 /** Test seam: reset once-per-session hydration/sync guards. */
-export function resetPocketBaseSyncStateForTests() {
+export function resetPocketBaseSyncState() {
   syncQueued = false
   hydrationStarted = false
 }
@@ -163,6 +171,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (!(init?.body instanceof FormData)) {
     headers.set("Content-Type", "application/json")
   }
+  // The API rules scope records to business_id = @request.auth.id, so every
+  // request must carry the auth token of the logged-in tenant.
+  if (pb.authStore.isValid) {
+    headers.set("Authorization", pb.authStore.token)
+  }
   const response = await fetch(`${baseUrl()}${path}`, {
     ...init,
     headers,
@@ -174,9 +187,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T
 }
 
-function recordFileUrl(record: PocketBaseRecord): string | null {
+function recordFileUrl(record: PocketBaseRecord, fileToken: string): string | null {
   if (!record.attachment) return null
-  return `${baseUrl()}/api/files/${COLLECTION}/${record.id}/${encodeURIComponent(record.attachment)}`
+  // Protected files (collection has a viewRule) need a short-lived file token.
+  const token = fileToken ? `?token=${encodeURIComponent(fileToken)}` : ""
+  return `${baseUrl()}/api/files/${COLLECTION}/${record.id}/${encodeURIComponent(record.attachment)}${token}`
 }
 
 function transactionPayloadForRemote(transaction: Transaction) {
@@ -187,8 +202,8 @@ function transactionPayloadForRemote(transaction: Transaction) {
   }
 }
 
-function transactionPayloadForLocal(record: PocketBaseRecord, payload: Transaction): Transaction {
-  const remoteFileUrl = recordFileUrl(record)
+function transactionPayloadForLocal(record: PocketBaseRecord, payload: Transaction, fileToken: string): Transaction {
+  const remoteFileUrl = recordFileUrl(record, fileToken)
   return {
     ...payload,
     attachmentName: payload.attachmentName ?? record.attachment ?? null,
@@ -205,7 +220,7 @@ async function listRecords(entity: EntityName): Promise<PocketBaseRecord[]> {
       perPage: String(perPage),
       page: String(page),
       sort: "-updated",
-      filter: `business_id = "${BUSINESS_ID}" && entity = "${entity}"`,
+      filter: `business_id = "${businessId()}" && entity = "${entity}"`,
     })
     const result = await requestJson<{ items: PocketBaseRecord[]; totalPages?: number }>(
       `/api/collections/${COLLECTION}/records?${query.toString()}`,
@@ -226,13 +241,13 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
       ? transactionPayloadForRemote(payload as Transaction)
       : payload
   const body = {
-    business_id: BUSINESS_ID,
+    business_id: businessId(),
     entity,
     app_id: appId,
     payload: sanitizedPayload,
   }
   const formData = new FormData()
-  formData.append("business_id", BUSINESS_ID)
+  formData.append("business_id", businessId())
   formData.append("entity", entity)
   formData.append("app_id", appId)
   formData.append("payload", JSON.stringify(sanitizedPayload))
@@ -336,6 +351,12 @@ export async function hydrateFromPocketBase() {
   ]
 
   let foundAny = false
+  // Files are protected by the collection view rule; a short-lived token lets
+  // payload URLs render attachments. Empty token = public files (local dev).
+  const fileToken = await pb.files
+    .getToken()
+    .then((token) => token)
+    .catch(() => "")
   for (const entity of entities) {
     const remote = await listRecords(entity)
     if (remote.length === 0) continue
@@ -353,7 +374,7 @@ export async function hydrateFromPocketBase() {
           const payload = record.payload
           if (!payload || typeof payload !== "object") return payload
           if (entity === "transactions") {
-            return transactionPayloadForLocal(record, payload as Transaction)
+            return transactionPayloadForLocal(record, payload as Transaction, fileToken)
           }
           return payload
         })

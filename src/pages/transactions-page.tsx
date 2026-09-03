@@ -52,7 +52,7 @@ function defaultCategoryForReview(classification: TransactionClassification): st
 }
 
 export function TransactionsPage() {
-  const search = useSearch({ from: "/transactions" }) as { filter?: string }
+  const search = useSearch({ from: "/_app/transactions" }) as { filter?: string }
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: transactions = [] } = useTransactions()

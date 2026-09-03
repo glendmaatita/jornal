@@ -1,9 +1,11 @@
 import { Suspense, lazy } from "react"
-import { Link, Outlet, useRouterState } from "@tanstack/react-router"
-import { BarChart3, Home as HomeIcon, Plus, ReceiptText, Settings, Wallet } from "lucide-react"
+import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
+import { BarChart3, Home as HomeIcon, LogOut, Plus, ReceiptText, Settings, Wallet } from "lucide-react"
 
 import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
+import { currentUser, logout } from "@/lib/pb"
+import { resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
 import { cn } from "@/lib/utils"
 
 // Deferred below the first paint: PocketBase sync + recurring rules pull in
@@ -20,8 +22,16 @@ const tabs = [
 ] as const
 
 export function AppShell() {
+  const navigate = useNavigate()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const { canInstall, install } = useInstallPrompt()
+  const user = currentUser()
+
+  function handleLogout() {
+    logout()
+    resetPocketBaseSyncState()
+    void navigate({ to: "/login", replace: true })
+  }
 
   return (
     <div className="min-h-dvh pb-[calc(76px+env(safe-area-inset-bottom))]">
@@ -41,6 +51,17 @@ export function AppShell() {
                 className="rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)]"
               >
                 Install
+              </button>
+            )}
+            {user && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                title={`Keluar (${user.email})`}
+                aria-label="Keluar"
+                className="grid size-9 place-items-center rounded-full transition-colors hover:bg-white"
+              >
+                <LogOut className="size-[18px]" aria-hidden="true" />
               </button>
             )}
             <Link
