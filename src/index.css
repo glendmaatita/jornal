@@ -1,0 +1,390 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ── Teofin design system fonts (Mulish) ── */
+@font-face {
+  font-family: "Mulish";
+  src: url("/fonts/Mulish-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mulish";
+  src: url("/fonts/Mulish-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mulish";
+  src: url("/fonts/Mulish-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Mulish";
+  src: url("/fonts/Mulish-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-link: var(--link);
+  --color-mint: var(--mint);
+  --font-sans: "Mulish", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Teofin palette (src/css/_variables.css) ── */
+:root {
+  color-scheme: light;
+  --white-color: #ffffff;
+  --main-dark: #1b1d4d;
+  --link: #ff5887;
+  --mint: #3eb290;
+  --body-text: #4c4c60;
+  --placeholder: #ced6e1;
+
+  --background: #edf0f2;
+  --foreground: #1b1d4d;
+  --card: #ffffff;
+  --card-foreground: #1b1d4d;
+  --primary: #1b1d4d;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5fd;
+  --secondary-foreground: #1b1d4d;
+  --muted: #f1f5fd;
+  --muted-foreground: #4c4c60;
+  --accent: #f1f5fd;
+  --accent-foreground: #1b1d4d;
+  --destructive: #e5484d;
+  --border: #ced6e1;
+  --input: #ced6e1;
+  --ring: #16579d;
+
+  --header-height: 50px;
+  --tab-bar-height: 68px;
+  --screen-width: 600px;
+  --gradient-primary: linear-gradient(91.28deg, #97daff 0%, #16579d 100%);
+  --gradient-card: linear-gradient(
+    69.78deg,
+    rgba(27, 29, 77, 0.9) 36.98%,
+    rgba(232, 138, 164, 0.75) 73.96%,
+    rgba(32, 141, 224, 0.85) 95.83%
+  );
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  background: var(--background);
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100dvh;
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--link) 25%, transparent);
+}
+
+/* ── Typography scale (_typography.css) ── */
+.t12 {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--body-text);
+}
+
+/* ── Cards: teofin white, radius 10px ── */
+[data-slot="card"] {
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(27 29 77 / 0.04);
+}
+
+/* ── Primary button: teofin gradient ── */
+.btn-gradient {
+  background: var(--gradient-primary);
+  color: var(--white-color);
+}
+
+/* ── Field primitives (custom, no native browser chrome) ── */
+.field-shell {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+  background-color: var(--white-color);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field-shell--with-value {
+  border-color: var(--border);
+}
+
+.field-shell--focus {
+  border-color: #16579d;
+  box-shadow: 0 0 0 3px rgb(22 87 157 / 0.12);
+}
+
+.field-shell--error {
+  border-color: var(--destructive);
+  box-shadow: 0 0 0 3px rgb(229 72 77 / 0.12);
+}
+
+.field-shell--disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.field-shell input,
+.field-shell button {
+  background: none;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+}
+
+.field-shell ::placeholder,
+.field-shell .placeholder {
+  color: var(--placeholder);
+}
+
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 6px;
+}
+
+.field-error {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--destructive);
+}
+
+.field-hint {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--body-text);
+}
+
+/* ── Tiptap editor ── */
+.tiptap {
+  min-height: 96px;
+  width: 100%;
+  outline: none;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--foreground);
+}
+
+.tiptap p {
+  margin: 0;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.2em;
+  margin: 0.35em 0;
+}
+
+.tiptap ul {
+  list-style: disc;
+}
+
+.tiptap ol {
+  list-style: decimal;
+}
+
+.tiptap strong {
+  font-weight: 700;
+}
+
+.tiptap em {
+  font-style: italic;
+}
+
+.tiptap pre {
+  background: var(--secondary);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.rich-toolbar {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px;
+}
+
+.rich-toolbar__btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 30px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--body-text);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.rich-toolbar__btn:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.rich-toolbar__btn--active {
+  background: var(--main-dark);
+  color: var(--white-color);
+}
+
+/* ── Custom calendar ── */
+.calendar-popover {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(320px, calc(100vw - 48px));
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--white-color);
+  box-shadow: 0 12px 32px rgb(27 29 77 / 0.16);
+  padding: 12px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.calendar-weekday {
+  padding: 4px 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--body-text);
+  text-transform: uppercase;
+}
+
+.calendar-day {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  transition: background-color 0.12s ease;
+}
+
+.calendar-day:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.calendar-day--outside {
+  color: var(--placeholder);
+  pointer-events: none;
+}
+
+.calendar-day--today {
+  box-shadow: inset 0 0 0 1.5px var(--border);
+}
+
+.calendar-day--selected {
+  background: var(--main-dark);
+  color: var(--white-color);
+}
+
+/* ── Money accents ── */
+.money-in {
+  color: var(--mint);
+}
+
+.bg-money-in {
+  background: color-mix(in oklab, var(--mint) 14%, white);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+  }
+}

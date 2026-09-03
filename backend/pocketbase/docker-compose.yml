@@ -1,0 +1,10 @@
+services:
+  pocketbase:
+    image: ghcr.io/pocketbase/pocketbase:0.40.2
+    command: ["serve", "--http", "0.0.0.0:8090"]
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./pb_data:/pb/pb_data
+      - ./pb_public:/pb/public
+      - ./pb_migrations:/pb/pb_migrations
