@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { AlertTriangle, Info, Lightbulb, Repeat, Trash2, TrendingDown, TrendingUp } from "lucide-react"
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { faChartLine, faLightbulb, faArrowTrendDown, faArrowTrendUp } from "@fortawesome/free-solid-svg-icons"
+import { AlertTriangle, Info, Repeat, Trash2, TrendingDown, TrendingUp } from "lucide-react"
 
 import { BarChart, DualBarChart, LineChart } from "@/components/charts"
 import { PeriodSelector } from "@/components/period-selector"
@@ -74,7 +76,7 @@ export function InsightsPage() {
   return (
     <div className="space-y-4 pb-8">
       <div>
-        <h1 className="text-xl tracking-tight">Insights</h1>
+        <h1 className="flex items-center gap-2 text-xl tracking-tight"><FontAwesomeIcon icon={faChartLine} className="size-5 text-primary" aria-hidden="true" />Insights</h1>
         <p className="text-sm text-muted-foreground">Apa yang sedang terjadi dengan bisnis Anda?</p>
       </div>
 
@@ -82,7 +84,7 @@ export function InsightsPage() {
       <Card>
         <CardContent className="p-5">
           <h2 className="flex items-center gap-2 text-lg tracking-tight">
-            <Lightbulb className="size-4 text-primary" aria-hidden="true" />
+            <FontAwesomeIcon icon={faLightbulb} className="size-4 text-primary" aria-hidden="true" />
             Insight Otomatis
           </h2>
           {!insights.sufficientData ? (
@@ -136,7 +138,7 @@ export function InsightsPage() {
       {/* Trends (§36–38) */}
       <Card>
         <CardContent className="p-5">
-          <h2 className="text-lg tracking-tight">Tren Omzet — 6 bulan</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faArrowTrendUp} className="size-4 text-emerald-500" aria-hidden="true" />Tren Omzet — 6 bulan</h2>
           <div className="mt-3">
             <BarChart data={trends.map((point) => ({ label: point.label, value: point.revenue }))} />
           </div>
@@ -145,7 +147,7 @@ export function InsightsPage() {
 
       <Card>
         <CardContent className="p-5">
-          <h2 className="text-lg tracking-tight">Tren Pengeluaran Bisnis — 6 bulan</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faArrowTrendDown} className="size-4 text-rose-500" aria-hidden="true" />Tren Pengeluaran Bisnis — 6 bulan</h2>
           <div className="mt-3">
             <BarChart data={trends.map((point) => ({ label: point.label, value: point.businessExpense }))} color="#b45309" />
           </div>
@@ -154,7 +156,7 @@ export function InsightsPage() {
 
       <Card>
         <CardContent className="p-5">
-          <h2 className="text-lg tracking-tight">Tren Cashflow — 6 bulan</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faChartLine} className="size-4 text-primary" aria-hidden="true" />Tren Cashflow — 6 bulan</h2>
           <div className="mt-3">
             <DualBarChart data={trends.map((point) => ({ label: point.label, in: point.moneyIn, out: point.moneyOut }))} />
           </div>

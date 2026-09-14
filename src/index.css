@@ -53,13 +53,8 @@
   --header-height: 50px;
   --tab-bar-height: 68px;
   --screen-width: 600px;
-  --gradient-primary: linear-gradient(91.28deg, #97daff 0%, #16579d 100%);
-  --gradient-card: linear-gradient(
-    69.78deg,
-    rgba(27, 29, 77, 0.9) 36.98%,
-    rgba(232, 138, 164, 0.75) 73.96%,
-    rgba(32, 141, 224, 0.85) 95.83%
-  );
+  --gradient-primary: #16579d;
+  --gradient-card: #1b1d4d;
 }
 
 * {
@@ -84,6 +79,26 @@ body {
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Keep labels and supporting copy readable on narrow phones. */
+@media (max-width: 640px) {
+  body {
+    font-size: 16px;
+  }
+
+  [class~="text-xs"] {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+
+  [class~="text-sm"] {
+    font-size: 0.9375rem;
+  }
+
+  [class~="text-[11px]"] {
+    font-size: 0.75rem;
+  }
 }
 
 /* HashiCorp-inspired editorial hierarchy: neutral system sans, compact
@@ -131,7 +146,7 @@ button:disabled {
   box-shadow: 0 1px 2px rgb(27 29 77 / 0.04);
 }
 
-/* ── Primary button: teofin gradient ── */
+/* ── Primary button ── */
 .btn-gradient {
   background: var(--gradient-primary);
   color: var(--white-color);

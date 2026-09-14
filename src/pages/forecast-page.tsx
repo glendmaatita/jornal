@@ -58,7 +58,7 @@ export function ForecastPage() {
       <div className="flex items-center justify-between gap-2">
         <div>
           <h1 className="text-xl tracking-tight">Proyeksi Safe To Spend</h1>
-          <p className="text-xs text-muted-foreground">Estimasi ke depan — bukan jaminan (§61, §63).</p>
+        <p className="text-xs text-muted-foreground">Perkiraan dana ke depan (§61, §63).</p>
         </div>
         <div className="flex gap-1">
           {HORIZONS.map((horizon) => (

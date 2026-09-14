@@ -105,7 +105,7 @@ function BottomNav({ pathname }: { pathname: string }) {
         <div className="relative flex justify-center">
           <Link
             to="/add"
-            className="absolute -top-7 grid size-[52px] place-items-center rounded-full bg-[linear-gradient(135deg,#97daff_0%,#16579d_100%)] text-white shadow-lg shadow-[#16579d]/25 transition-transform active:scale-95"
+            className="absolute -top-7 grid size-[52px] place-items-center rounded-full bg-[#16579d] text-white shadow-lg shadow-[#16579d]/25 transition-transform active:scale-95"
             aria-label="Tambah transaksi"
           >
             <Plus className="size-6" aria-hidden="true" />

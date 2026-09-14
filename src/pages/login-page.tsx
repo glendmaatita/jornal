@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 
 import { BrandMark } from "@/components/brand-mark"
+import { useInstallPrompt } from "@/hooks/use-install-prompt"
 import { loginWithGoogle, pocketBaseConfigured } from "@/lib/pb"
 import { resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
 
@@ -9,6 +10,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [error, setError] = useState("")
   const [pending, setPending] = useState(false)
+  const { canInstall, install } = useInstallPrompt()
 
   async function handleGoogleLogin() {
     setError("")
@@ -48,6 +50,15 @@ export function LoginPage() {
           {pending ? "Membuka Google…" : "Masuk dengan Google"}
         </button>
         {error && <p className="mt-3 t13 text-red-600">{error}</p>}
+        {canInstall && (
+          <button
+            type="button"
+            onClick={() => void install()}
+            className="mt-4 w-full rounded-xl border border-[#ced6e1] bg-[#f1f5fd] px-4 py-3 text-sm font-semibold text-[#1b1d4d] transition-colors hover:bg-[#e8eefc]"
+          >
+            Install Jornal di perangkat
+          </button>
+        )}
       </div>
     </div>
   )

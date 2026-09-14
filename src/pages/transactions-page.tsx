@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { faFilter, faReceipt } from "@fortawesome/free-solid-svg-icons"
 import { Search, ShieldQuestion } from "lucide-react"
 
 import { TransactionItem } from "@/components/transaction-item"
@@ -150,7 +152,7 @@ export function TransactionsPage() {
       )}
       {isReviewMode && (
         <div className="flex items-center justify-between">
-          <h1 className="text-xl">Butuh Konfirmasi</h1>
+          <h1 className="flex items-center gap-2 text-xl"><FontAwesomeIcon icon={faReceipt} className="size-4 text-primary" aria-hidden="true" />Butuh Konfirmasi</h1>
           <Button variant="ghost" size="sm" onClick={() => void navigate({ to: "/transactions" })}>
             Tutup
           </Button>
@@ -170,6 +172,7 @@ export function TransactionsPage() {
           </div>
 
           <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary" aria-label="Filter transaksi"><FontAwesomeIcon icon={faFilter} className="size-3.5" aria-hidden="true" /></span>
             <FilterChip active={direction === ""} onClick={() => setDirection("")}>Semua</FilterChip>
             <FilterChip active={direction === "MONEY_IN"} onClick={() => setDirection(direction === "MONEY_IN" ? "" : "MONEY_IN")}>Masuk</FilterChip>
             <FilterChip active={direction === "MONEY_OUT"} onClick={() => setDirection(direction === "MONEY_OUT" ? "" : "MONEY_OUT")}>Keluar</FilterChip>

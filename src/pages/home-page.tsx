@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react"
 import { Link } from "@tanstack/react-router"
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { faArrowRight, faArrowTrendDown, faArrowTrendUp, faCalendarDays, faChartLine, faClipboardList, faPiggyBank, faPlus, faShieldHalved } from "@fortawesome/free-solid-svg-icons"
 
-import { AlertTriangle, ArrowRight, CalendarClock, PiggyBank, Sparkles } from "lucide-react"
+import { AlertTriangle, ArrowRight } from "lucide-react"
 
 import { ConfidenceBadge, TransactionItem } from "@/components/transaction-item"
 import { PeriodSelector } from "@/components/period-selector"
@@ -79,18 +81,18 @@ export function HomePage() {
     <div className="space-y-4 pb-8">
       <PeriodSelector preset={preset} custom={custom} onChange={setPreset} onCustomChange={setCustom} />
 
-      {/* Safe To Spend — the core differentiator (§46, §48), teofin gradient card */}
+      {/* Safe To Spend — the core differentiator (§46, §48), calm navy card */}
       {safeToSpend && (
         <Link to="/safe-to-spend" className="block" aria-label="Lihat rincian Safe To Spend">
           <Card
             className="border border-[#e2a9cb]/60 text-white shadow-lg transition-transform active:scale-[0.99]"
-            style={{ background: "var(--gradient-card)", backdropFilter: "blur(11px)" }}
+            style={{ background: "var(--gradient-card)" }}
           >
             <CardContent className="p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="flex items-center gap-1.5 text-xs font-semibold tracking-[2px] text-white/75 uppercase">
-                    <Sparkles className="size-3.5" aria-hidden="true" />
+                    <FontAwesomeIcon icon={faShieldHalved} className="size-3.5" aria-hidden="true" />
                     Safe To Spend
                   </p>
                   <p className="mt-2 text-4xl font-bold tracking-tight tabular-nums">
@@ -124,7 +126,7 @@ export function HomePage() {
           <Card className="border-primary/30 bg-primary/5 transition-transform active:scale-[0.99]">
             <CardContent className="p-4">
               <p className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-                <CalendarClock className="size-3.5" aria-hidden="true" />
+                    <FontAwesomeIcon icon={faCalendarDays} className="size-3.5" aria-hidden="true" />
                 Pengingat reserve
               </p>
               <ul className="mt-1.5 space-y-1 text-xs">
@@ -163,16 +165,16 @@ export function HomePage() {
       <Card>
         <CardContent className="p-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg tracking-tight">{period.label}</h2>
+            <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faChartLine} className="size-4 text-primary" aria-hidden="true" />{period.label}</h2>
             {safeToSpend && <ConfidenceBadge status={safeToSpend.confidence} />}
           </div>
           <div className="mt-4 grid grid-cols-1 gap-3 text-center sm:grid-cols-3">
             <div className="rounded-xl bg-secondary/60 p-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Uang Masuk</p>
+              <p className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground"><FontAwesomeIcon icon={faArrowTrendUp} className="size-3 text-emerald-500" aria-hidden="true" />Uang Masuk</p>
               <p className="mt-1 text-sm font-semibold money-in tabular-nums">{formatRupiah(moneyIn)}</p>
             </div>
             <div className="rounded-xl bg-secondary/60 p-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Uang Keluar</p>
+              <p className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-muted-foreground"><FontAwesomeIcon icon={faArrowTrendDown} className="size-3 text-rose-500" aria-hidden="true" />Uang Keluar</p>
               <p className="mt-1 text-sm font-semibold tabular-nums">{formatRupiah(moneyOut)}</p>
             </div>
             <div className="rounded-xl bg-secondary/60 p-3">
@@ -184,12 +186,12 @@ export function HomePage() {
             <div>
               <p className="text-xs text-muted-foreground">Omzet</p>
               <p className="mt-0.5 font-semibold tabular-nums">{formatRupiah(revenue)}</p>
-              <p className="text-[11px] text-muted-foreground">bukan semua uang masuk adalah omzet</p>
+              <p className="text-[11px] text-muted-foreground">Omzet mencakup pendapatan usaha</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Pengeluaran Bisnis</p>
               <p className="mt-0.5 font-semibold tabular-nums">{formatRupiah(businessExpense)}</p>
-              <p className="text-[11px] text-muted-foreground">bukan semua uang keluar adalah biaya</p>
+              <p className="text-[11px] text-muted-foreground">Biaya usaha tercatat di sini</p>
             </div>
           </div>
         </CardContent>
@@ -201,14 +203,14 @@ export function HomePage() {
           <Card className="transition-transform active:scale-[0.99]">
             <CardContent className="flex items-center gap-3 p-4">
               <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10">
-                <PiggyBank className="size-5 text-primary" aria-hidden="true" />
+                <FontAwesomeIcon icon={faPiggyBank} className="size-5 text-primary" aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted-foreground">Estimasi Dana Pajak</p>
                 <p className="font-semibold tabular-nums">{formatRupiah(taxReserve.recommendedTaxReserve)}</p>
-                <p className="text-[11px] text-muted-foreground">Disarankan untuk disisihkan — alokasi virtual, bukan transfer uang</p>
+                <p className="text-[11px] text-muted-foreground">Saran alokasi virtual untuk pajak</p>
               </div>
-              <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <FontAwesomeIcon icon={faArrowRight} className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             </CardContent>
           </Card>
         </Link>
@@ -218,7 +220,7 @@ export function HomePage() {
       <Card>
         <CardContent className="p-3">
           <div className="flex items-center justify-between px-2 py-2">
-            <h2 className="text-lg tracking-tight">Transaksi Terbaru</h2>
+            <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faClipboardList} className="size-4 text-primary" aria-hidden="true" />Transaksi Terbaru</h2>
             <Badge>{transactions.length} total</Badge>
           </div>
           {recent.length > 0 ? (
@@ -229,8 +231,10 @@ export function HomePage() {
             </div>
           ) : (
             <div className="px-2 py-8 text-center">
+              <FontAwesomeIcon icon={faClipboardList} className="mx-auto mb-2 size-8 text-muted-foreground/50" aria-hidden="true" />
               <p className="text-sm text-muted-foreground">Belum ada transaksi.</p>
               <Link to="/add" className={buttonVariants({ size: "sm", className: "mt-3" })}>
+                <FontAwesomeIcon icon={faPlus} className="size-3.5" aria-hidden="true" />
                 Catat transaksi pertama
               </Link>
             </div>

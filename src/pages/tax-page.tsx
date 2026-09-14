@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { AlertTriangle, Info } from "lucide-react"
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { faCircleInfo, faPiggyBank, faScaleBalanced, faTriangleExclamation } from "@fortawesome/free-solid-svg-icons"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { TextField } from "@/components/ui/text-field"
@@ -49,7 +50,7 @@ export function TaxPage() {
     <div className="space-y-4 pb-8">
       <Card>
         <CardContent className="p-6">
-          <h1 className="text-xl tracking-tight">Tax Overview {profile.fiscalYear}</h1>
+          <h1 className="flex items-center gap-2 text-xl tracking-tight"><FontAwesomeIcon icon={faScaleBalanced} className="size-5 text-primary" aria-hidden="true" />Tax Overview {profile.fiscalYear}</h1>
           <dl className="mt-4 space-y-3 text-sm">
             <Row label="Revenue YTD" value={formatRupiah(overview.revenueYTD)} />
             <Row label="Proyeksi Omzet Setahun" value={formatRupiah(overview.projectedAnnualRevenue)} />
@@ -59,7 +60,7 @@ export function TaxPage() {
           </dl>
           <div className="mt-4 rounded-xl bg-secondary/60 p-3 text-xs leading-relaxed text-muted-foreground">
             <p className="flex items-start gap-1.5">
-              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <FontAwesomeIcon icon={faCircleInfo} className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
               {overview.explanation}
             </p>
           </div>
@@ -70,7 +71,7 @@ export function TaxPage() {
       {alerts.length > 0 && (
         <Card>
           <CardContent className="p-5">
-            <h2 className="text-lg tracking-tight">Peringatan Pajak</h2>
+            <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faTriangleExclamation} className="size-4 text-amber-600" aria-hidden="true" />Peringatan Pajak</h2>
             <ul className="mt-3 space-y-2">
               {alerts.map((alert) => (
                 <li
@@ -79,7 +80,7 @@ export function TaxPage() {
                     alert.level === "warning" ? "bg-red-50 text-red-900" : "bg-amber-50 text-amber-900"
                   }`}
                 >
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  <FontAwesomeIcon icon={faTriangleExclamation} className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                   {alert.text}
                 </li>
               ))}
@@ -90,7 +91,7 @@ export function TaxPage() {
 
       <Card>
         <CardContent className="p-6">
-          <h2 className="text-lg tracking-tight">Tax Reserve</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faPiggyBank} className="size-4 text-primary" aria-hidden="true" />Tax Reserve</h2>
           <p className="mt-1 text-xs text-muted-foreground">Rekomendasi dana pajak yang sebaiknya disisihkan.</p>
 
           <div className="mt-4 rounded-xl bg-primary/10 p-4">
@@ -120,7 +121,7 @@ export function TaxPage() {
           </div>
 
           <p className="mt-4 rounded-xl bg-secondary/60 p-3 text-xs leading-relaxed text-muted-foreground">
-            Reserve adalah <strong>alokasi virtual</strong> — bukan transfer uang nyata. Angka ini otomatis ikut ketika Anda
+            Reserve adalah <strong>alokasi virtual</strong>. Angka ini ikut dihitung saat Anda
             mencatat transaksi baru.
           </p>
         </CardContent>

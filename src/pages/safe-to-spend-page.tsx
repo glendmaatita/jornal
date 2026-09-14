@@ -134,7 +134,7 @@ export function SafeToSpendPage() {
             {formatRupiah(result.safeToSpend)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Estimasi dana yang tersedia setelah reserve yang diketahui — bukan saldo rekening.
+            Perkiraan dana yang tersedia setelah reserve yang tercatat. Cek saldo rekening untuk angka aktual.
           </p>
 
           {/* §55 — contextual weekly insight with reason breakdown */}
@@ -306,7 +306,7 @@ export function SafeToSpendPage() {
             </div>
           </div>
           <p className="mt-3 rounded-xl bg-secondary/60 p-3 text-xs leading-relaxed text-muted-foreground">
-            Reserve adalah <strong>alokasi virtual</strong> — sistem tidak memindahkan uang Anda. Gunakan angka ini sebagai
+            Reserve adalah <strong>alokasi virtual</strong>. Gunakan angka ini sebagai
             pengingat berapa yang sebaiknya tidak dibelanjakan.
           </p>
         </CardContent>

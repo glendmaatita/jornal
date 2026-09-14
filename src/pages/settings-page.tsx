@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Plus, Trash2 } from "lucide-react"
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
+import { faBrain, faBuilding, faDatabase, faSliders, faWallet } from "@fortawesome/free-solid-svg-icons"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -73,14 +75,14 @@ export function SettingsPage() {
   return (
     <div className="space-y-4 pb-8">
       <div>
-        <h1 className="text-xl tracking-tight">Pengaturan</h1>
+        <h1 className="flex items-center gap-2 text-xl tracking-tight"><FontAwesomeIcon icon={faSliders} className="size-4 text-primary" aria-hidden="true" />Pengaturan</h1>
         <p className="text-sm text-muted-foreground">Profil bisnis, pajak, dan data aplikasi.</p>
       </div>
 
       {/* Business / tax profile (§41) */}
       <Card>
         <CardContent className="space-y-4 p-5">
-          <h2 className="text-lg tracking-tight">Profil Bisnis & Pajak</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faBuilding} className="size-4 text-primary" aria-hidden="true" />Profil Bisnis & Pajak</h2>
           <TextField
             label="Nama bisnis"
             value={nameDraft ?? profile.businessName}
@@ -146,7 +148,7 @@ export function SettingsPage() {
       {/* Accounts & opening balances (§31, §46.4) */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="text-lg tracking-tight">Akun & Saldo Awal</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faWallet} className="size-4 text-primary" aria-hidden="true" />Akun & Saldo Awal</h2>
           <label className="flex items-center justify-between gap-3 rounded-xl bg-secondary/50 p-3">
             <span>
               <span className="block text-sm font-medium">Lacak lokasi uang</span>
@@ -245,7 +247,7 @@ export function SettingsPage() {
       {/* Classification thresholds (§22) */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="text-lg tracking-tight">Ambang Klasifikasi</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faSliders} className="size-4 text-primary" aria-hidden="true" />Ambang Klasifikasi</h2>
           <p className="text-xs text-muted-foreground">
             ≥ {Math.round(settings.autoAccept * 100)}% otomatis diterima · {" "}
             {Math.round(settings.needsReview * 100)}–{Math.round(settings.autoAccept * 100) - 1}% diterima + saran ·{" "}
@@ -287,7 +289,7 @@ export function SettingsPage() {
       {/* Learning loop (§25 — activated in Phase 2) + classification metrics */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="text-lg tracking-tight">Pola yang Dipelajari</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faBrain} className="size-4 text-primary" aria-hidden="true" />Pola yang Dipelajari</h2>
           <p className="text-xs leading-relaxed text-muted-foreground">
             Ketika Anda mengoreksi klasifikasi, sistem menyimpan pola. Transaksi serupa berikutnya otomatis diklasifikasi
             dengan keyakinan lebih tinggi.
@@ -364,7 +366,7 @@ export function SettingsPage() {
       {/* Data */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="text-lg tracking-tight">Data</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faDatabase} className="size-4 text-primary" aria-hidden="true" />Data</h2>
           <p className="text-xs leading-relaxed text-muted-foreground">
             Semua data tersimpan di perangkat ini (offline-ready). Total transaksi tercatat: {transactions.length}.
           </p>

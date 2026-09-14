@@ -6,7 +6,7 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-[linear-gradient(91.28deg,#97daff_0%,#16579d_100%)] text-white shadow-sm hover:brightness-105",
+          "bg-[#16579d] text-white shadow-sm hover:bg-[#124b86]",
         secondary: "bg-[#f1f5fd] text-[var(--main-dark)] border border-[#ced6e1] hover:bg-[#e8eefc]",
         outline: "border border-[#ced6e1] bg-white hover:bg-[#f1f5fd] hover:text-[var(--main-dark)]",
         ghost: "hover:bg-white hover:text-[var(--main-dark)]",
