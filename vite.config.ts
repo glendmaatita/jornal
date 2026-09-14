@@ -88,6 +88,7 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: false,
         navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/pb(?:\/|$)/, /^\/healthz(?:\/|$)/],
         globPatterns: ["**/*.{js,css,html,webmanifest}"],
       },
       devOptions: {

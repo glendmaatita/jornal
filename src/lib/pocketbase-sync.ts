@@ -1,5 +1,5 @@
 import type { Account, AppSettings, BusinessProfile, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
-import { KEYS } from "./store"
+import { KEYS, scopedStorageKey } from "./store"
 import { pb } from "./pb"
 
 type EntityName =
@@ -84,7 +84,7 @@ function baseUrl() {
 
 function localJson<T>(key: string, fallback: T): T {
   try {
-    const raw = window.localStorage.getItem(key)
+    const raw = window.localStorage.getItem(scopedStorageKey(key))
     return raw ? (JSON.parse(raw) as T) : fallback
   } catch {
     return fallback
@@ -93,7 +93,7 @@ function localJson<T>(key: string, fallback: T): T {
 
 function writeLocalJson<T>(key: string, value: T) {
   try {
-    window.localStorage.setItem(key, JSON.stringify(value))
+    window.localStorage.setItem(scopedStorageKey(key), JSON.stringify(value))
   } catch {
     // ignore
   }
@@ -184,7 +184,9 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await response.text().catch(() => "")
     throw new Error(`PocketBase ${response.status}: ${text}`)
   }
-  return (await response.json()) as T
+  if (response.status === 204) return undefined as T
+  const text = await response.text()
+  return (text ? JSON.parse(text) : undefined) as T
 }
 
 function recordFileUrl(record: PocketBaseRecord, fileToken: string): string | null {
@@ -404,6 +406,7 @@ export async function initializePocketBaseSync() {
     await hydrateFromPocketBase()
     return true
   } catch {
+    hydrationStarted = false
     return false
   }
 }

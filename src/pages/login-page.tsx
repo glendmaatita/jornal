@@ -2,9 +2,11 @@ import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 
 import { BrandMark } from "@/components/brand-mark"
+import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
-import { loginWithGoogle, pocketBaseConfigured } from "@/lib/pb"
+import { loginWithGoogle, pb, pocketBaseConfigured } from "@/lib/pb"
 import { resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
+import { setDataScope } from "@/lib/store"
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -17,6 +19,7 @@ export function LoginPage() {
     setPending(true)
     try {
       await loginWithGoogle()
+      setDataScope(pb.authStore.record?.id)
       // Fresh hydration/sync cycle for this tenant.
       resetPocketBaseSyncState()
       await navigate({ to: "/" })
@@ -60,9 +63,11 @@ export function LoginPage() {
           </button>
         )}
       </div>
+      <PwaStatus />
     </div>
   )
 }
+
 
 function GoogleIcon() {
   return (

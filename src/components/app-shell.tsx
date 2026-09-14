@@ -7,6 +7,7 @@ import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
 import { currentUser, logout } from "@/lib/pb"
 import { resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
+import { setDataScope } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 // Deferred below the first paint: PocketBase sync + recurring rules pull in
@@ -29,6 +30,7 @@ export function AppShell() {
   const user = currentUser()
 
   function handleLogout() {
+    setDataScope("local")
     logout()
     resetPocketBaseSyncState()
     void navigate({ to: "/login", replace: true })
@@ -137,7 +139,7 @@ function TabLink({
         className={cn("size-[20px]", active ? "text-[var(--link)]" : "text-[var(--body-text)]")}
         aria-hidden="true"
       />
-      <span className={cn("text-[10px] font-semibold leading-none", active ? "text-[var(--link)]" : "text-[var(--body-text)]")}>
+      <span className={cn("text-xs font-semibold leading-none", active ? "text-[var(--link)]" : "text-[var(--body-text)]")}>
         {tab.label}
       </span>
     </Link>

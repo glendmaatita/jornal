@@ -31,7 +31,7 @@ export function PwaStatus() {
 
   return (
     <aside
-      className="fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-white/10 bg-primary px-4 py-3 text-primary-foreground shadow-2xl"
+      className="fixed inset-x-4 bottom-[calc(80px+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-white/10 bg-primary px-4 py-3 text-primary-foreground shadow-2xl"
       aria-live="polite"
     >
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/10">
@@ -49,7 +49,7 @@ export function PwaStatus() {
           Update
         </Button>
       )}
-      {(isOnline || needRefresh) && (
+      {(!isOnline || needRefresh) && (
         <Button size="icon" variant="ghost" className="size-8 hover:bg-white/10" onClick={dismiss}>
           <X aria-hidden="true" />
           <span className="sr-only">Dismiss</span>

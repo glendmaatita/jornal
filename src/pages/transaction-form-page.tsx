@@ -132,7 +132,8 @@ export function TransactionFormPage() {
 
   const openAttachmentPicker = (mode: "upload" | "camera") => {
     setAttachmentMode(mode)
-    attachmentInputRef.current?.click()
+    // Let React commit the capture attribute before opening the native picker.
+    window.setTimeout(() => attachmentInputRef.current?.click(), 0)
   }
 
   const handleAttachmentSelected = async (file: File | null) => {
@@ -406,7 +407,11 @@ export function TransactionFormPage() {
                     <span className="field-label !mb-1 !text-xs">Jenis klasifikasi</span>
                     <select
                       value={effectiveClassification}
-                      onChange={(event) => setClassificationOverride(event.target.value as TransactionClassification)}
+                      onChange={(event) => {
+                        const next = event.target.value as TransactionClassification
+                        setClassificationOverride(next)
+                        if (next === "INTERNAL_TRANSFER") setMode("transfer")
+                      }}
                       className="field-shell !min-h-[46px] w-full !py-0 text-sm"
                     >
                       {(direction === "MONEY_IN"

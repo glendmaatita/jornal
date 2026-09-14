@@ -5,7 +5,7 @@ import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/
 import { AppShell } from "@/components/app-shell"
 import { OnboardingPage } from "@/pages/onboarding-page"
 import { LoginPage } from "@/pages/login-page"
-import { isOnboarded } from "@/lib/store"
+import { isOnboarded, setDataScope } from "@/lib/store"
 import { pb } from "@/lib/pb"
 
 const HomePage = lazy(() => import("@/pages/home-page").then((m) => ({ default: m.HomePage })))
@@ -36,6 +36,7 @@ const appLayoutRoute = createRoute({
   id: "_app",
   component: AppShell,
   beforeLoad: ({ location }) => {
+    setDataScope(pb.authStore.record?.id)
     if (!pb.authStore.isValid) {
       throw redirect({ to: "/login", replace: true })
     }

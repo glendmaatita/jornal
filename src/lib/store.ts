@@ -34,12 +34,22 @@ export const KEYS = {
 } as const
 
 const BUSINESS_ID = "local"
+let activeScope = "local"
+
+/** Select the local data partition for the authenticated tenant. */
+export function setDataScope(scope: string | null | undefined) {
+  activeScope = scope?.trim() || "local"
+}
+
+export function scopedStorageKey(key: string): string {
+  return activeScope === "local" ? key : `jornal.${activeScope}.${key}`
+}
 
 // ── Low-level helpers (SSR/private-mode safe) ──
 
 function read<T>(key: string, fallback: T): T {
   try {
-    const stored = window.localStorage.getItem(key)
+    const stored = window.localStorage.getItem(scopedStorageKey(key))
     if (!stored) return fallback
     return JSON.parse(stored) as T
   } catch {
@@ -49,7 +59,7 @@ function read<T>(key: string, fallback: T): T {
 
 function write<T>(key: string, value: T) {
   try {
-    window.localStorage.setItem(key, JSON.stringify(value))
+    window.localStorage.setItem(scopedStorageKey(key), JSON.stringify(value))
   } catch {
     // Storage unavailable — keep in-memory usage working for the session
   }
@@ -378,6 +388,7 @@ export function needsReviewTransactions(): Transaction[] {
 export function resolveReview(id: string, classification: Transaction["classification"], categoryId: string | null) {
   return updateTransaction(id, {
     classification,
+    taxClassification: classification,
     categoryId,
     classificationSource: "USER",
     classificationConfidence: 1,
@@ -655,7 +666,7 @@ export function isOnboarded(): boolean {
 export function resetAllData() {
   for (const key of Object.values(KEYS)) {
     try {
-      window.localStorage.removeItem(key)
+      window.localStorage.removeItem(scopedStorageKey(key))
     } catch {
       // ignore
     }

@@ -42,7 +42,9 @@ export function computeSnapshotAsOf(input: StsHistoryInput, date: string, usePer
   const accountsAsOf = usePersistedHistory ? resolveAccountsAsOf(date, input.accounts) : input.accounts
   const profileAsOf = usePersistedHistory ? resolveProfileAsOf(date, input.profile) : input.profile
   const reservesActive = usePersistedHistory ? resolveReservesAsOf(date, input.reserves) : activeReservesAsOf(input.reserves, date)
-  const otherReserve = reservesActive.reduce((sum, reserve) => sum + reserve.amount, 0)
+  const otherReserve = reservesActive
+    .filter((reserve) => !usePersistedHistory || reserve.status === "ACTIVE")
+    .reduce((sum, reserve) => sum + reserve.amount, 0)
 
   const cashPosition = computeCashPosition(txnsUpTo, accountsAsOf, profileAsOf, date)
   const overview = computeTaxOverviewAsOf(profileAsOf, txnsUpTo, date, usePersistedHistory)

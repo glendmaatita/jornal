@@ -179,7 +179,9 @@ export function SettingsPage() {
                       value={accountBalanceDrafts[account.id] ?? (account.openingBalance > 0 ? formatNumberInput(account.openingBalance) : "")}
                       onChange={(value) => setAccountBalanceDrafts((current) => ({ ...current, [account.id]: value }))}
                       onBlur={() => {
-                        upsertAccount({ ...account, openingBalance: parseAmountInput(accountBalanceDrafts[account.id] ?? "") })
+                        const draft = accountBalanceDrafts[account.id]
+                        if (draft === undefined) return
+                        upsertAccount({ ...account, openingBalance: parseAmountInput(draft) })
                         invalidate()
                       }}
                     />
@@ -236,7 +238,7 @@ export function SettingsPage() {
                   prefix="Rp"
                   value={openingBalanceDraft ?? (profile.openingBalance > 0 ? formatNumberInput(profile.openingBalance) : "")}
                   onChange={(value) => setOpeningBalanceDraft(value)}
-                  onBlur={() => commitProfile({ openingBalance: parseAmountInput(openingBalanceDraft ?? "") })}
+                  onBlur={() => openingBalanceDraft !== null && commitProfile({ openingBalance: parseAmountInput(openingBalanceDraft) })}
                   hint="Saldo awal tidak dihitung sebagai omzet."
                 />
             </div>
