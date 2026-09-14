@@ -13,5 +13,5 @@
     "strict": true,
     "types": ["bun", "node"]
   },
-  "include": ["vite.config.ts", "server.ts"]
+  "include": ["vite.config.ts", "server.ts", "scripts/**/*.ts"]
 }

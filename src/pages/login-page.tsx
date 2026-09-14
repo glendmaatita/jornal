@@ -1,8 +1,8 @@
 import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
-import { Wallet } from "lucide-react"
 
-import { loginWithGoogle } from "@/lib/pb"
+import { BrandMark } from "@/components/brand-mark"
+import { loginWithGoogle, pocketBaseConfigured } from "@/lib/pb"
 import { resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
 
 export function LoginPage() {
@@ -19,7 +19,11 @@ export function LoginPage() {
       resetPocketBaseSyncState()
       await navigate({ to: "/" })
     } catch {
-      setError("Gagal masuk dengan Google. Coba lagi.")
+      setError(
+        pocketBaseConfigured
+          ? "Gagal masuk dengan Google. Pastikan Google OAuth aktif di PocketBase, lalu coba lagi."
+          : "Login Google belum terhubung. Jalankan PocketBase dan isi VITE_POCKETBASE_URL di .env.local.",
+      )
     } finally {
       setPending(false)
     }
@@ -28,9 +32,7 @@ export function LoginPage() {
   return (
     <div className="grid min-h-dvh place-items-center bg-[var(--background)] px-5">
       <div className="w-full max-w-[360px] text-center">
-        <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[var(--main-dark)] text-white shadow-md">
-          <Wallet className="size-7" aria-hidden="true" />
-        </span>
+        <BrandMark className="mx-auto size-16" />
         <h1 className="mt-4 text-xl font-bold tracking-tight">Jornal</h1>
         <p className="mt-2 t13 text-[var(--body-text)]">
           Catat uang masuk &amp; keluar bisnis. Masuk untuk sinkron antar perangkat.

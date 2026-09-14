@@ -46,3 +46,9 @@ The workflow requires GitHub Actions to have read/write package permissions. For
 ## PWA behavior
 
 The production build includes an installable web manifest, platform icons, offline precaching, SPA navigation fallback, update prompts, and iOS standalone metadata. In development, service workers are enabled so the install and offline flows can be exercised locally.
+
+## Brand assets
+
+The Jornal mark combines a white **J** with sky blue ledger strokes on navy, using the app's existing palette. The shared `BrandMark` component uses `src/assets/jornal-logo.svg` in the app header and sign-in screen.
+
+After editing that SVG, run `bun run icons` to regenerate the favicon, PNG fallback, Apple touch icon, and PWA icons in `public/`. Commit those generated assets with the source. Apple and maskable icons use an opaque square background so the device can apply its own shape.

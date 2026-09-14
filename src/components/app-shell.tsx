@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react"
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { BarChart3, Home as HomeIcon, LogOut, Plus, ReceiptText, Settings, Wallet } from "lucide-react"
 
+import { BrandMark } from "@/components/brand-mark"
 import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
 import { currentUser, logout } from "@/lib/pb"
@@ -38,9 +39,7 @@ export function AppShell() {
       <header className="sticky top-0 z-40 border-b border-[#e4e8ed] bg-[var(--background)]">
         <div className="mx-auto flex h-[50px] max-w-[600px] items-center justify-between px-5">
           <Link to="/" className="flex items-center gap-2.5" aria-label="Jornal">
-            <span className="grid size-8 place-items-center rounded-[10px] bg-[var(--main-dark)] text-white shadow-sm">
-              <Wallet className="size-4" aria-hidden="true" />
-            </span>
+            <BrandMark className="size-8" />
             <span className="text-[15px] font-bold tracking-tight">Jornal</span>
           </Link>
           <div className="flex items-center gap-1">

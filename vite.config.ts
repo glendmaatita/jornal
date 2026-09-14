@@ -40,7 +40,7 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       injectRegister: false,
-      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
+      includeAssets: ["favicon.svg", "favicon-32x32.png", "apple-touch-icon.png"],
       manifest: {
         id: "/",
         name: "Jornal — Cashflow & Pajak Bisnis",
@@ -51,8 +51,8 @@ export default defineConfig({
         scope: "/",
         display: "standalone",
         orientation: "portrait",
-        background_color: "#f4f1e8",
-        theme_color: "#173c33",
+        background_color: "#edf0f2",
+        theme_color: "#1b1d4d",
         categories: ["business", "finance", "productivity"],
         icons: [
           {

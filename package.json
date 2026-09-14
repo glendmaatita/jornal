@@ -6,6 +6,7 @@
   "packageManager": "bun@1.4.0",
   "scripts": {
     "dev": "vite",
+    "icons": "bun scripts/generate-icons.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "bun run server.ts",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/bun": "^1.4.0",
     "@types/node": "^26.4.1",

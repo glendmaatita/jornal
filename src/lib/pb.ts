@@ -3,6 +3,8 @@ import PocketBase from "pocketbase"
 // Same-origin path proxied to PocketBase by server.ts (VITE_POCKETBASE_URL=/pb).
 const baseUrl = import.meta.env.VITE_POCKETBASE_URL?.trim() || ""
 
+export const pocketBaseConfigured = Boolean(baseUrl)
+
 export const pb = new PocketBase(baseUrl || undefined)
 
 /** The authenticated tenant (PocketBase user record), if any. */

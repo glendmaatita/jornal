@@ -25,7 +25,9 @@ type Handler = (
 let respond: Handler | null = null
 
 function setEnv(value: string | undefined) {
-  setPocketBaseUrl(value ?? null)
+  // An empty override explicitly disables sync even when a developer's
+  // repository-level .env configures a local PocketBase endpoint.
+  setPocketBaseUrl(value ?? "")
 }
 
 /** Drain the queued microtask sync so tests start from a clean slate. */
