@@ -81,7 +81,33 @@ export default defineConfig({
             url: "/add",
             icons: [{ src: "/pwa-192x192.png", sizes: "192x192" }],
           },
+          {
+            name: "Uang masuk",
+            short_name: "Masuk",
+            url: "/add?direction=MONEY_IN",
+            icons: [{ src: "/pwa-192x192.png", sizes: "192x192" }],
+          },
+          {
+            name: "Uang keluar",
+            short_name: "Keluar",
+            url: "/add?direction=MONEY_OUT",
+            icons: [{ src: "/pwa-192x192.png", sizes: "192x192" }],
+          },
+          {
+            name: "Foto struk",
+            short_name: "Struk",
+            url: "/add?capture=receipt",
+            icons: [{ src: "/pwa-192x192.png", sizes: "192x192" }],
+          },
         ],
+        // Supported browsers deliver shared receipt files to this route. The
+        // page creates a review draft; it never uploads without user review.
+        share_target: {
+          action: "/add?shared=1",
+          method: "POST",
+          enctype: "multipart/form-data",
+          params: { files: [{ name: "receipt", accept: ["image/*", "application/pdf"] }] },
+        },
       },
       workbox: {
         cleanupOutdatedCaches: true,

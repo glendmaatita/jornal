@@ -4,7 +4,10 @@ const port = Number(process.env.PORT ?? 3000)
 const distDirectory = resolve(import.meta.dir, "dist")
 const indexFile = Bun.file(resolve(distDirectory, "index.html"))
 
-const immutableAssetPattern = /\.[a-zA-Z0-9_-]{8,}\.(?:js|css|png|svg|woff2?)$/
+// Vite emits names such as `index-C8abc123.js` (hash preceded by `-`), while
+// some older builds use a dot. Match both forms so immutable caching is used
+// for actual hashed assets.
+const immutableAssetPattern = /(?:[-.]|^)[a-zA-Z0-9_-]{8,}\.(?:js|css|png|svg|woff2?)$/
 const contentTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",

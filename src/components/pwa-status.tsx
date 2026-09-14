@@ -22,9 +22,11 @@ export function PwaStatus() {
     }
   }, [])
 
-  if (isOnline && !offlineReady && !needRefresh) return null
+  const [dismissed, setDismissed] = useState(false)
+  if (dismissed || (isOnline && !offlineReady && !needRefresh)) return null
 
   const dismiss = () => {
+    setDismissed(true)
     setOfflineReady(false)
     setNeedRefresh(false)
   }

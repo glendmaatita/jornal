@@ -51,6 +51,9 @@ function businessId(): string {
 }
 
 let testUrlOverride: string | null = null
+let syncQueued = false
+let hydrationStarted = false
+let syncGeneration = 0
 
 /** Test seam: override/clear the configured PocketBase URL at runtime. */
 export function setPocketBaseUrl(url: string | null) {
@@ -61,6 +64,7 @@ export function setPocketBaseUrl(url: string | null) {
 export function resetPocketBaseSyncState() {
   syncQueued = false
   hydrationStarted = false
+  syncGeneration += 1
 }
 
 /** Read lazily so tests can toggle the endpoint at runtime. */
@@ -71,8 +75,6 @@ function configuredUrl(): string {
   return import.meta.env.VITE_POCKETBASE_URL?.trim() ?? ""
 }
 
-let syncQueued = false
-let hydrationStarted = false
 
 function enabled() {
   return configuredUrl().length > 0
@@ -97,6 +99,19 @@ function writeLocalJson<T>(key: string, value: T) {
   } catch {
     // ignore
   }
+}
+
+function mergeLocalArray(remotePayloads: unknown[], key: string): unknown[] {
+  const local = localJson<unknown[]>(key, [])
+  const identity = (value: unknown) => {
+    if (!value || typeof value !== "object") return String(value)
+    const candidate = value as { id?: string; effectiveAt?: string; deletedAt?: string | null }
+    if (key.toLowerCase().includes("history")) return `${candidate.id ?? ""}:${candidate.effectiveAt ?? ""}:${candidate.deletedAt ?? "live"}`
+    return candidate.id ?? JSON.stringify(value)
+  }
+  const merged = new Map(local.map((value) => [identity(value), value]))
+  for (const value of remotePayloads) merged.set(identity(value), value)
+  return [...merged.values()]
 }
 
 function isDataUrl(value: string | null | undefined): value is string {
@@ -312,7 +327,7 @@ async function pruneExplicitlyDeleted(entity: EntityName) {
   )
 }
 
-export async function syncToPocketBase() {
+async function syncToPocketBaseUnsafe(runGeneration: number, runBusinessId: string) {
   if (!enabled() || typeof window === "undefined") return
   const states: Partial<LocalStateMap> = {
     profile: localJson(KEYS.profile, null),
@@ -329,6 +344,10 @@ export async function syncToPocketBase() {
   }
 
   for (const [entity, value] of Object.entries(states) as Array<[EntityName, unknown]>) {
+    // Never continue a request sequence after logout or tenant switch.
+    if (runGeneration !== syncGeneration || runBusinessId !== businessId()) {
+      throw new Error("Sync cancelled: account changed")
+    }
     if (value == null) continue
     if (Array.isArray(value)) {
       for (const item of value as Array<{ id?: string }>) {
@@ -343,6 +362,12 @@ export async function syncToPocketBase() {
       await pruneExplicitlyDeleted(entity)
     }
   }
+}
+
+export async function syncToPocketBase() {
+  const runGeneration = syncGeneration
+  const runBusinessId = businessId()
+  return syncToPocketBaseUnsafe(runGeneration, runBusinessId)
 }
 
 export async function hydrateFromPocketBase() {
@@ -380,7 +405,8 @@ export async function hydrateFromPocketBase() {
     }
     writeLocalJson(
       key,
-      remote
+      mergeLocalArray(
+        remote
         .map((record) => {
           const payload = record.payload
           if (!payload || typeof payload !== "object") return payload
@@ -390,6 +416,8 @@ export async function hydrateFromPocketBase() {
           return payload
         })
         .filter((payload) => payload !== null && payload !== undefined),
+        key,
+      ),
     )
   }
   return foundAny

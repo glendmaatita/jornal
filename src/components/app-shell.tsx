@@ -1,11 +1,12 @@
-import { Suspense, lazy } from "react"
+import { Suspense, lazy, useEffect } from "react"
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
+import { useQueryClient } from "@tanstack/react-query"
 import { BarChart3, Home as HomeIcon, LogOut, Plus, ReceiptText, Settings, Wallet } from "lucide-react"
 
 import { BrandMark } from "@/components/brand-mark"
 import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
-import { currentUser, logout } from "@/lib/pb"
+import { currentUser, logout, pb } from "@/lib/pb"
 import { resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
 import { setDataScope } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -25,11 +26,23 @@ const tabs = [
 
 export function AppShell() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const { canInstall, install } = useInstallPrompt()
   const user = currentUser()
 
+  useEffect(() => {
+    const onAuthChange = () => {
+      queryClient.cancelQueries()
+      queryClient.clear()
+    }
+    const unsubscribe = pb.authStore.onChange(onAuthChange)
+    return unsubscribe
+  }, [queryClient])
+
   function handleLogout() {
+    queryClient.cancelQueries()
+    queryClient.clear()
     setDataScope("local")
     logout()
     resetPocketBaseSyncState()

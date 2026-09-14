@@ -7,8 +7,9 @@ interface BeforeInstallPromptEvent extends Event {
 
 export function useInstallPrompt() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
-  const [isInstalled, setIsInstalled] = useState(
-    () => window.matchMedia("(display-mode: standalone)").matches,
+  const [isInstalled, setIsInstalled] = useState(() =>
+    window.matchMedia("(display-mode: standalone)").matches ||
+    ("standalone" in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone)),
   )
 
   useEffect(() => {
@@ -20,20 +21,26 @@ export function useInstallPrompt() {
       setIsInstalled(true)
       setInstallPrompt(null)
     }
+    const media = window.matchMedia("(display-mode: standalone)")
+    const handleDisplayMode = () => setIsInstalled(media.matches)
 
     window.addEventListener("beforeinstallprompt", handlePrompt)
     window.addEventListener("appinstalled", handleInstalled)
+    media.addEventListener?.("change", handleDisplayMode)
     return () => {
       window.removeEventListener("beforeinstallprompt", handlePrompt)
       window.removeEventListener("appinstalled", handleInstalled)
+      media.removeEventListener?.("change", handleDisplayMode)
     }
   }, [])
 
   const install = async () => {
     if (!installPrompt) return
     await installPrompt.prompt()
-    const choice = await installPrompt.userChoice
-    if (choice.outcome === "accepted") setInstallPrompt(null)
+    await installPrompt.userChoice
+    // beforeinstallprompt is one-shot; clear it after either outcome so a
+    // dismissed prompt does not leave a dead install button on screen.
+    setInstallPrompt(null)
   }
 
   return { canInstall: Boolean(installPrompt) && !isInstalled, install }

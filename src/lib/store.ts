@@ -41,6 +41,11 @@ export function setDataScope(scope: string | null | undefined) {
   activeScope = scope?.trim() || "local"
 }
 
+/** Current tenant partition, used to scope all client-side caches as well. */
+export function getDataScope() {
+  return activeScope
+}
+
 export function scopedStorageKey(key: string): string {
   return activeScope === "local" ? key : `jornal.${activeScope}.${key}`
 }
@@ -374,6 +379,9 @@ export function duplicateTransaction(id: string): Transaction | null {
   const rest: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
     ...source,
     description: `${source.description} (salinan)`,
+    // A duplicate is a new entry draft for today; the original remains
+    // unchanged and the user can edit the copy before saving it.
+    transactionDate: todayIsoDate(),
   }
   return createTransaction(rest)
 }

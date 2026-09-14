@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 
 import { useFinancialEvents } from "@/lib/queries"
-import { initializePocketBaseSync } from "@/lib/pocketbase-sync"
+import { initializePocketBaseSync, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
 import { processRecurringRules } from "@/lib/store"
 import { CHANGED_EVENT } from "@/lib/types"
 
@@ -11,11 +11,18 @@ export function DeferredEffects() {
   useFinancialEvents()
 
   useEffect(() => {
+    const retry = () => schedulePocketBaseSync()
+    window.addEventListener("online", retry)
+    window.addEventListener("focus", retry)
     void (async () => {
       await initializePocketBaseSync()
       processRecurringRules()
       window.dispatchEvent(new CustomEvent(CHANGED_EVENT))
     })()
+    return () => {
+      window.removeEventListener("online", retry)
+      window.removeEventListener("focus", retry)
+    }
   }, [])
 
   return null

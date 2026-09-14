@@ -13,19 +13,22 @@ import {
   loadSettings,
   loadTransactions,
   subscribeFinancialEvents,
+  getDataScope,
 } from "@/lib/store"
 import { ALL_CATEGORIES } from "@/lib/categories"
 import { computeSafeToSpend } from "@/lib/safe-to-spend"
 import { CHANGED_EVENT } from "@/lib/types"
 
+// Keys include the active tenant. This prevents React Query from briefly
+// rendering the previous account while auth and local storage switch.
 export const queryKeys = {
-  transactions: ["transactions"] as const,
-  accounts: ["accounts"] as const,
-  reserves: ["reserves"] as const,
-  profile: ["profile"] as const,
-  settings: ["settings"] as const,
-  corrections: ["corrections"] as const,
-  recurringRules: ["recurring-rules"] as const,
+  get transactions() { return ["jornal", getDataScope(), "transactions"] as const },
+  get accounts() { return ["jornal", getDataScope(), "accounts"] as const },
+  get reserves() { return ["jornal", getDataScope(), "reserves"] as const },
+  get profile() { return ["jornal", getDataScope(), "profile"] as const },
+  get settings() { return ["jornal", getDataScope(), "settings"] as const },
+  get corrections() { return ["jornal", getDataScope(), "corrections"] as const },
+  get recurringRules() { return ["jornal", getDataScope(), "recurring-rules"] as const },
 }
 
 /** Global invalidation whenever any financial state changes (event architecture, §57). */
