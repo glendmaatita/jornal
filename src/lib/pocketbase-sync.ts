@@ -166,6 +166,14 @@ function entityKey(entity: EntityName): string {
   }
 }
 
+function historyKey(entity: EntityName): string | null {
+  if (entity === "profile") return KEYS.profileHistory
+  if (entity === "accounts") return KEYS.accountHistory
+  if (entity === "transactions") return KEYS.transactionHistory
+  if (entity === "reserves") return KEYS.reserveHistory
+  return null
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? {})
   if (!(init?.body instanceof FormData)) {
@@ -290,16 +298,17 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
   }
 }
 
-async function pruneMissing(entity: EntityName, keepAppIds: Set<string>) {
+async function pruneExplicitlyDeleted(entity: EntityName) {
+  const key = historyKey(entity)
+  if (!key) return
+  const history = localJson<Array<{ id?: string; deletedAt?: string | null }>>(key, [])
+  const deletedIds = new Set(history.filter((record) => record.deletedAt).map((record) => record.id).filter(Boolean))
+  if (deletedIds.size === 0) return
   const remote = await listRecords(entity)
   await Promise.all(
     remote
-      .filter((record) => !keepAppIds.has(record.app_id))
-      .map((record) =>
-        requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, {
-          method: "DELETE",
-        }),
-      ),
+      .filter((record) => deletedIds.has(record.app_id))
+      .map((record) => requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" })),
   )
 }
 
@@ -322,16 +331,16 @@ export async function syncToPocketBase() {
   for (const [entity, value] of Object.entries(states) as Array<[EntityName, unknown]>) {
     if (value == null) continue
     if (Array.isArray(value)) {
-      const keep = new Set<string>()
       for (const item of value as Array<{ id?: string }>) {
         const appId = entityAppId(entity, item)
-        keep.add(appId)
         await upsertRecord(entity, appId, item)
       }
-      await pruneMissing(entity, keep)
+      // A missing item is ambiguous across devices. Only explicit tombstones
+      // may delete a remote record.
+      await pruneExplicitlyDeleted(entity)
     } else {
       await upsertRecord(entity, entity, value)
-      await pruneMissing(entity, new Set([entity]))
+      await pruneExplicitlyDeleted(entity)
     }
   }
 }

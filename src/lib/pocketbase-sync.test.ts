@@ -86,13 +86,9 @@ describe("pocketbase-sync disabled", () => {
 })
 
 describe("syncToPocketBase", () => {
-  test("enabled but empty local state only lists (prune pass), no mutations", async () => {
+  test("enabled but empty local state performs no remote mutations", async () => {
     setEnv("http://pb.test")
     await syncToPocketBase()
-    expect(calls.length).toBeGreaterThan(0)
-    if (calls.some((call) => call.method !== "GET")) {
-      console.log("DEBUG:", calls.map((call) => `${call.method} ${call.url}`).join(" || "))
-    }
     expect(calls.filter((call) => call.method !== "GET")).toHaveLength(0)
   })
 
@@ -138,7 +134,7 @@ describe("syncToPocketBase", () => {
     expect(JSON.parse(String(body.payload)).attachmentDataUrl).toBeNull()
   })
 
-  test("patches existing records and deletes remote ones missing locally", async () => {
+  test("patches existing records without deleting remote-only records", async () => {
     setEnv("http://pb.test")
     // Seed a transaction with a deterministic id directly (createTransaction generates ids)
     localStorageShim.setItem(KEYS.transactions, JSON.stringify([transactionFixture("txn-1")]))
@@ -165,7 +161,7 @@ describe("syncToPocketBase", () => {
     calls = []
     await syncToPocketBase()
     expect(calls.some((call) => call.method === "PATCH" && call.url.endsWith("/records/pb-1"))).toBe(true)
-    expect(calls.some((call) => call.method === "DELETE" && call.url.endsWith("/records/pb-2"))).toBe(true)
+    expect(calls.some((call) => call.method === "DELETE")).toBe(false)
   })
 
   test("history records use id:effectiveAt:deletedAt composite app ids", async () => {
@@ -199,7 +195,7 @@ describe("syncToPocketBase", () => {
     expect(String(thrown)).toContain("500")
   })
 
-  test("pagination walks all pages", async () => {
+  test("empty local state does not paginate remote snapshots", async () => {
     setEnv("http://pb.test")
     await flushQueuedSync()
     const fullPage = Array.from({ length: 200 }, (_, index) =>
@@ -213,7 +209,7 @@ describe("syncToPocketBase", () => {
     }
     calls = []
     await syncToPocketBase()
-    expect(calls.some((call) => call.url.includes("page=2"))).toBe(true)
+    expect(calls.some((call) => call.url.includes("page=2"))).toBe(false)
   })
 })
 
