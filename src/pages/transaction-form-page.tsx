@@ -64,7 +64,6 @@ export function TransactionFormPage() {
   const [notes, setNotes] = useState("")
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
   const [attachmentDataUrl, setAttachmentDataUrl] = useState<string | null>(null)
-  const [attachmentMode, setAttachmentMode] = useState<"upload" | "camera">("upload")
   const [showMore, setShowMore] = useState(false)
   const [classificationOverride, setClassificationOverride] = useState<TransactionClassification | null>(null)
   const [smartText, setSmartText] = useState("")
@@ -72,7 +71,8 @@ export function TransactionFormPage() {
   const [loadedId, setLoadedId] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null)
+  const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const [paymentMethodListId] = useState(() => `payment-methods-${crypto.randomUUID()}`)
   const [supplierCustomerListId] = useState(() => `supplier-customer-${crypto.randomUUID()}`)
   const draftKey = scopedStorageKey(`jornal.transaction-draft.${transactionId ?? "new"}.v1`)
@@ -189,9 +189,10 @@ export function TransactionFormPage() {
   }
 
   const openAttachmentPicker = (mode: "upload" | "camera") => {
-    setAttachmentMode(mode)
-    // Let React commit the capture attribute before opening the native picker.
-    window.setTimeout(() => attachmentInputRef.current?.click(), 0)
+    // Invoke the preconfigured input during the user's gesture. Waiting for a
+    // state commit can lose mobile browser user activation and open no picker.
+    if (mode === "camera") cameraInputRef.current?.click()
+    else uploadInputRef.current?.click()
   }
 
   const handleAttachmentSelected = async (file: File | null) => {
@@ -539,10 +540,21 @@ export function TransactionFormPage() {
               <div className="space-y-2">
                 <span className="field-label">Lampiran</span>
                 <input
-                  ref={attachmentInputRef}
+                  ref={uploadInputRef}
                   type="file"
                   accept="image/*,.pdf"
-                  capture={attachmentMode === "camera" ? "environment" : undefined}
+                  className="hidden"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0] ?? null
+                    await handleAttachmentSelected(file)
+                    event.target.value = ""
+                  }}
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
                   className="hidden"
                   onChange={async (event) => {
                     const file = event.target.files?.[0] ?? null
