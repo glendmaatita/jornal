@@ -12,8 +12,12 @@ export function DeferredEffects() {
 
   useEffect(() => {
     const retry = () => schedulePocketBaseSync()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") retry()
+    }
     window.addEventListener("online", retry)
     window.addEventListener("focus", retry)
+    document.addEventListener("visibilitychange", onVisibilityChange)
     void (async () => {
       await initializePocketBaseSync()
       processRecurringRules()
@@ -22,6 +26,7 @@ export function DeferredEffects() {
     return () => {
       window.removeEventListener("online", retry)
       window.removeEventListener("focus", retry)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
     }
   }, [])
 
