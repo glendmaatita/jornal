@@ -60,7 +60,9 @@ export function SettingsPage() {
     const anchor = document.createElement("a")
     anchor.href = url
     anchor.download = `jornal-backup-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.append(anchor)
     anchor.click()
+    anchor.remove()
     // Give mobile browsers time to start the download before releasing it.
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
     setDataMessage("Backup berhasil dibuat.")
