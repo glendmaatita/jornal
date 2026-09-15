@@ -24,6 +24,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Explicit data reset now removes all active-tenant draft keys from localStorage and the durable mirror before clearing the outbox (F13, W05).
 - Reset now acknowledges only the active tenant's outbox keys, so one account cannot discard another account's pending operations (F01, F13).
 - Reset navigation now waits for scoped IndexedDB mirrors and outbox cleanup to complete before opening onboarding (F13).
+- Backup import rejects files larger than 10 MB before reading them, keeping recovery responsive under oversized input (F04, W05).
 - Transaction search now has an explicit associated label for assistive technology (U07).
 - The static server now sends clickjacking, referrer, permissions, and opener isolation headers while retaining OAuth popup compatibility (F06, U07).
 - Hydrated receipt records now persist a stable file endpoint without a signed token; detail view requests a fresh token only when opening the file (F05).
