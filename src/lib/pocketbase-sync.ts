@@ -91,6 +91,29 @@ export function loadSyncConflicts(): SyncConflict[] {
   } catch { return [] }
 }
 
+export function resolveSyncConflict(id: string, choice: "local" | "remote") {
+  const conflict = loadSyncConflicts().find((item) => item.id === id)
+  if (!conflict || !conflict.entity || conflict.localPayload === undefined) return false
+  const key = entityKey(conflict.entity as EntityName)
+  const selected = choice === "remote" ? conflict.remotePayload : conflict.localPayload
+  const value = choice === "local" && selected && typeof selected === "object"
+    ? { ...(selected as Record<string, unknown>), updatedAt: new Date().toISOString() }
+    : selected
+  try {
+    const current = localJson<unknown>(key, null)
+    if (Array.isArray(current) && value && typeof value === "object" && "id" in value) {
+      const next = current.map((item) => item && typeof item === "object" && (item as { id?: string }).id === (value as { id?: string }).id ? value : item)
+      writeLocalJson(key, next)
+    } else {
+      writeLocalJson(key, value)
+    }
+    const remaining = loadSyncConflicts().filter((item) => item.id !== id)
+    window.localStorage.setItem(scopedStorageKey(KEYS.syncConflicts), JSON.stringify(remaining))
+    schedulePocketBaseSync()
+    return true
+  } catch { return false }
+}
+
 function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>) {
   if (!String(error).startsWith("Error: Conflict") && !String(error).startsWith("Conflict")) return
   const existing = loadSyncConflicts()

@@ -3,7 +3,7 @@ import { CloudOff, Download, RefreshCw, X } from "lucide-react"
 import { useRegisterSW } from "virtual:pwa-register/react"
 
 import { Button } from "@/components/ui/button"
-import { getSyncStatus, loadSyncConflicts, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
+import { getSyncStatus, loadSyncConflicts, resolveSyncConflict, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
 
 export function PwaStatus() {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
@@ -68,9 +68,14 @@ export function PwaStatus() {
         </Button>
       )}
       {hasConflict && (
-        <a href="/transactions" className="text-xs font-semibold underline underline-offset-2">
-          Tinjau transaksi
-        </a>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button type="button" className="text-xs font-semibold underline underline-offset-2" onClick={() => {
+            if (resolveSyncConflict(conflicts[0].id, "local")) setConflicts(loadSyncConflicts())
+          }}>Pakai perangkat</button>
+          <button type="button" className="text-xs font-semibold underline underline-offset-2" onClick={() => {
+            if (resolveSyncConflict(conflicts[0].id, "remote")) setConflicts(loadSyncConflicts())
+          }}>Pakai server</button>
+        </div>
       )}
       {(!isOnline || needRefresh) && (
         <Button size="icon" variant="ghost" className="size-8 hover:bg-white/10" onClick={dismiss}>
