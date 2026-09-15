@@ -640,6 +640,11 @@ export function TransactionFormPage() {
           <Button type="submit" size="lg" className="w-full" disabled={save.isPending}>
             Simpan
           </Button>
+          {save.isError && (
+            <p className="field-error text-center" role="alert">
+              Transaksi belum tersimpan. Data isian tetap ada; coba lagi.
+            </p>
+          )}
           {editing && (
             <Link to="/transactions/$transactionId" params={{ transactionId: editing.id }} className="block text-center text-xs font-medium text-[var(--link)] underline">
               Batal
