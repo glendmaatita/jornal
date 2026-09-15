@@ -15,6 +15,7 @@ This index records evidence from the current `develop` branch. A local pass does
 | Sync transport | `bun test src/lib/pocketbase-sync.test.ts` | 19 tests passed, including multipart attachments, pagination, conflicts, and empty responses |
 | Share target handoff | Live `PORT=4181 bun run server.ts`; multipart POST followed by token GET and replay | `303` redirect with one-time token; file/text payload returned with `Cache-Control: no-store`; token replay returns `410` |
 | Share target validation | Live `PORT=4182 bun run server.ts`; JavaScript file upload | Unsupported MIME type returns `415` |
+| Share target body bound | Live `PORT=4183 bun run server.ts`; 9 MB multipart upload | Request is rejected early with `413` before intake; text fields are capped before storage |
 
 ## Implemented and locally evidenced
 

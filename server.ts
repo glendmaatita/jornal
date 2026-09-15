@@ -76,10 +76,17 @@ const server = Bun.serve({
 
     if (url.pathname === "/share-target") {
       if (request.method === "POST") {
+        const declaredLength = Number(request.headers.get("content-length") ?? 0)
+        if (declaredLength > shareLimit + 256 * 1024) {
+          return Response.json({ error: "Data yang dibagikan terlalu besar." }, { status: 413, headers: { ...securityHeaders, "Cache-Control": "no-store" } })
+        }
         const now = Date.now()
         for (const [key, value] of sharedIntake) if (value.expiresAt < now) sharedIntake.delete(key)
         const form = await request.formData().catch(() => null)
         if (!form) return Response.json({ error: "Data yang dibagikan tidak valid." }, { status: 400, headers: securityHeaders })
+        const title = String(form.get("title") ?? "").slice(0, 500)
+        const text = String(form.get("text") ?? "").slice(0, 10_000)
+        const sharedUrl = String(form.get("url") ?? "").slice(0, 2_000)
         const candidate = form.get("files")
         let file: { name: string; type: string; data: string } | undefined
         if (candidate instanceof File && candidate.size > 0) {
@@ -95,7 +102,7 @@ const server = Bun.serve({
         const token = crypto.randomUUID()
         sharedIntake.set(token, {
           expiresAt: Date.now() + 5 * 60 * 1000,
-          title: String(form.get("title") ?? ""), text: String(form.get("text") ?? ""), url: String(form.get("url") ?? ""), file,
+          title, text, url: sharedUrl, file,
         })
         return Response.redirect(`${url.origin}/add?shared=1&shareToken=${encodeURIComponent(token)}`, 303)
       }
