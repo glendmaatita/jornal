@@ -1,7 +1,7 @@
 import type { Account, AppSettings, BusinessProfile, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
 import { KEYS, scopedStorageKey } from "./store"
 import { pb } from "./pb"
-import { acknowledgeOutbox, restoreState } from "./local-db"
+import { acknowledgeOutbox, listOutbox, restoreState } from "./local-db"
 
 type EntityName =
   | "profile"
@@ -414,7 +414,11 @@ async function syncToPocketBaseUnsafe(runGeneration: number, runBusinessId: stri
     reserveHistory: localJson(KEYS.reserveHistory, []),
   }
 
+  const queuedKeys = new Set((await listOutbox()).map((row) => row.key))
+  const hasQueuedState = queuedKeys.size > 0
+
   for (const [entity, value] of Object.entries(states) as Array<[EntityName, unknown]>) {
+    if (hasQueuedState && !queuedKeys.has(scopedStorageKey(entityKey(entity)))) continue
     // Never continue a request sequence after logout or tenant switch.
     if (runGeneration !== syncGeneration || runBusinessId !== businessId()) {
       throw new Error("Sync cancelled: account changed")

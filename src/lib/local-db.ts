@@ -13,6 +13,8 @@ interface StateRow {
   updatedAt: number
 }
 
+interface OutboxRow { key: string; value: unknown; queuedAt: number }
+
 function database(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === "undefined") return Promise.resolve(null)
   return new Promise((resolve, reject) => {
@@ -60,14 +62,24 @@ export async function clearMirroredState(key: string): Promise<void> {
   }).finally(() => db.close())
 }
 
-export async function enqueueOutbox(key: string): Promise<void> {
+export async function enqueueOutbox(key: string, value: unknown): Promise<void> {
   const db = await database()
   if (!db) return
   await new Promise<void>((resolve, reject) => {
-    const request = db.transaction(OUTBOX, "readwrite").objectStore(OUTBOX).put({ key, queuedAt: Date.now() })
+    const request = db.transaction(OUTBOX, "readwrite").objectStore(OUTBOX).put({ key, value, queuedAt: Date.now() } satisfies OutboxRow)
     request.onsuccess = () => resolve()
     request.onerror = () => reject(request.error ?? new Error("IndexedDB outbox write failed"))
   }).finally(() => db.close())
+}
+
+export async function listOutbox(): Promise<OutboxRow[]> {
+  const db = await database()
+  if (!db) return []
+  return new Promise<OutboxRow[]>((resolve, reject) => {
+    const request = db.transaction(OUTBOX, "readonly").objectStore(OUTBOX).getAll()
+    request.onsuccess = () => { resolve(request.result as OutboxRow[]); db.close() }
+    request.onerror = () => { reject(request.error ?? new Error("IndexedDB outbox read failed")); db.close() }
+  })
 }
 
 export async function acknowledgeOutbox(keys: string[]): Promise<void> {

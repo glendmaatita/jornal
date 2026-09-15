@@ -74,7 +74,7 @@ function write<T>(key: string, value: T) {
   // IndexedDB is asynchronous and unavailable in the test/SSR shims; it is a
   // durable second copy for browser restarts and quota recovery.
   void mirrorState(storageKey, value).catch(() => undefined)
-  void enqueueOutbox(storageKey).catch(() => undefined)
+  void enqueueOutbox(storageKey, value).catch(() => undefined)
 }
 
 // ── Event architecture (§57) ──
