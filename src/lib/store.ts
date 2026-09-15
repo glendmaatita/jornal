@@ -704,6 +704,15 @@ export interface LocalDataExport {
 export function exportLocalData(): LocalDataExport {
   const data: Record<string, unknown> = {}
   for (const key of Object.values(KEYS)) data[key] = read<unknown>(key, null)
+  try {
+    const prefix = activeScope === "local" ? "jornal.transaction-draft." : `jornal.${activeScope}.jornal.transaction-draft.`
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index)
+      if (!key?.startsWith(prefix)) continue
+      const raw = window.localStorage.getItem(key)
+      if (raw) data[key] = JSON.parse(raw)
+    }
+  } catch { /* backups still include the core state when storage is restricted */ }
   return { format: "jornal-local-export", version: 1, scope: activeScope, exportedAt: nowIso(), data }
 }
 
@@ -718,11 +727,15 @@ export function importLocalData(candidate: unknown): { imported: number } {
   if (envelope.format !== "jornal-local-export" || envelope.version !== 1 || !envelope.data || typeof envelope.data !== "object") {
     throw new Error("Format backup Jornal tidak dikenali")
   }
-  const entries = Object.entries(envelope.data).filter(([key]) => Object.values(KEYS).includes(key as typeof KEYS[keyof typeof KEYS]))
+  const draftPrefix = activeScope === "local" ? "jornal.transaction-draft." : `jornal.${activeScope}.jornal.transaction-draft.`
+  const entries = Object.entries(envelope.data).filter(([key]) =>
+    Object.values(KEYS).includes(key as typeof KEYS[keyof typeof KEYS]) || key.startsWith(draftPrefix),
+  )
   if (entries.length === 0) throw new Error("Backup tidak berisi data Jornal")
   for (const [storageKey, value] of entries) {
     const key = Object.entries(KEYS).find(([, valueKey]) => valueKey === storageKey)?.[0] as keyof typeof KEYS | undefined
     if (key) write(KEYS[key], value)
+    else window.localStorage.setItem(storageKey, JSON.stringify(value))
   }
   emitFinancialEvent("TAX_PROFILE_UPDATED")
   schedulePocketBaseSync()
