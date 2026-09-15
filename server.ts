@@ -29,6 +29,16 @@ const securityHeaders = {
 
 const sharedIntake = new Map<string, { expiresAt: number; title: string; text: string; url: string; file?: { name: string; type: string; data: string } }>()
 const shareLimit = 8 * 1024 * 1024
+const maxPendingShares = 32
+
+function pruneSharedIntake(now = Date.now()) {
+  for (const [key, value] of sharedIntake) if (value.expiresAt < now) sharedIntake.delete(key)
+  while (sharedIntake.size >= maxPendingShares) {
+    const oldest = sharedIntake.keys().next().value
+    if (!oldest) break
+    sharedIntake.delete(oldest)
+  }
+}
 
 async function responseFor(filePath: string, request: Request) {
   const file = Bun.file(filePath)
@@ -80,8 +90,7 @@ const server = Bun.serve({
         if (declaredLength > shareLimit + 256 * 1024) {
           return Response.json({ error: "Data yang dibagikan terlalu besar." }, { status: 413, headers: { ...securityHeaders, "Cache-Control": "no-store" } })
         }
-        const now = Date.now()
-        for (const [key, value] of sharedIntake) if (value.expiresAt < now) sharedIntake.delete(key)
+        pruneSharedIntake()
         const form = await request.formData().catch(() => null)
         if (!form) return Response.json({ error: "Data yang dibagikan tidak valid." }, { status: 400, headers: securityHeaders })
         const title = String(form.get("title") ?? "").slice(0, 500)
@@ -108,6 +117,7 @@ const server = Bun.serve({
       }
       const token = url.searchParams.get("token")
       if (!token) return Response.json({ error: "Token tidak ditemukan." }, { status: 400, headers: securityHeaders })
+      pruneSharedIntake()
       const item = sharedIntake.get(token)
       sharedIntake.delete(token)
       if (!item || item.expiresAt < Date.now()) return Response.json({ error: "Tautan berbagi sudah kedaluwarsa." }, { status: 410, headers: securityHeaders })
