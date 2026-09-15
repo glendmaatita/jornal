@@ -40,6 +40,14 @@ export function AppShell() {
     return unsubscribe
   }, [queryClient])
 
+  useEffect(() => {
+    // Ask once per browser profile after login. Persistence is feature
+    // detected; denial must not block the local-first app.
+    if (!navigator.storage?.persist || sessionStorage.getItem("jornal.storage-requested") === "1") return
+    sessionStorage.setItem("jornal.storage-requested", "1")
+    void navigator.storage.persist().catch(() => false)
+  }, [])
+
   function handleLogout() {
     queryClient.cancelQueries()
     queryClient.clear()
