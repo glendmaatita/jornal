@@ -56,9 +56,9 @@ export function TransactionFormPage() {
   const [description, setDescription] = useState("")
   const [transactionDate, setTransactionDate] = useState(todayIsoDate())
   const [categoryId, setCategoryId] = useState<string | null>(null)
-  const [accountId, setAccountId] = useState<string | null>(null)
+  const [accountId, setAccountId] = useState<string | null>(() => readEntryPreference("account"))
   const [transferAccountId, setTransferAccountId] = useState<string | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState("Transfer")
+  const [paymentMethod, setPaymentMethod] = useState(() => readEntryPreference("payment") || "Transfer")
   const [supplierCustomer, setSupplierCustomer] = useState("")
   const [tags, setTags] = useState("")
   const [notes, setNotes] = useState("")
@@ -267,6 +267,8 @@ export function TransactionFormPage() {
       } else {
         createTransaction(payload)
       }
+      writeEntryPreference("account", accountId)
+      writeEntryPreference("payment", paymentMethod.trim())
     },
     onSuccess: async () => {
       try { window.localStorage.removeItem(draftKey) } catch { /* ignore */ }
@@ -631,4 +633,20 @@ export function TransactionFormPage() {
       )}
     </div>
   )
+}
+
+function readEntryPreference(kind: "account" | "payment") {
+  try {
+    return window.localStorage.getItem(scopedStorageKey(`jornal.entry-default.${kind}.v1`))
+  } catch {
+    return null
+  }
+}
+
+function writeEntryPreference(kind: "account" | "payment", value: string | null) {
+  try {
+    const key = scopedStorageKey(`jornal.entry-default.${kind}.v1`)
+    if (value) window.localStorage.setItem(key, value)
+    else window.localStorage.removeItem(key)
+  } catch { /* preferences are optional; the transaction itself is already saved */ }
 }
