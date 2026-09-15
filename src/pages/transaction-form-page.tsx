@@ -559,7 +559,7 @@ export function TransactionFormPage() {
                 <span className="field-label">Lampiran</span>
                 {captureRequested && !attachmentDataUrl && (
                   <p className="rounded-lg bg-secondary/60 px-3 py-2 text-xs text-muted-foreground" role="status">
-                    Mode foto siap. Tekan “Buka kamera” untuk mengambil struk.
+                    Mode foto siap. Tekan “Ambil foto” untuk mengambil struk.
                   </p>
                 )}
                 <input
@@ -587,10 +587,10 @@ export function TransactionFormPage() {
                 />
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Button type="button" variant="outline" onClick={() => openAttachmentPicker("upload")}>
-                    Upload file
+                    Pilih file
                   </Button>
                   <Button type="button" variant="outline" onClick={() => openAttachmentPicker("camera")}>
-                    Buka kamera
+                    Ambil foto
                   </Button>
                 </div>
                 {attachmentName && (
