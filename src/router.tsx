@@ -23,7 +23,19 @@ const TransactionFormPage = lazy(() =>
 )
 const TransactionsPage = lazy(() => import("@/pages/transactions-page").then((m) => ({ default: m.TransactionsPage })))
 
-const rootRoute = createRootRoute({})
+function NotFoundPage() {
+  return (
+    <main className="grid min-h-dvh place-items-center bg-[var(--background)] px-5 text-center">
+      <div className="max-w-sm">
+        <h1 className="text-2xl tracking-tight">Halaman tidak ditemukan</h1>
+        <p className="mt-2 text-sm text-[var(--body-text)]">Tautan ini sudah berubah atau belum tersedia.</p>
+        <a href="/" className="mt-5 inline-flex rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">Ke beranda</a>
+      </div>
+    </main>
+  )
+}
+
+const rootRoute = createRootRoute({ notFoundComponent: NotFoundPage })
 
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
