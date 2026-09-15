@@ -39,6 +39,8 @@ interface PocketBaseRecord {
   attachment?: string | null
   updated: string
   created: string
+  revision?: number
+  deleted_at?: string | null
 }
 
 const COLLECTION = "jornal_records"
@@ -312,6 +314,8 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
     entity,
     app_id: appId,
     payload: sanitizedPayload,
+    revision: (found?.revision ?? 0) + 1,
+    deleted_at: null,
   }
   if (found && found.payload && payload && typeof found.payload === "object" && typeof payload === "object") {
     const remoteUpdatedAt = (found.payload as { updatedAt?: unknown }).updatedAt
