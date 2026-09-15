@@ -37,11 +37,21 @@ export function AppShell() {
       // logout, or token refresh. This prevents a stale tenant's data from
       // briefly appearing while React invalidates the previous cache.
       setDataScope(pb.authStore.record?.id)
+      resetPocketBaseSyncState()
       queryClient.cancelQueries()
       queryClient.clear()
     }
     const unsubscribe = pb.authStore.onChange(onAuthChange)
-    return unsubscribe
+    const onStorage = (event: StorageEvent) => {
+      // PocketBase persists its auth store under pb_auth. React to another
+      // tab clearing or replacing that value before rendering its data.
+      if (event.key === "pb_auth" || event.key === null) onAuthChange()
+    }
+    window.addEventListener("storage", onStorage)
+    return () => {
+      unsubscribe()
+      window.removeEventListener("storage", onStorage)
+    }
   }, [queryClient])
 
   useEffect(() => {
