@@ -93,14 +93,18 @@ export function loadSyncConflicts(): SyncConflict[] {
 
 export function resolveSyncConflict(id: string, choice: "local" | "remote") {
   const conflict = loadSyncConflicts().find((item) => item.id === id)
-  if (!conflict || !conflict.entity || conflict.localPayload === undefined) return false
+  if (!conflict || !conflict.entity) return false
   const key = entityKey(conflict.entity as EntityName)
-  const selected = choice === "remote" ? conflict.remotePayload : conflict.localPayload
+  const current = localJson<unknown>(key, null)
+  const currentLocalValue = Array.isArray(current) && conflict.appId
+    ? current.find((item) => item && typeof item === "object" && (item as { id?: string }).id === conflict.appId)
+    : current
+  const selected = choice === "remote" ? conflict.remotePayload : currentLocalValue ?? conflict.localPayload
+  if (selected === undefined) return false
   const value = choice === "local" && selected && typeof selected === "object"
     ? { ...(selected as Record<string, unknown>), updatedAt: new Date().toISOString() }
     : selected
   try {
-    const current = localJson<unknown>(key, null)
     if (Array.isArray(current) && value && typeof value === "object" && "id" in value) {
       const next = current.map((item) => item && typeof item === "object" && (item as { id?: string }).id === (value as { id?: string }).id ? value : item)
       writeLocalJson(key, next)
