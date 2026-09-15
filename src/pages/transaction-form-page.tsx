@@ -25,6 +25,7 @@ import type { ClassificationSource, TransactionClassification, TransactionDirect
 import { CLASSIFICATION_LABELS } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { scopedStorageKey } from "@/lib/store"
+import { mirrorState, restoreState } from "@/lib/local-db"
 
 type Mode = "money_in" | "money_out" | "transfer"
 
@@ -81,41 +82,44 @@ export function TransactionFormPage() {
 
   // Keep an unfinished entry available across navigation, refresh, and a
   // service-worker update. Drafts are tenant-scoped through scopedStorageKey.
-  /* eslint-disable react-hooks/set-state-in-effect -- restore an external draft once on mount */
   useEffect(() => {
     if (draftRestoredRef.current) return
-    try {
-      const raw = window.localStorage.getItem(draftKey)
-      if (raw) {
-        const draft = JSON.parse(raw) as Partial<{
+    let active = true
+    const restoreDraft = (draft: Partial<{
           mode: Mode; amount: string; description: string; transactionDate: string; categoryId: string | null
           accountId: string | null; transferAccountId: string | null; paymentMethod: string; supplierCustomer: string
           tags: string; notes: string; attachmentName: string | null; attachmentDataUrl: string | null
           classificationOverride: TransactionClassification | null
-        }>
-        if (draft.mode) setMode(draft.mode)
-        if (typeof draft.amount === "string") setAmount(draft.amount)
-        if (typeof draft.description === "string") setDescription(draft.description)
-        if (typeof draft.transactionDate === "string") setTransactionDate(draft.transactionDate)
-        if ("categoryId" in draft) setCategoryId(draft.categoryId ?? null)
-        if ("accountId" in draft) setAccountId(draft.accountId ?? null)
-        if ("transferAccountId" in draft) setTransferAccountId(draft.transferAccountId ?? null)
-        if (typeof draft.paymentMethod === "string") setPaymentMethod(draft.paymentMethod)
-        if (typeof draft.supplierCustomer === "string") setSupplierCustomer(draft.supplierCustomer)
-        if (typeof draft.tags === "string") setTags(draft.tags)
-        if (typeof draft.notes === "string") setNotes(draft.notes)
-        if ("attachmentName" in draft) setAttachmentName(draft.attachmentName ?? null)
-        if ("attachmentDataUrl" in draft) setAttachmentDataUrl(draft.attachmentDataUrl ?? null)
-        if ("classificationOverride" in draft) setClassificationOverride(draft.classificationOverride ?? null)
-      }
-    } catch {
-      // A corrupt draft must never prevent a new transaction from opening.
-      window.localStorage.removeItem(draftKey)
+        }> | null) => {
+      if (!draft || !active) return
+      if (draft.mode) setMode(draft.mode)
+      if (typeof draft.amount === "string") setAmount(draft.amount)
+      if (typeof draft.description === "string") setDescription(draft.description)
+      if (typeof draft.transactionDate === "string") setTransactionDate(draft.transactionDate)
+      if ("categoryId" in draft) setCategoryId(draft.categoryId ?? null)
+      if ("accountId" in draft) setAccountId(draft.accountId ?? null)
+      if ("transferAccountId" in draft) setTransferAccountId(draft.transferAccountId ?? null)
+      if (typeof draft.paymentMethod === "string") setPaymentMethod(draft.paymentMethod)
+      if (typeof draft.supplierCustomer === "string") setSupplierCustomer(draft.supplierCustomer)
+      if (typeof draft.tags === "string") setTags(draft.tags)
+      if (typeof draft.notes === "string") setNotes(draft.notes)
+      if ("attachmentName" in draft) setAttachmentName(draft.attachmentName ?? null)
+      if ("attachmentDataUrl" in draft) setAttachmentDataUrl(draft.attachmentDataUrl ?? null)
+      if ("classificationOverride" in draft) setClassificationOverride(draft.classificationOverride ?? null)
     }
-    draftRestoredRef.current = true
+    void (async () => {
+      try {
+        const raw = window.localStorage.getItem(draftKey)
+        if (raw) restoreDraft(JSON.parse(raw))
+        else restoreDraft(await restoreState(draftKey).catch(() => null) as Partial<{ mode: Mode; amount: string; description: string; transactionDate: string; categoryId: string | null; accountId: string | null; transferAccountId: string | null; paymentMethod: string; supplierCustomer: string; tags: string; notes: string; attachmentName: string | null; attachmentDataUrl: string | null; classificationOverride: TransactionClassification | null }> | null)
+      } catch {
+        window.localStorage.removeItem(draftKey)
+      } finally {
+        if (active) draftRestoredRef.current = true
+      }
+    })()
+    return () => { active = false }
   }, [draftKey])
-  /* eslint-enable react-hooks/set-state-in-effect */
-
   /* eslint-disable react-hooks/set-state-in-effect -- consume validated shortcut/share intent once */
   useEffect(() => {
     if (editing) return
@@ -135,12 +139,14 @@ export function TransactionFormPage() {
 
   useEffect(() => {
     if (!draftRestoredRef.current || editing) return
-    try {
-      window.localStorage.setItem(draftKey, JSON.stringify({
+    const draft = {
         mode, amount, description, transactionDate, categoryId, accountId, transferAccountId,
         paymentMethod, supplierCustomer, tags, notes, attachmentName, attachmentDataUrl,
         classificationOverride,
-      }))
+      }
+    try {
+      window.localStorage.setItem(draftKey, JSON.stringify(draft))
+      void mirrorState(draftKey, draft).catch(() => undefined)
     } catch {
       // Save still reports its own durable result; draft persistence is best effort.
     }
