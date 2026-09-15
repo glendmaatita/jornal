@@ -562,7 +562,14 @@ export async function hydrateFromPocketBase() {
     const key = entityKey(entity)
     if (entity === "profile" || entity === "settings") {
       const payload = remote[0]?.payload ?? null
-      writeLocalJson(key, payload)
+      const local = localJson<unknown>(key, null)
+      const localUpdatedAt = local && typeof local === "object" ? (local as { updatedAt?: unknown }).updatedAt : undefined
+      const remoteUpdatedAt = payload && typeof payload === "object" ? (payload as { updatedAt?: unknown }).updatedAt : undefined
+      // A device may have a durable offline edit that has not reached the
+      // server yet. Do not erase it during startup hydration.
+      if (!(typeof localUpdatedAt === "string" && typeof remoteUpdatedAt === "string" && localUpdatedAt > remoteUpdatedAt)) {
+        writeLocalJson(key, payload)
+      }
       continue
     }
     writeLocalJson(
