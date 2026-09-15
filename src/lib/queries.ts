@@ -38,6 +38,11 @@ export function useFinancialEvents() {
       for (const key of Object.values(queryKeys)) {
         void queryClient.invalidateQueries({ queryKey: key })
       }
+      const badge = (navigator as Navigator & { setAppBadge?: (count?: number) => Promise<void> }).setAppBadge
+      if (badge) {
+        const pending = loadTransactions().filter((transaction) => transaction.reviewStatus === "NEEDS_REVIEW").length
+        void badge(pending).catch(() => undefined)
+      }
     }
     const unsubscribe = subscribeFinancialEvents(invalidateAll)
     window.addEventListener("storage", invalidateAll)
