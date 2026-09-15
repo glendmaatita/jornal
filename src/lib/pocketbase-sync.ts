@@ -530,7 +530,9 @@ async function syncWithRetry() {
     } catch (error) {
       if (!retryableSyncError(error) || attempt === 2) throw error
       setSyncStatus("retrying")
-      await new Promise((resolve) => setTimeout(resolve, 400 * 2 ** attempt))
+      const exponentialDelay = 400 * 2 ** attempt
+      const jitter = Math.floor(Math.random() * 200)
+      await new Promise((resolve) => setTimeout(resolve, Math.min(5_000, exponentialDelay + jitter)))
     }
   }
 }
