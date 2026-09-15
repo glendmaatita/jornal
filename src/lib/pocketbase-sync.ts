@@ -1,7 +1,7 @@
 import type { Account, AppSettings, BusinessProfile, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
 import { KEYS, scopedStorageKey } from "./store"
 import { pb } from "./pb"
-import { restoreState } from "./local-db"
+import { acknowledgeOutbox, restoreState } from "./local-db"
 
 type EntityName =
   | "profile"
@@ -433,6 +433,7 @@ async function syncToPocketBaseUnsafe(runGeneration: number, runBusinessId: stri
       await pruneExplicitlyDeleted(entity)
     }
   }
+  await acknowledgeOutbox(Object.values(KEYS).map((key) => scopedStorageKey(key)))
 }
 
 export async function syncToPocketBase() {

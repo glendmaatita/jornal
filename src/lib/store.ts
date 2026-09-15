@@ -18,7 +18,7 @@ import type {
 } from "./types"
 import { patternToken, DEFAULT_THRESHOLDS } from "./classification"
 import { todayIsoDate } from "./format"
-import { clearMirroredState, mirrorState } from "./local-db"
+import { clearMirroredState, enqueueOutbox, mirrorState } from "./local-db"
 
 export const KEYS = {
   transactions: "jornal.transactions.v1",
@@ -74,6 +74,7 @@ function write<T>(key: string, value: T) {
   // IndexedDB is asynchronous and unavailable in the test/SSR shims; it is a
   // durable second copy for browser restarts and quota recovery.
   void mirrorState(storageKey, value).catch(() => undefined)
+  void enqueueOutbox(storageKey).catch(() => undefined)
 }
 
 // ── Event architecture (§57) ──

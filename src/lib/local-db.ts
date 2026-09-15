@@ -4,7 +4,8 @@
  */
 const DATABASE = "jornal-local-v1"
 const STORE = "state"
-const VERSION = 1
+const VERSION = 2
+const OUTBOX = "outbox"
 
 interface StateRow {
   key: string
@@ -19,6 +20,7 @@ function database(): Promise<IDBDatabase | null> {
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "key" })
+      if (!db.objectStoreNames.contains(OUTBOX)) db.createObjectStore(OUTBOX, { keyPath: "key" })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error("IndexedDB unavailable"))
@@ -55,5 +57,28 @@ export async function clearMirroredState(key: string): Promise<void> {
     const request = db.transaction(STORE, "readwrite").objectStore(STORE).delete(key)
     request.onsuccess = () => resolve()
     request.onerror = () => reject(request.error ?? new Error("IndexedDB delete failed"))
+  }).finally(() => db.close())
+}
+
+export async function enqueueOutbox(key: string): Promise<void> {
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const request = db.transaction(OUTBOX, "readwrite").objectStore(OUTBOX).put({ key, queuedAt: Date.now() })
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error ?? new Error("IndexedDB outbox write failed"))
+  }).finally(() => db.close())
+}
+
+export async function acknowledgeOutbox(keys: string[]): Promise<void> {
+  if (keys.length === 0) return
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(OUTBOX, "readwrite")
+    const objectStore = transaction.objectStore(OUTBOX)
+    for (const key of keys) objectStore.delete(key)
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB outbox acknowledge failed"))
   }).finally(() => db.close())
 }
