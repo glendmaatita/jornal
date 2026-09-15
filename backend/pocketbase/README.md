@@ -33,6 +33,8 @@ Create one collection named `jornal_records` with these fields:
 - `entity` — text
 - `app_id` — text
 - `payload` — json
+- `revision` — number (monotonic sync version)
+- `deleted_at` — date (nullable tombstone timestamp)
 
 Recommended constraints:
 
