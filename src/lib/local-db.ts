@@ -75,6 +75,20 @@ export async function enqueueOutbox(key: string, value: unknown): Promise<void> 
   }).finally(() => db.close())
 }
 
+/** Persist the local mirror and its pending sync operation atomically. */
+export async function persistState(key: string, value: unknown): Promise<void> {
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction([STORE, OUTBOX], "readwrite")
+    transaction.objectStore(STORE).put({ key, value, updatedAt: Date.now() } satisfies StateRow)
+    transaction.objectStore(OUTBOX).put({ key, value, queuedAt: Date.now() } satisfies OutboxRow)
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB persistence failed"))
+    transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB persistence aborted"))
+  }).finally(() => db.close())
+}
+
 export async function listOutbox(): Promise<OutboxRow[]> {
   const db = await database()
   if (!db) return []
