@@ -3,6 +3,7 @@ import { CloudOff, Download, RefreshCw, X } from "lucide-react"
 import { useRegisterSW } from "virtual:pwa-register/react"
 
 import { Button } from "@/components/ui/button"
+import { getSyncStatus, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
 
 export function PwaStatus() {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
@@ -23,7 +24,10 @@ export function PwaStatus() {
   }, [])
 
   const [dismissed, setDismissed] = useState(false)
-  if (dismissed || (isOnline && !offlineReady && !needRefresh)) return null
+  const [syncStatus, setSyncStatus] = useState(getSyncStatus)
+  useEffect(() => subscribeSyncStatus(setSyncStatus), [])
+  const syncFailed = syncStatus === "failed"
+  if (dismissed || (isOnline && !offlineReady && !needRefresh && !syncFailed)) return null
 
   const dismiss = () => {
     setDismissed(true)
@@ -37,10 +41,12 @@ export function PwaStatus() {
       aria-live="polite"
     >
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/10">
-        {needRefresh ? <RefreshCw /> : isOnline ? <Download /> : <CloudOff />}
+        {needRefresh || syncFailed ? <RefreshCw /> : isOnline ? <Download /> : <CloudOff />}
       </span>
       <p className="min-w-0 flex-1 text-sm leading-snug">
-        {needRefresh
+        {syncFailed
+          ? "Sinkronisasi tertunda. Data tetap tersimpan di perangkat."
+          : needRefresh
           ? "Versi baru Jornal siap dipakai."
           : isOnline
             ? "Jornal siap dipakai offline."
@@ -49,6 +55,11 @@ export function PwaStatus() {
       {needRefresh && (
         <Button size="sm" variant="secondary" onClick={() => void updateServiceWorker(true)}>
           Update
+        </Button>
+      )}
+      {syncFailed && isOnline && (
+        <Button size="sm" variant="secondary" onClick={() => { setDismissed(false); schedulePocketBaseSync() }}>
+          Coba lagi
         </Button>
       )}
       {(!isOnline || needRefresh) && (

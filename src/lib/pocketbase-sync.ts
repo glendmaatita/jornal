@@ -55,6 +55,23 @@ let testUrlOverride: string | null = null
 let syncQueued = false
 let hydrationStarted = false
 let syncGeneration = 0
+export type SyncStatus = "idle" | "syncing" | "synced" | "retrying" | "failed"
+let syncStatus: SyncStatus = "idle"
+const syncStatusListeners = new Set<(status: SyncStatus) => void>()
+
+export function getSyncStatus() {
+  return syncStatus
+}
+
+export function subscribeSyncStatus(listener: (status: SyncStatus) => void) {
+  syncStatusListeners.add(listener)
+  return () => { syncStatusListeners.delete(listener) }
+}
+
+function setSyncStatus(status: SyncStatus) {
+  syncStatus = status
+  for (const listener of syncStatusListeners) listener(status)
+}
 
 /** Test seam: override/clear the configured PocketBase URL at runtime. */
 export function setPocketBaseUrl(url: string | null) {
@@ -66,6 +83,7 @@ export function resetPocketBaseSyncState() {
   syncQueued = false
   hydrationStarted = false
   syncGeneration += 1
+  setSyncStatus("idle")
 }
 
 /** Read lazily so tests can toggle the endpoint at runtime. */
@@ -391,7 +409,33 @@ async function syncToPocketBaseUnsafe(runGeneration: number, runBusinessId: stri
 export async function syncToPocketBase() {
   const runGeneration = syncGeneration
   const runBusinessId = businessId()
-  return syncToPocketBaseUnsafe(runGeneration, runBusinessId)
+  setSyncStatus("syncing")
+  try {
+    const result = await syncToPocketBaseUnsafe(runGeneration, runBusinessId)
+    setSyncStatus("synced")
+    return result
+  } catch (error) {
+    setSyncStatus("failed")
+    throw error
+  }
+}
+
+function retryableSyncError(error: unknown) {
+  const status = Number(String(error).match(/PocketBase (\d{3})/)?.[1] ?? 0)
+  return status === 0 || status === 408 || status === 425 || status === 429 || status >= 500
+}
+
+async function syncWithRetry() {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await syncToPocketBase()
+      return
+    } catch (error) {
+      if (!retryableSyncError(error) || attempt === 2) throw error
+      setSyncStatus("retrying")
+      await new Promise((resolve) => setTimeout(resolve, 400 * 2 ** attempt))
+    }
+  }
 }
 
 export async function hydrateFromPocketBase() {
@@ -453,8 +497,9 @@ export function schedulePocketBaseSync() {
   syncQueued = true
   queueMicrotask(() => {
     syncQueued = false
-    void syncToPocketBase().catch(() => {
-      // Keep the local-first app working if backend sync is unavailable.
+    void syncWithRetry().catch(() => {
+      // Keep local data available; the visible status remains failed so the
+      // user can retry on reconnect/focus or the next mutation.
     })
   })
 }
