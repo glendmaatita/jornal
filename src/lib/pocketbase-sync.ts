@@ -199,10 +199,14 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (pb.authStore.isValid) {
     headers.set("Authorization", pb.authStore.token)
   }
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 15_000)
   const response = await fetch(`${baseUrl()}${path}`, {
     ...init,
     headers,
+    signal: init?.signal ?? controller.signal,
   })
+  clearTimeout(timeout)
   if (!response.ok) {
     const text = await response.text().catch(() => "")
     throw new Error(`PocketBase ${response.status}: ${text}`)

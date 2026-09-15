@@ -67,6 +67,7 @@ export function TransactionFormPage() {
   const [showSmart, setShowSmart] = useState(false)
   const [loadedId, setLoadedId] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const attachmentInputRef = useRef<HTMLInputElement | null>(null)
   const [paymentMethodListId] = useState(() => `payment-methods-${crypto.randomUUID()}`)
   const [supplierCustomerListId] = useState(() => `supplier-customer-${crypto.randomUUID()}`)
@@ -191,6 +192,12 @@ export function TransactionFormPage() {
 
   const handleAttachmentSelected = async (file: File | null) => {
     if (!file) return
+    const maxBytes = 8 * 1024 * 1024
+    if (file.size > maxBytes) {
+      setAttachmentError("Lampiran terlalu besar. Pilih file sampai 8 MB.")
+      return
+    }
+    setAttachmentError(null)
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(String(reader.result ?? ""))
@@ -552,6 +559,7 @@ export function TransactionFormPage() {
                     </div>
                   </div>
                 )}
+                {attachmentError && <p className="field-error" role="alert">{attachmentError}</p>}
               </div>
             </div>
           )}
