@@ -94,3 +94,14 @@ export async function acknowledgeOutbox(keys: string[]): Promise<void> {
     transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB outbox acknowledge failed"))
   }).finally(() => db.close())
 }
+
+/** Drop every pending mutation when the user explicitly resets this device's data. */
+export async function clearOutbox(): Promise<void> {
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const request = db.transaction(OUTBOX, "readwrite").objectStore(OUTBOX).clear()
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error ?? new Error("IndexedDB outbox clear failed"))
+  }).finally(() => db.close())
+}
