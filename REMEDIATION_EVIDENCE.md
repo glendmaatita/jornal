@@ -27,6 +27,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Backup import rejects files larger than 10 MB before reading them, keeping recovery responsive under oversized input (F04, W05).
 - Backup import now validates each known key's expected array/object shape before writing any data (F04, W05).
 - Remaining English financial labels were localized to Indonesian, including tax reserve and reserve status summaries (U08).
+- Foreground sync now resumes on `visibilitychange` when a tab becomes visible, covering mobile resume paths without relying on focus events (F09, W04).
 - Transaction search now has an explicit associated label for assistive technology (U07).
 - The static server now sends clickjacking, referrer, permissions, and opener isolation headers while retaining OAuth popup compatibility (F06, U07).
 - Hydrated receipt records now persist a stable file endpoint without a signed token; detail view requests a fresh token only when opening the file (F05).
