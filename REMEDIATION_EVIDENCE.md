@@ -22,6 +22,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Transaction drafts are mirrored to IndexedDB and restored when localStorage is empty, so a refresh or service-worker restart can recover an unfinished entry (F12, W01, W05).
 - Successful transaction saves now remove both the localStorage draft and its durable mirror, preventing stale drafts from resurfacing after recovery (F12).
 - Explicit data reset now removes all active-tenant draft keys from localStorage and the durable mirror before clearing the outbox (F13, W05).
+- Reset now acknowledges only the active tenant's outbox keys, so one account cannot discard another account's pending operations (F01, F13).
 - Local-only startup restores the IndexedDB mirror even when PocketBase is disabled; storage and IndexedDB failures raise a visible recovery notice (F04, W01, W05).
 - Revision/tombstone metadata, tenant PocketBase rules, server 409 conflict persistence, bounded retries, caller-aware request timeouts, and merge-preserving hydration (F02, F03, F09, W04).
 - Transient sync retries now use capped exponential backoff with bounded jitter to avoid synchronized retry storms (F09, W04).
