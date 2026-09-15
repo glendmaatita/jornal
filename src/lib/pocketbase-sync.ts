@@ -478,7 +478,15 @@ async function processPendingReset() {
   if (!window.localStorage.getItem(markerKey)) return false
   for (const entity of ["profile", "settings", "accounts", "transactions", "reserves", "corrections", "recurringRules", "profileHistory", "accountHistory", "transactionHistory", "reserveHistory"] as EntityName[]) {
     const records = await listRecords(entity)
-    for (const record of records) await requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" })
+    for (const record of records) {
+      try {
+        await requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" })
+      } catch (error) {
+        // A concurrent device may have deleted the row already; reset remains
+        // idempotent. Other failures must keep the marker for retry.
+        if (!String(error).includes("PocketBase 404")) throw error
+      }
+    }
   }
   try { window.localStorage.removeItem(markerKey) } catch { /* durable mirror cleanup still follows */ }
   await clearResetMarker(markerKey)

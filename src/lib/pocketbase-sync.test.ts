@@ -120,6 +120,20 @@ describe("syncToPocketBase", () => {
     expect(localStorageShim.getItem(resetKey)).toBeTruthy()
   })
 
+  test("reset treats an already-deleted remote row as success", async () => {
+    setEnv("http://pb.test")
+    const resetKey = scopedStorageKey(RESET_PENDING_KEY)
+    localStorageShim.setItem(resetKey, new Date().toISOString())
+    respond = (url, method) => {
+      if (url.includes("/records?") && method === "GET") {
+        return { status: 200, body: { items: [{ id: "remote-row", entity: "profile", app_id: "profile", business_id: "local", payload: {} }], totalPages: 1 } }
+      }
+      return { status: 404, body: { error: "missing" } }
+    }
+    await expect(syncToPocketBase()).resolves.toBeUndefined()
+    expect(localStorageShim.getItem(resetKey)).toBeNull()
+  })
+
   test("upserts profile, transactions and reserves as POST records", async () => {
     setEnv("http://pb.test")
     saveProfile({ ...emptyProfile(), businessName: "Kedai" })
