@@ -358,7 +358,7 @@ function transactionPayloadForLocal(record: PocketBaseRecord, payload: Transacti
   }
 }
 
-async function listRecords(entity: EntityName, appId?: string): Promise<PocketBaseRecord[]> {
+async function listRecords(entity: EntityName, appId?: string, requestedBusinessId = businessId()): Promise<PocketBaseRecord[]> {
   const records: PocketBaseRecord[] = []
   let page = 1
   const perPage = 200
@@ -367,7 +367,7 @@ async function listRecords(entity: EntityName, appId?: string): Promise<PocketBa
       perPage: String(perPage),
       page: String(page),
       sort: "-updated",
-      filter: `business_id = "${businessId()}" && entity = "${entity}"${appId ? ` && app_id = "${appId}"` : ""}`,
+      filter: `business_id = "${requestedBusinessId}" && entity = "${entity}"${appId ? ` && app_id = "${appId}"` : ""}`,
     })
     const result = await requestJson<{ items: PocketBaseRecord[]; totalPages?: number }>(
       `/api/collections/${COLLECTION}/records?${query.toString()}`,
@@ -471,14 +471,16 @@ async function pruneExplicitlyDeleted(entity: EntityName) {
   )
 }
 
-async function processPendingReset() {
+async function processPendingReset(runBusinessId: string) {
   const markerKey = scopedStorageKey(RESET_PENDING_KEY)
   // The marker is an ISO string written directly so it remains readable even
   // if a previous localStorage JSON payload was corrupted.
   if (!window.localStorage.getItem(markerKey)) return false
   for (const entity of ["profile", "settings", "accounts", "transactions", "reserves", "corrections", "recurringRules", "profileHistory", "accountHistory", "transactionHistory", "reserveHistory"] as EntityName[]) {
-    const records = await listRecords(entity)
+    if (businessId() !== runBusinessId) throw new Error("Reset cancelled: account changed")
+    const records = await listRecords(entity, undefined, runBusinessId)
     for (const record of records) {
+      if (businessId() !== runBusinessId) throw new Error("Reset cancelled: account changed")
       try {
         await requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" })
       } catch (error) {
@@ -499,7 +501,7 @@ async function clearResetMarker(markerKey: string) {
 
 async function syncToPocketBaseUnsafe(runGeneration: number, runBusinessId: string) {
   if (!enabled() || typeof window === "undefined") return
-  await processPendingReset()
+  await processPendingReset(runBusinessId)
   const states: Partial<LocalStateMap> = {
     profile: localJson(KEYS.profile, null),
     settings: localJson(KEYS.settings, null),
