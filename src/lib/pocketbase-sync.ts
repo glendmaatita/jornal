@@ -291,18 +291,26 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 15_000)
+  const externalSignal = init?.signal
+  const abortFromCaller = () => controller.abort(externalSignal?.reason)
+  if (externalSignal) {
+    if (externalSignal.aborted) abortFromCaller()
+    else externalSignal.addEventListener("abort", abortFromCaller, { once: true })
+  }
   let response: Response
   try {
     response = await fetch(`${baseUrl()}${path}`, {
       ...init,
       headers,
-      signal: init?.signal ?? controller.signal,
+      signal: controller.signal,
     })
   } catch (error) {
     clearTimeout(timeout)
+    externalSignal?.removeEventListener("abort", abortFromCaller)
     throw error
   }
   clearTimeout(timeout)
+  externalSignal?.removeEventListener("abort", abortFromCaller)
   if (!response.ok) {
     const text = await response.text().catch(() => "")
     throw new Error(`PocketBase ${response.status}: ${text}`)
