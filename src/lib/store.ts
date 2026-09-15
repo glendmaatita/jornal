@@ -694,9 +694,8 @@ export function resetAllData() {
     }
     void clearMirroredState(storageKey).catch(() => undefined)
   }
-  void clearOutbox().catch(() => undefined)
+  void clearOutbox().then(() => schedulePocketBaseSync()).catch(() => undefined)
   emitFinancialEvent("TAX_PROFILE_UPDATED")
-  schedulePocketBaseSync()
 }
 
 export interface LocalDataExport {
