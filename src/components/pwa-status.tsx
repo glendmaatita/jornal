@@ -3,7 +3,7 @@ import { CloudOff, Download, RefreshCw, X } from "lucide-react"
 import { useRegisterSW } from "virtual:pwa-register/react"
 
 import { Button } from "@/components/ui/button"
-import { getSyncStatus, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
+import { getSyncStatus, loadSyncConflicts, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
 
 export function PwaStatus() {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
@@ -25,9 +25,12 @@ export function PwaStatus() {
 
   const [dismissed, setDismissed] = useState(false)
   const [syncStatus, setSyncStatus] = useState(getSyncStatus)
+  const [conflicts, setConflicts] = useState(loadSyncConflicts)
   useEffect(() => subscribeSyncStatus(setSyncStatus), [])
+  useEffect(() => subscribeSyncStatus(() => setConflicts(loadSyncConflicts())), [])
   const syncFailed = syncStatus === "failed"
-  if (dismissed || (isOnline && !offlineReady && !needRefresh && !syncFailed)) return null
+  const hasConflict = conflicts.length > 0
+  if (dismissed || (isOnline && !offlineReady && !needRefresh && !syncFailed && !hasConflict)) return null
 
   const dismiss = () => {
     setDismissed(true)
@@ -44,7 +47,9 @@ export function PwaStatus() {
         {needRefresh || syncFailed ? <RefreshCw /> : isOnline ? <Download /> : <CloudOff />}
       </span>
       <p className="min-w-0 flex-1 text-sm leading-snug">
-        {syncFailed
+        {hasConflict
+          ? "Ada perubahan dari perangkat lain. Data lokal tetap tersimpan; tinjau lalu coba lagi."
+          : syncFailed
           ? "Sinkronisasi tertunda. Data tetap tersimpan di perangkat."
           : needRefresh
           ? "Versi baru Jornal siap dipakai."

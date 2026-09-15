@@ -58,6 +58,7 @@ let syncQueued = false
 let hydrationStarted = false
 let syncGeneration = 0
 export type SyncStatus = "idle" | "syncing" | "synced" | "retrying" | "failed"
+export interface SyncConflict { message: string; occurredAt: string }
 let syncStatus: SyncStatus = "idle"
 const syncStatusListeners = new Set<(status: SyncStatus) => void>()
 
@@ -73,6 +74,21 @@ export function subscribeSyncStatus(listener: (status: SyncStatus) => void) {
 function setSyncStatus(status: SyncStatus) {
   syncStatus = status
   for (const listener of syncStatusListeners) listener(status)
+}
+
+export function loadSyncConflicts(): SyncConflict[] {
+  try {
+    const raw = window.localStorage.getItem(scopedStorageKey(KEYS.syncConflicts))
+    return raw ? JSON.parse(raw) as SyncConflict[] : []
+  } catch { return [] }
+}
+
+function recordSyncConflict(error: unknown) {
+  if (!String(error).startsWith("Error: Conflict") && !String(error).startsWith("Conflict")) return
+  const conflicts = [...loadSyncConflicts(), { message: String(error).replace(/^Error:\s*/, ""), occurredAt: new Date().toISOString() }]
+  try {
+    window.localStorage.setItem(scopedStorageKey(KEYS.syncConflicts), JSON.stringify(conflicts.slice(-20)))
+  } catch { /* local work remains available even when storage is full */ }
 }
 
 /** Test seam: override/clear the configured PocketBase URL at runtime. */
@@ -428,6 +444,7 @@ export async function syncToPocketBase() {
     setSyncStatus("synced")
     return result
   } catch (error) {
+    recordSyncConflict(error)
     setSyncStatus("failed")
     throw error
   }

@@ -32,6 +32,7 @@ export const KEYS = {
   settings: "jornal.settings.v1",
   corrections: "jornal.corrections.v1",
   recurringRules: "jornal.recurring-rules.v1",
+  syncConflicts: "jornal.sync-conflicts.v1",
 } as const
 
 const BUSINESS_ID = "local"
