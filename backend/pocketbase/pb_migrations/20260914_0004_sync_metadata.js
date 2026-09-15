@@ -2,13 +2,13 @@
 migrate(
   (app) => {
     const collection = app.findCollectionByNameOrId("jornal_records")
-    collection.fields.add(new Field({
+    if (!collection.fields.getByName("created")) collection.fields.add(new Field({
       name: "created",
       type: "autodate",
       onCreate: true,
       onUpdate: false,
     }))
-    collection.fields.add(new Field({
+    if (!collection.fields.getByName("updated")) collection.fields.add(new Field({
       name: "updated",
       type: "autodate",
       onCreate: true,
@@ -18,12 +18,9 @@ migrate(
     if (attachment) attachment.protected = true
     app.save(collection)
   },
-  (app) => {
-    const collection = app.findCollectionByNameOrId("jornal_records")
-    collection.fields.removeByName("created")
-    collection.fields.removeByName("updated")
-    const attachment = collection.fields.getByName("attachment")
-    if (attachment) attachment.protected = false
-    app.save(collection)
+  () => {
+    // Keep fields on rollback: an idempotent migration cannot know whether a
+    // pre-existing field belonged to this migration, and removing it could
+    // destroy populated data.
   },
 )

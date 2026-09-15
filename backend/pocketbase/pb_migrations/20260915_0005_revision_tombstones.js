@@ -4,7 +4,7 @@
 migrate(
   (app) => {
     const collection = app.findCollectionByNameOrId("jornal_records")
-    collection.fields.add(new Field({
+    if (!collection.fields.getByName("revision")) collection.fields.add(new Field({
       name: "revision",
       type: "number",
       // Existing rows need to migrate before the request hook can populate
@@ -13,17 +13,15 @@ migrate(
       required: false,
       min: 0,
     }))
-    collection.fields.add(new Field({
+    if (!collection.fields.getByName("deleted_at")) collection.fields.add(new Field({
       name: "deleted_at",
       type: "date",
       required: false,
     }))
     app.save(collection)
   },
-  (app) => {
-    const collection = app.findCollectionByNameOrId("jornal_records")
-    collection.fields.removeByName("revision")
-    collection.fields.removeByName("deleted_at")
-    app.save(collection)
+  () => {
+    // Keep metadata on rollback to avoid deleting values from a populated
+    // database when field ownership cannot be distinguished safely.
   },
 )
