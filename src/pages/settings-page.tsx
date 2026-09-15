@@ -67,6 +67,10 @@ export function SettingsPage() {
 
   const importData = async (file: File | undefined) => {
     if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      setDataMessage("Backup terlalu besar. Pilih file sampai 10 MB.")
+      return
+    }
     try {
       const parsed = JSON.parse(await file.text()) as unknown
       if (!window.confirm("Pulihkan backup ini? Data pada perangkat akan digabungkan dengan isi backup.")) return
