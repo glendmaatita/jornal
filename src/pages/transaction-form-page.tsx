@@ -47,7 +47,10 @@ export function TransactionFormPage() {
   const editing = useMemo(() => transactions.find((transaction) => transaction.id === transactionId) ?? null, [transactions, transactionId])
   const thresholds = settings ?? DEFAULT_THRESHOLDS
 
-  const [mode, setMode] = useState<Mode>("money_out")
+  const [mode, setMode] = useState<Mode>(() => {
+    const direction = new URLSearchParams(window.location.search).get("direction")
+    return direction === "MONEY_IN" ? "money_in" : direction === "MONEY_OUT" ? "money_out" : "money_out"
+  })
   const [amount, setAmount] = useState("")
   const [description, setDescription] = useState("")
   const [transactionDate, setTransactionDate] = useState(todayIsoDate())
