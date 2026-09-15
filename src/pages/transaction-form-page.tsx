@@ -292,6 +292,7 @@ export function TransactionFormPage() {
   })
 
   const submit = () => {
+    if (save.isPending) return
     if (!canSave) {
       setShowErrors(true)
       return
