@@ -1,4 +1,4 @@
-import { StrictMode } from "react"
+import { Component, StrictMode, type ReactNode } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RouterProvider } from "@tanstack/react-router"
@@ -15,14 +15,46 @@ const queryClient = new QueryClient({
   },
 })
 
+class AppErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch() {
+    console.error("Jornal render failed")
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <main className="grid min-h-dvh place-items-center bg-[var(--background)] px-5 text-center">
+        <div className="max-w-sm">
+          <h1 className="text-2xl tracking-tight">Jornal perlu dimuat ulang</h1>
+          <p className="mt-2 text-sm text-[var(--body-text)]">Data di perangkat tetap tersimpan. Muat ulang untuk melanjutkan.</p>
+          <div className="mt-5 flex justify-center gap-2">
+            <button type="button" className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground" onClick={() => window.location.reload()}>
+              Muat ulang
+            </button>
+            <a href="/" className="rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-semibold text-foreground">Ke beranda</a>
+          </div>
+        </div>
+      </main>
+    )
+  }
+}
+
 const rootElement = document.getElementById("root")
 
 if (!rootElement) throw new Error("Root element was not found")
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </AppErrorBoundary>
   </StrictMode>,
 )
