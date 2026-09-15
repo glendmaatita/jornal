@@ -183,7 +183,8 @@ button:disabled {
   border: none;
   outline: none;
   color: inherit;
-  font: inherit;
+  font-family: inherit;
+  line-height: inherit;
 }
 
 .field-shell ::placeholder,
