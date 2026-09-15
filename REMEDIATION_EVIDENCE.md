@@ -17,6 +17,7 @@ This index records evidence from the current `develop` branch. A local pass does
 ## Implemented and locally evidenced
 
 - Account-scoped local storage and query keys, auth partition switching, durable IndexedDB mirror, drafts, backup/restore validation, and reset outbox clearing (F01, F04, F12, W01, W05).
+- Auth storage changes from another tab now reset the sync generation, switch the tenant partition, and clear React Query caches before the next render (F01, F09).
 - Business mutations now persist their IndexedDB mirror and sync outbox in one read/write transaction; a failed transaction raises the existing storage recovery notice instead of silently acknowledging durability (F04, W01).
 - Transaction drafts are mirrored to IndexedDB and restored when localStorage is empty, so a refresh or service-worker restart can recover an unfinished entry (F12, W01, W05).
 - Successful transaction saves now remove both the localStorage draft and its durable mirror, preventing stale drafts from resurfacing after recovery (F12).
