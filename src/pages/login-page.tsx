@@ -12,7 +12,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [error, setError] = useState("")
   const [pending, setPending] = useState(false)
-  const { canInstall, install } = useInstallPrompt()
+  const { canInstall, isInstalled, isIos, install } = useInstallPrompt()
 
   async function handleGoogleLogin() {
     setError("")
@@ -73,6 +73,14 @@ export function LoginPage() {
           >
             Install Jornal di perangkat
           </button>
+        )}
+        {isIos && !isInstalled && !canInstall && (
+          <details className="mt-4 rounded-xl border border-[#ced6e1] bg-[#f1f5fd] px-4 py-3 text-left text-sm text-[#1b1d4d]">
+            <summary className="cursor-pointer font-semibold">Pasang Jornal di iPhone</summary>
+            <p className="mt-2 text-xs leading-relaxed text-[var(--body-text)]">
+              Buka menu Bagikan di Safari, lalu pilih “Tambahkan ke Layar Utama”.
+            </p>
+          </details>
         )}
       </div>
       <PwaStatus />

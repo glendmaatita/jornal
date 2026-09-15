@@ -59,5 +59,6 @@ export function useInstallPrompt() {
     notify()
   }
 
-  return { canInstall: Boolean(installPrompt) && !isInstalled, install }
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  return { canInstall: Boolean(installPrompt) && !isInstalled, isInstalled, isIos, install }
 }
