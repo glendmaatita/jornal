@@ -1,7 +1,7 @@
 import type { Account, AppSettings, BusinessProfile, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
 import { KEYS, scopedStorageKey } from "./store"
 import { pb } from "./pb"
-import { acknowledgeOutbox, listOutbox, restoreState } from "./local-db"
+import { acknowledgeOutbox, listOutbox, mirrorState, restoreState } from "./local-db"
 
 type EntityName =
   | "profile"
@@ -175,11 +175,13 @@ function localJson<T>(key: string, fallback: T): T {
 }
 
 function writeLocalJson<T>(key: string, value: T) {
+  const storageKey = scopedStorageKey(key)
   try {
-    window.localStorage.setItem(scopedStorageKey(key), JSON.stringify(value))
+    window.localStorage.setItem(storageKey, JSON.stringify(value))
   } catch {
     // ignore
   }
+  void mirrorState(storageKey, value).catch(() => undefined)
 }
 
 async function restoreMissingLocalState() {
