@@ -10,7 +10,7 @@ This index records evidence from the current `develop` branch. A local pass does
 | Type safety | `bun run typecheck` | Passed |
 | Static checks | `bun run lint` | Passed |
 | Production bundle | `bun run build` | Passed; 48 precache entries, editor remains lazy |
-| Preview compression | `curl -sSI -H 'Accept-Encoding: gzip' http://127.0.0.1:4173/assets/<hashed>.js` | `200`; `Content-Encoding: gzip`, `Vary: Accept-Encoding`, immutable cache |
+| Preview compression and headers | Built preview `GET`/`HEAD` probes against a hashed JS asset | `GET`: `200`, gzip + `Vary: Accept-Encoding`, immutable cache; `HEAD`: `200`, no body, explicit `content-length`, security headers |
 | Fresh PocketBase schema | `pocketbase migrate up --dir <disposable-dir> --migrationsDir backend/pocketbase/pb_migrations` | Migrations 0001–0005 applied |
 | Sync transport | `bun test src/lib/pocketbase-sync.test.ts` | 19 tests passed, including multipart attachments, pagination, conflicts, and empty responses |
 
