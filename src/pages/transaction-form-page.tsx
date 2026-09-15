@@ -196,6 +196,14 @@ export function TransactionFormPage() {
   const descriptionError = mode !== "transfer" && !description.trim() ? "Keterangan membantu sistem mengklasifikasi transaksi." : undefined
   const canSave = !amountError && !transferError && !descriptionError
 
+  /* eslint-disable react-hooks/set-state-in-effect -- focus the first field after validation renders */
+  useEffect(() => {
+    if (!showErrors) return
+    const firstInvalid = document.querySelector<HTMLElement>('[aria-invalid="true"]')
+    firstInvalid?.focus()
+  }, [showErrors, amountError, transferError, descriptionError])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   const applySmartInput = () => {
     const parsed = parseTransactionInput(smartText)
     setMode(parsed.direction === "MONEY_IN" ? "money_in" : "money_out")
