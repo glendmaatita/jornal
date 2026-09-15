@@ -48,7 +48,10 @@ export async function restoreState(key: string): Promise<unknown | undefined> {
       resolve((request.result as StateRow | undefined)?.value)
       db.close()
     }
-    request.onerror = () => reject(request.error ?? new Error("IndexedDB read failed"))
+    request.onerror = () => {
+      db.close()
+      reject(request.error ?? new Error("IndexedDB read failed"))
+    }
   })
 }
 
