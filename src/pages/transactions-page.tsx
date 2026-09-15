@@ -181,7 +181,7 @@ export function TransactionsPage() {
             <select
               value={categoryId}
               onChange={(event) => setCategoryId(event.target.value)}
-              className="h-8 shrink-0 rounded-full border border-border bg-card px-3 text-xs"
+              className="h-10 shrink-0 rounded-full border border-border bg-card px-3 text-sm"
               aria-label="Filter kategori"
             >
               <option value="">Semua kategori</option>
@@ -195,7 +195,7 @@ export function TransactionsPage() {
             <select
               value={classification}
               onChange={(event) => setClassification(event.target.value as TransactionClassification | "")}
-              className="h-8 shrink-0 rounded-full border border-border bg-card px-3 text-xs"
+              className="h-10 shrink-0 rounded-full border border-border bg-card px-3 text-sm"
               aria-label="Filter klasifikasi"
             >
               <option value="">Semua klasifikasi</option>
@@ -322,7 +322,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       type="button"
       onClick={onClick}
       className={cn(
-        "h-8 shrink-0 rounded-full border px-3 text-xs font-medium transition-colors",
+        "h-10 shrink-0 rounded-full border px-3 text-sm font-medium transition-colors",
         active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground",
       )}
     >

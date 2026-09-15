@@ -89,7 +89,7 @@ export function PwaStatus() {
           }}>Pakai server</button>
         </div>
       )}
-      <Button size="icon" variant="ghost" className="size-8 hover:bg-white/10" onClick={dismiss} aria-label="Tutup pemberitahuan">
+      <Button size="icon" variant="ghost" className="size-10 hover:bg-white/10" onClick={dismiss} aria-label="Tutup pemberitahuan">
         <X aria-hidden="true" />
       </Button>
     </aside>

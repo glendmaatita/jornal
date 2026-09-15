@@ -230,7 +230,7 @@ export function SettingsPage() {
                         deleteAccount(account.id)
                         invalidate()
                       }}
-                      className="grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       aria-label={`Hapus ${account.name}`}
                     >
                       <Trash2 className="size-4" aria-hidden="true" />
@@ -375,7 +375,7 @@ export function SettingsPage() {
                         deleteCorrection(pattern.id)
                         invalidate()
                       }}
-                      className="grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       aria-label={`Hapus pola ${pattern.token}`}
                     >
                       <Trash2 className="size-4" aria-hidden="true" />

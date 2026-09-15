@@ -28,7 +28,7 @@ export function PeriodSelector({ preset, custom, onChange, onCustomChange }: Per
             type="button"
             onClick={() => onChange(option.value)}
             className={cn(
-              "shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+              "shrink-0 rounded-full border px-3 py-2 text-sm font-semibold transition-colors",
               preset === option.value
                 ? "border-transparent bg-[var(--main-dark)] text-white"
                 : "border-border bg-white text-[var(--body-text)]",
