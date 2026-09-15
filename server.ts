@@ -27,6 +27,9 @@ const securityHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
 }
 
+const sharedIntake = new Map<string, { expiresAt: number; title: string; text: string; url: string; file?: { name: string; type: string; data: string } }>()
+const shareLimit = 8 * 1024 * 1024
+
 async function responseFor(filePath: string, request: Request) {
   const file = Bun.file(filePath)
   const extension = extname(filePath)
@@ -69,6 +72,34 @@ const server = Bun.serve({
       return Response.json({ status: "ok" }, {
         headers: { ...securityHeaders, "Cache-Control": "no-store" },
       })
+    }
+
+    if (url.pathname === "/share-target") {
+      if (request.method === "POST") {
+        const form = await request.formData().catch(() => null)
+        if (!form) return Response.json({ error: "Data yang dibagikan tidak valid." }, { status: 400, headers: securityHeaders })
+        const candidate = form.get("files")
+        let file: { name: string; type: string; data: string } | undefined
+        if (candidate instanceof File && candidate.size > 0) {
+          if (candidate.size > shareLimit) return Response.json({ error: "File terlalu besar." }, { status: 413, headers: securityHeaders })
+          const bytes = new Uint8Array(await candidate.arrayBuffer())
+          let binary = ""
+          for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
+          file = { name: candidate.name || "struk", type: candidate.type || "application/octet-stream", data: btoa(binary) }
+        }
+        const token = crypto.randomUUID()
+        sharedIntake.set(token, {
+          expiresAt: Date.now() + 5 * 60 * 1000,
+          title: String(form.get("title") ?? ""), text: String(form.get("text") ?? ""), url: String(form.get("url") ?? ""), file,
+        })
+        return Response.redirect(`${url.origin}/add?shared=1&shareToken=${encodeURIComponent(token)}`, 303)
+      }
+      const token = url.searchParams.get("token")
+      if (!token) return Response.json({ error: "Token tidak ditemukan." }, { status: 400, headers: securityHeaders })
+      const item = sharedIntake.get(token)
+      sharedIntake.delete(token)
+      if (!item || item.expiresAt < Date.now()) return Response.json({ error: "Tautan berbagi sudah kedaluwarsa." }, { status: 410, headers: securityHeaders })
+      return Response.json(item, { headers: { ...securityHeaders, "Cache-Control": "no-store" } })
     }
 
     // Reverse proxy /pb/* to the PocketBase instance managed by supervisord,

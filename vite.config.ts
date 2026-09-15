@@ -103,9 +103,10 @@ export default defineConfig({
         // Supported browsers deliver shared receipt files to this route. The
         // page creates a review draft; it never uploads without user review.
         share_target: {
-          action: "/add?shared=1",
-          method: "GET",
-          params: { title: "title", text: "text", url: "url" },
+          action: "/share-target",
+          method: "POST",
+          enctype: "multipart/form-data",
+          params: { title: "title", text: "text", url: "url", files: [{ name: "files", accept: ["image/*", "application/pdf"] }] },
         },
       },
       workbox: {

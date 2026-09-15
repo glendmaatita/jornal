@@ -13,6 +13,7 @@ This index records evidence from the current `develop` branch. A local pass does
 | Preview compression and headers | Built Jornal preview on isolated port 4174; `GET`/`HEAD` probes against a hashed JS asset | Health `200` with `{"status":"ok"}`; `GET`: `200`, gzip + `Vary: Accept-Encoding`, immutable cache; `HEAD`: `200`, no body, explicit `content-length`, security headers |
 | Fresh PocketBase schema | `pocketbase migrate up --dir <disposable-dir> --migrationsDir backend/pocketbase/pb_migrations` | Migrations 0001–0005 applied |
 | Sync transport | `bun test src/lib/pocketbase-sync.test.ts` | 19 tests passed, including multipart attachments, pagination, conflicts, and empty responses |
+| Share target handoff | Live `PORT=4181 bun run server.ts`; multipart POST followed by token GET and replay | `303` redirect with one-time token; file/text payload returned with `Cache-Control: no-store`; token replay returns `410` |
 
 ## Implemented and locally evidenced
 
@@ -36,6 +37,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Remaining English financial labels were localized to Indonesian, including tax reserve and reserve status summaries (U08).
 - Foreground sync now resumes on `visibilitychange` when a tab becomes visible, covering mobile resume paths without relying on focus events (F09, W04).
 - Shortcut and share routes are now preserved through first-time onboarding, so the requested entry action resumes after setup (W06, W07).
+- Installed share targets now accept a bounded multipart receipt, keep it in a five-minute one-time server handoff, and restore it as an editable transaction draft; oversized and replayed tokens are rejected (W07).
 - Transaction search now has an explicit associated label for assistive technology (U07).
 - The static server now sends clickjacking, referrer, permissions, and opener isolation headers while retaining OAuth popup compatibility (F06, U07).
 - Hydrated receipt records now persist a stable file endpoint without a signed token; detail view requests a fresh token only when opening the file (F05).

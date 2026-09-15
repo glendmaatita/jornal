@@ -131,9 +131,19 @@ export function TransactionFormPage() {
     }
     if (params.get("shared") === "1") {
       const sharedText = [params.get("title"), params.get("text"), params.get("url")]
-        .filter((value): value is string => Boolean(value?.trim()))
-        .join("\n")
+        .filter((value): value is string => Boolean(value?.trim())).join("\n")
       if (sharedText) setDescription((current) => current || sharedText)
+      const token = params.get("shareToken")
+      if (token) {
+        void fetch(`/share-target?token=${encodeURIComponent(token)}`).then(async (response) => {
+          if (!response.ok) return
+          const shared = await response.json() as { file?: { name: string; type: string; data: string } }
+          if (!shared.file) return
+          setAttachmentName(shared.file.name)
+          setAttachmentDataUrl(`data:${shared.file.type};base64,${shared.file.data}`)
+          setAttachmentRemoved(false)
+        }).catch(() => undefined)
+      }
     }
   }, [editing])
   /* eslint-enable react-hooks/set-state-in-effect */
