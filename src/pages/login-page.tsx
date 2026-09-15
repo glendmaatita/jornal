@@ -23,11 +23,14 @@ export function LoginPage() {
       // Fresh hydration/sync cycle for this tenant.
       resetPocketBaseSyncState()
       await navigate({ to: "/" })
-    } catch {
+    } catch (loginError) {
+      // Keep deployment details out of the user-facing flow; retain the
+      // diagnostic for local debugging without exposing configuration names.
+      console.error("Google login failed", loginError)
       setError(
         pocketBaseConfigured
-          ? "Gagal masuk dengan Google. Pastikan Google OAuth aktif di PocketBase, lalu coba lagi."
-          : "Login Google belum terhubung. Jalankan PocketBase dan isi VITE_POCKETBASE_URL di .env.local.",
+          ? "Login Google gagal. Periksa koneksi lalu coba lagi."
+          : "Login Google belum siap. Hubungi pengelola aplikasi.",
       )
     } finally {
       setPending(false)
