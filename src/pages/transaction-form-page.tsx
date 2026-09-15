@@ -65,6 +65,7 @@ export function TransactionFormPage() {
   const [notes, setNotes] = useState("")
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
   const [attachmentDataUrl, setAttachmentDataUrl] = useState<string | null>(null)
+  const [attachmentRemoved, setAttachmentRemoved] = useState(false)
   const [showMore, setShowMore] = useState(false)
   const [captureRequested, setCaptureRequested] = useState(false)
   const [classificationOverride, setClassificationOverride] = useState<TransactionClassification | null>(null)
@@ -168,6 +169,7 @@ export function TransactionFormPage() {
     setNotes(editing.notes)
     setAttachmentName(editing.attachmentName)
     setAttachmentDataUrl(editing.attachmentDataUrl)
+    setAttachmentRemoved(false)
     if (editing.classificationSource === "USER") setClassificationOverride(editing.classification)
   }
 
@@ -243,6 +245,7 @@ export function TransactionFormPage() {
     })
     setAttachmentName(file.name)
     setAttachmentDataUrl(dataUrl)
+    setAttachmentRemoved(false)
   }
 
   const save = useMutation({
@@ -262,6 +265,7 @@ export function TransactionFormPage() {
         transferAccountId: mode === "transfer" ? selectedTransferAccountId : null,
         attachmentName,
         attachmentDataUrl: attachmentDataUrl ?? editing?.attachmentDataUrl ?? null,
+        attachmentRemoteUrl: attachmentRemoved ? null : attachmentDataUrl ? null : editing?.attachmentRemoteUrl ?? null,
         taxClassification: effectiveClassification,
         classification: effectiveClassification,
         businessRelevance: mode === "transfer" ? "NON_BUSINESS" : suggestion.businessRelevance,
@@ -612,9 +616,18 @@ export function TransactionFormPage() {
                 </div>
                 {attachmentName && (
                   <div className="rounded-[10px] border border-border bg-white p-3 text-xs text-[var(--body-text)]">
-                    <div className="font-medium">{attachmentName}</div>
-                    <div className="mt-1 text-muted-foreground">
-                      {attachmentDataUrl ? "Lampiran siap disimpan" : "Belum ada data lampiran"}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium">{attachmentName}</div>
+                        <div className="mt-1 text-muted-foreground">
+                          {attachmentDataUrl ? "Lampiran siap disimpan" : "Lampiran tersimpan"}
+                        </div>
+                      </div>
+                      <button type="button" className="font-semibold text-[var(--link)] underline" onClick={() => {
+                        setAttachmentName(null)
+                        setAttachmentDataUrl(null)
+                        setAttachmentRemoved(true)
+                      }}>Hapus</button>
                     </div>
                   </div>
                 )}
