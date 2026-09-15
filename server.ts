@@ -18,7 +18,7 @@ const contentTypes: Record<string, string> = {
   ".webmanifest": "application/manifest+json; charset=utf-8",
 }
 
-function responseFor(filePath: string) {
+async function responseFor(filePath: string, request: Request) {
   const file = Bun.file(filePath)
   const extension = extname(filePath)
   const isServiceWorker = filePath.endsWith("/sw.js") || filePath.endsWith("/registerSW.js")
@@ -28,12 +28,21 @@ function responseFor(filePath: string) {
       ? "public, max-age=31536000, immutable"
       : "public, max-age=0, must-revalidate"
 
-  return new Response(file, {
-    headers: {
+  const headers = new Headers({
       "Cache-Control": cacheControl,
       ...(contentTypes[extension] ? { "Content-Type": contentTypes[extension] } : {}),
       "X-Content-Type-Options": "nosniff",
-    },
+    })
+  const compressible = new Set([".js", ".css", ".html", ".json", ".webmanifest"])
+  const acceptsGzip = request.headers.get("accept-encoding")?.toLowerCase().includes("gzip")
+  if (acceptsGzip && compressible.has(extension) && file.size > 1024) {
+    headers.set("Content-Encoding", "gzip")
+    headers.set("Vary", "Accept-Encoding")
+    headers.delete("Content-Length")
+    return new Response(file.stream().pipeThrough(new CompressionStream("gzip")), { headers })
+  }
+  return new Response(file, {
+    headers,
   })
 }
 
@@ -68,7 +77,7 @@ const server = Bun.serve({
 
     if (requestedPath.startsWith(`${distDirectory}/`)) {
       const requestedFile = Bun.file(requestedPath)
-      if (await requestedFile.exists()) return responseFor(requestedPath)
+      if (await requestedFile.exists()) return responseFor(requestedPath, request)
     }
 
     // SPA fallback: any path without a file extension resolves to index.html
