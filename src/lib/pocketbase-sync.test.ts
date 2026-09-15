@@ -106,6 +106,20 @@ describe("syncToPocketBase", () => {
     expect(localStorageShim.getItem(resetKey)).toBeNull()
   })
 
+  test("failed pending reset keeps its marker for retry", async () => {
+    setEnv("http://pb.test")
+    const resetKey = scopedStorageKey(RESET_PENDING_KEY)
+    localStorageShim.setItem(resetKey, new Date().toISOString())
+    respond = (url, method) => {
+      if (url.includes("/records?") && method === "GET") {
+        return { status: 200, body: { items: [{ id: "remote-row", entity: "profile", app_id: "profile", business_id: "local", payload: {} }], totalPages: 1 } }
+      }
+      return { status: 500, body: { error: "temporary failure" } }
+    }
+    await expect(syncToPocketBase()).rejects.toThrow("PocketBase 500")
+    expect(localStorageShim.getItem(resetKey)).toBeTruthy()
+  })
+
   test("upserts profile, transactions and reserves as POST records", async () => {
     setEnv("http://pb.test")
     saveProfile({ ...emptyProfile(), businessName: "Kedai" })
