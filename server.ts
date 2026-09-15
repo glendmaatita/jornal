@@ -42,6 +42,10 @@ async function responseFor(filePath: string, request: Request) {
       ...(contentTypes[extension] ? { "Content-Type": contentTypes[extension] } : {}),
       ...securityHeaders,
     })
+  if (request.method === "HEAD") {
+    headers.set("Content-Length", String(file.size))
+    return new Response(null, { headers })
+  }
   const compressible = new Set([".js", ".css", ".html", ".json", ".webmanifest"])
   const acceptsGzip = request.headers.get("accept-encoding")?.toLowerCase().includes("gzip")
   if (acceptsGzip && compressible.has(extension) && file.size > 1024) {
