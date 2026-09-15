@@ -64,6 +64,9 @@ const appLayoutRoute = createRoute({
     // Onboarding gate before any route component loads, so the redirect does
     // not pay for lazy chunks of the originally matched route (§66 item 1–3)
     if (!isOnboarded() && location.pathname !== "/onboarding") {
+      try {
+        if (location.href) window.sessionStorage.setItem("jornal.pending-route", location.href)
+      } catch { /* session storage may be unavailable in private browsing */ }
       throw redirect({ to: "/onboarding", replace: true })
     }
   },
