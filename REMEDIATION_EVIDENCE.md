@@ -29,6 +29,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Static asset `HEAD` requests now return headers only with an explicit content length, while `GET` retains negotiated gzip delivery (P05).
 - Login now provides iOS Safari installation guidance when the native install prompt API is unavailable (W03).
 - The `/pb` reverse proxy now bounds upstream requests to 30 seconds and returns a localized `504` JSON error on an unavailable PocketBase (F09, P05).
+- Calendar day controls now announce full dates and expose selected state to assistive technology (U07).
 - Editing a transaction preserves its stable receipt reference, while the form now offers an explicit Hapus action that removes the attachment on save (F05, U04).
 - Local-only startup restores the IndexedDB mirror even when PocketBase is disabled; storage and IndexedDB failures raise a visible recovery notice (F04, W01, W05).
 - Revision/tombstone metadata, tenant PocketBase rules, server 409 conflict persistence, bounded retries, caller-aware request timeouts, and merge-preserving hydration (F02, F03, F09, W04).
