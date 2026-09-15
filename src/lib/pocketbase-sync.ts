@@ -335,11 +335,10 @@ function recordFileUrl(record: PocketBaseRecord, fileToken: string): string | nu
 }
 
 function transactionPayloadForRemote(transaction: Transaction) {
-  if (!isDataUrl(transaction.attachmentDataUrl)) return transaction
-  return {
-    ...transaction,
-    attachmentDataUrl: null,
-  }
+  const payload = { ...transaction }
+  delete payload.attachmentRemoteUrl
+  if (!isDataUrl(transaction.attachmentDataUrl)) return payload
+  return { ...payload, attachmentDataUrl: null }
 }
 
 function transactionPayloadForLocal(record: PocketBaseRecord, payload: Transaction, fileToken: string): Transaction {
@@ -347,7 +346,8 @@ function transactionPayloadForLocal(record: PocketBaseRecord, payload: Transacti
   return {
     ...payload,
     attachmentName: payload.attachmentName ?? record.attachment ?? null,
-    attachmentDataUrl: payload.attachmentDataUrl ?? remoteFileUrl,
+    attachmentDataUrl: payload.attachmentDataUrl ?? null,
+    attachmentRemoteUrl: payload.attachmentDataUrl?.startsWith("data:") ? null : remoteFileUrl ? remoteFileUrl.split("?")[0] : null,
   }
 }
 

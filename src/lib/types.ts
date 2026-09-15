@@ -70,6 +70,8 @@ export interface Transaction {
   transferAccountId: string | null // destination account for INTERNAL_TRANSFER (§32)
   attachmentName: string | null
   attachmentDataUrl: string | null
+  /** Stable file endpoint; access tokens are added only while viewing. */
+  attachmentRemoteUrl?: string | null
   classification: TransactionClassification
   taxClassification: TransactionClassification
   businessRelevance: BusinessRelevance
@@ -83,6 +85,7 @@ export interface Transaction {
 export type NewTransaction = Omit<Transaction, "id" | "businessId" | "createdAt" | "updatedAt"> & {
   taxClassification?: TransactionClassification
   attachmentDataUrl?: string | null
+  attachmentRemoteUrl?: string | null
 }
 
 export type ReserveStatus = "ACTIVE" | "USED" | "CANCELLED"

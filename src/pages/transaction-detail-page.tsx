@@ -21,12 +21,12 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
   const accountMap = useAccountMap()
 
   const transaction = transactions.find((candidate) => candidate.id === transactionId)
-  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(transaction?.attachmentDataUrl ?? null)
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(transaction?.attachmentDataUrl ?? transaction?.attachmentRemoteUrl ?? null)
 
   /* eslint-disable react-hooks/set-state-in-effect -- reset when the viewed record changes */
   useEffect(() => {
     let cancelled = false
-    const currentUrl = transaction?.attachmentDataUrl ?? null
+    const currentUrl = transaction?.attachmentDataUrl ?? transaction?.attachmentRemoteUrl ?? null
     setAttachmentUrl(currentUrl)
     if (!currentUrl || currentUrl.startsWith("data:")) return () => { cancelled = true }
     void pb.files.getToken().then((token) => {
@@ -35,7 +35,7 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
       setAttachmentUrl(`${currentUrl.split("?")[0]}${separator}token=${encodeURIComponent(token)}`)
     }).catch(() => undefined)
     return () => { cancelled = true }
-  }, [transaction?.attachmentDataUrl])
+  }, [transaction?.attachmentDataUrl, transaction?.attachmentRemoteUrl])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const remove = useMutation({
