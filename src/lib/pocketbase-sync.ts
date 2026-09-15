@@ -404,6 +404,8 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
   formData.append("entity", entity)
   formData.append("app_id", appId)
   formData.append("payload", JSON.stringify(sanitizedPayload))
+  formData.append("revision", String(body.revision))
+  formData.append("deleted_at", "")
   if (entity === "transactions" && payload && typeof payload === "object") {
     const transaction = payload as Transaction
     if (isDataUrl(transaction.attachmentDataUrl)) {
