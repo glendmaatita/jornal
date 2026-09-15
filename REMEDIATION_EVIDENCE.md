@@ -24,6 +24,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Local-only startup restores the IndexedDB mirror even when PocketBase is disabled; storage and IndexedDB failures raise a visible recovery notice (F04, W01, W05).
 - Revision/tombstone metadata, tenant PocketBase rules, server 409 conflict persistence, bounded retries, caller-aware request timeouts, and merge-preserving hydration (F02, F03, F09, W04).
 - Transient sync retries now use capped exponential backoff with bounded jitter to avoid synchronized retry storms (F09, W04).
+- Choosing the local side of a sync conflict now reads the current tenant-scoped record, preserving a pending local receipt even though conflict logs omit attachment data (F02, F05).
 - Lazy onboarding/editor routes, explicit icon imports, bounded transaction rendering, solid surfaces, Indonesian document language, and mobile camera activation (P02–P07, U04, U06–U09, W02–W03).
 - Install prompt handling on login and authenticated routes, offline status/retry UI, persistent storage request, and pending-review app badge (W02–W05, W08). Shortcut/share intent now survives login and onboarding; device acceptance remains pending (W06–W07).
 
