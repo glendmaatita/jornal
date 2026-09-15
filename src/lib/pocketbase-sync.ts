@@ -606,11 +606,15 @@ export function schedulePocketBaseSync() {
 }
 
 export async function initializePocketBaseSync() {
-  if (!enabled() || typeof window === "undefined") return false
+  if (typeof window === "undefined") return false
   if (hydrationStarted) return false
   hydrationStarted = true
   try {
     await restoreMissingLocalState()
+    if (!enabled()) {
+      hydrationStarted = false
+      return false
+    }
     await hydrateFromPocketBase()
     return true
   } catch {
