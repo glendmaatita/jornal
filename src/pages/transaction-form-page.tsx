@@ -25,7 +25,7 @@ import type { ClassificationSource, TransactionClassification, TransactionDirect
 import { CLASSIFICATION_LABELS } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { scopedStorageKey } from "@/lib/store"
-import { mirrorState, restoreState } from "@/lib/local-db"
+import { clearMirroredState, mirrorState, restoreState } from "@/lib/local-db"
 
 type Mode = "money_in" | "money_out" | "transfer"
 
@@ -280,6 +280,7 @@ export function TransactionFormPage() {
     },
     onSuccess: async () => {
       try { window.localStorage.removeItem(draftKey) } catch { /* ignore */ }
+      await clearMirroredState(draftKey).catch(() => undefined)
       await queryClient.invalidateQueries({ queryKey: queryKeys.transactions })
       await queryClient.invalidateQueries({ queryKey: queryKeys.corrections })
       void navigate({ to: "/transactions" })
