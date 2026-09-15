@@ -60,6 +60,7 @@ export function SettingsPage() {
     if (!file) return
     try {
       const parsed = JSON.parse(await file.text()) as unknown
+      if (!window.confirm("Pulihkan backup ini? Data pada perangkat akan digabungkan dengan isi backup.")) return
       const result = importLocalData(parsed)
       setDataMessage(`${result.imported} bagian data dipulihkan.`)
       invalidate()
