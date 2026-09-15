@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { ArrowLeft, ChevronDown, Sparkles } from "lucide-react"
@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
-import { RichTextField } from "@/components/ui/rich-text-field"
 import { TextField } from "@/components/ui/text-field"
 import { categoriesForKind, ALL_CATEGORIES } from "@/lib/categories"
 import {
@@ -28,6 +27,8 @@ import { cn } from "@/lib/utils"
 import { scopedStorageKey } from "@/lib/store"
 
 type Mode = "money_in" | "money_out" | "transfer"
+
+const RichTextField = lazy(() => import("@/components/ui/rich-text-field").then((module) => ({ default: module.RichTextField })))
 
 const reviewStatusMeta: Record<string, { label: string; className: string }> = {
   AUTO_ACCEPTED: { label: "Otomatis dikonfirmasi", className: "bg-[color-mix(in_oklab,var(--mint)_12%,white)] text-[var(--mint)]" },
@@ -532,7 +533,9 @@ export function TransactionFormPage() {
                 ))}
               </datalist>
               <TextField label="Tag" value={tags} onChange={setTags} placeholder="project-alpha, penting" hint="Pisahkan dengan koma" />
-              <RichTextField label="Catatan" value={notes} onChange={setNotes} placeholder="Catatan tambahan…" minHeight={80} />
+              <Suspense fallback={<div className="field-shell text-sm text-muted-foreground">Memuat editor…</div>}>
+                <RichTextField label="Catatan" value={notes} onChange={setNotes} placeholder="Catatan tambahan…" minHeight={80} />
+              </Suspense>
               <div className="space-y-2">
                 <span className="field-label">Lampiran</span>
                 <input
