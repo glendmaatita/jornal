@@ -94,11 +94,11 @@ export function TaxPage() {
 
       <Card>
         <CardContent className="p-6">
-          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faPiggyBank} className="size-4 text-primary" aria-hidden="true" />Tax Reserve</h2>
+            <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faPiggyBank} className="size-4 text-primary" aria-hidden="true" />Cadangan Pajak</h2>
           <p className="mt-1 text-xs text-muted-foreground">Rekomendasi dana pajak yang sebaiknya disisihkan.</p>
 
           <div className="mt-4 rounded-xl bg-primary/10 p-4">
-            <p className="text-xs text-muted-foreground">Recommended Tax Reserve</p>
+            <p className="text-xs text-muted-foreground">Saran cadangan pajak</p>
             <p className="mt-1 text-3xl font-medium tabular-nums text-primary">
               {formatRupiah(overview.recommendedTaxReserve)}
             </p>
@@ -106,7 +106,7 @@ export function TaxPage() {
 
           <div className="mt-4 space-y-2 text-sm">
             <div className="flex flex-col items-end justify-between gap-1">
-              <span className="text-muted-foreground">Already Reserved</span>
+              <span className="text-muted-foreground">Sudah disisihkan</span>
               <TextField
                 type="amount"
                 prefix="Rp"
@@ -118,7 +118,7 @@ export function TaxPage() {
               />
             </div>
             <div className="flex justify-between border-t border-border/60 pt-2">
-              <span className="font-medium">Additional Reserve Needed</span>
+              <span className="font-medium">Tambahan yang perlu disisihkan</span>
               <span className="font-semibold tabular-nums">{formatRupiah(additionalNeeded)}</span>
             </div>
           </div>

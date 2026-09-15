@@ -453,7 +453,7 @@ export function SafeToSpendPage() {
                 .map((reserve) => (
                   <div key={reserve.id} className="mt-1.5 flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center gap-1.5">
-                      <Badge className="bg-[color-mix(in_oklab,var(--mint)_16%,white)] text-[var(--mint)]">USED</Badge>
+                      <Badge className="bg-[color-mix(in_oklab,var(--mint)_16%,white)] text-[var(--mint)]">Terpakai</Badge>
                       {reserve.name}
                     </span>
                     <span className="tabular-nums">{formatRupiah(reserve.amount)}</span>
