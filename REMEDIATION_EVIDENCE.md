@@ -40,6 +40,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Backup exports now append and remove their temporary download anchor, avoiding DOM accumulation during repeated exports (W05).
 - Remaining English financial labels were localized to Indonesian, including tax reserve and reserve status summaries (U08).
 - Foreground sync now resumes on `visibilitychange` when a tab becomes visible, covering mobile resume paths without relying on focus events (F09, W04).
+- Dismissing an offline/update notice no longer hides persistent sync failures, conflicts, or storage recovery actions; those controls remain available until resolved (F08, F09).
 - Shortcut and share routes are now preserved through first-time onboarding, so the requested entry action resumes after setup (W06, W07).
 - Installed share targets now accept a bounded multipart receipt, keep it in a five-minute one-time server handoff, and restore it as an editable transaction draft; oversized and replayed tokens are rejected (W07).
 - Share handoff storage prunes expired entries on reads/writes and caps pending payloads at 32, preventing abandoned shares from growing server memory without bound (W07, F09).

@@ -37,7 +37,8 @@ export function PwaStatus() {
   }, [])
   const syncFailed = syncStatus === "failed"
   const hasConflict = conflicts.length > 0
-  if (dismissed || (isOnline && !offlineReady && !needRefresh && !syncFailed && !hasConflict && !storageWarning)) return null
+  const persistentAction = syncFailed || hasConflict || storageWarning
+  if ((dismissed && !persistentAction) || (isOnline && !offlineReady && !needRefresh && !persistentAction)) return null
 
   const dismiss = () => {
     setDismissed(true)
