@@ -313,6 +313,15 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
     app_id: appId,
     payload: sanitizedPayload,
   }
+  if (found && found.payload && payload && typeof found.payload === "object" && typeof payload === "object") {
+    const remoteUpdatedAt = (found.payload as { updatedAt?: unknown }).updatedAt
+    const localUpdatedAt = (payload as { updatedAt?: unknown }).updatedAt
+    if (typeof remoteUpdatedAt === "string" && typeof localUpdatedAt === "string") {
+      if (remoteUpdatedAt > localUpdatedAt) {
+        throw new Error(`Conflict: remote ${entity}/${appId} is newer`)
+      }
+    }
+  }
   const formData = new FormData()
   formData.append("business_id", businessId())
   formData.append("entity", entity)
