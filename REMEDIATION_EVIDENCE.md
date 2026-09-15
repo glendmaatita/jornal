@@ -31,6 +31,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Reset failure coverage verifies a `500` during remote deletion leaves the marker intact and rejects the sync, preserving retryability (F09, F13).
 - Reset deletion treats remote `404` responses as already complete, so concurrent deletion cannot cause an endless retry loop (F09, F13).
 - Reset deletion captures the initiating tenant ID and aborts on account changes before each list/delete operation, preventing cross-account cleanup during logout or tab switching (F01, F13).
+- Normal sync list, upsert, and tombstone-prune requests now use the captured tenant identity and abort if it changes mid-drain, preventing cross-account request mixing (F01, F02, F09).
 - Reset now acknowledges only the active tenant's outbox keys, so one account cannot discard another account's pending operations (F01, F13).
 - Reset navigation now waits for scoped IndexedDB mirrors and outbox cleanup to complete before opening onboarding (F13).
 - Reset regression now awaits `resetAllData()` completion, proving the durable cleanup contract at the store boundary (F13).

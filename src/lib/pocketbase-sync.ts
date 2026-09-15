@@ -380,18 +380,19 @@ async function listRecords(entity: EntityName, appId?: string, requestedBusiness
   return records
 }
 
-async function upsertRecord(entity: EntityName, appId: string, payload: unknown): Promise<void> {
+async function upsertRecord(entity: EntityName, appId: string, payload: unknown, requestedBusinessId = businessId()): Promise<void> {
+  if (businessId() !== requestedBusinessId) throw new Error("Sync cancelled: account changed")
   // Look up only the tenant/entity/app key being written. Full entity scans
   // made a 100-row sync issue hundreds of unnecessary reads and enlarged the
   // race window between two devices.
-  const existing = await listRecords(entity, appId)
+  const existing = await listRecords(entity, appId, requestedBusinessId)
   const found = existing.find((record) => record.app_id === appId)
   const sanitizedPayload =
     entity === "transactions" && payload && typeof payload === "object"
       ? transactionPayloadForRemote(payload as Transaction)
       : payload
   const body = {
-    business_id: businessId(),
+    business_id: requestedBusinessId,
     entity,
     app_id: appId,
     payload: sanitizedPayload,
@@ -414,7 +415,7 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
     }
   }
   const formData = new FormData()
-  formData.append("business_id", businessId())
+  formData.append("business_id", requestedBusinessId)
   formData.append("entity", entity)
   formData.append("app_id", appId)
   formData.append("payload", JSON.stringify(sanitizedPayload))
@@ -429,6 +430,7 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
   }
   const hasAttachment = entity === "transactions" && payload && typeof payload === "object" && isDataUrl((payload as Transaction).attachmentDataUrl)
   try {
+    if (businessId() !== requestedBusinessId) throw new Error("Sync cancelled: account changed")
     if (found) {
       await requestJson(
         `/api/collections/${COLLECTION}/records/${found.id}`,
@@ -457,13 +459,13 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
   }
 }
 
-async function pruneExplicitlyDeleted(entity: EntityName) {
+async function pruneExplicitlyDeleted(entity: EntityName, requestedBusinessId = businessId()) {
   const key = historyKey(entity)
   if (!key) return
   const history = localJson<Array<{ id?: string; deletedAt?: string | null }>>(key, [])
   const deletedIds = new Set(history.filter((record) => record.deletedAt).map((record) => record.id).filter(Boolean))
   if (deletedIds.size === 0) return
-  const remote = await listRecords(entity)
+  const remote = await listRecords(entity, undefined, requestedBusinessId)
   await Promise.all(
     remote
       .filter((record) => deletedIds.has(record.app_id))
@@ -529,14 +531,14 @@ async function syncToPocketBaseUnsafe(runGeneration: number, runBusinessId: stri
     if (Array.isArray(value)) {
       for (const item of value as Array<{ id?: string }>) {
         const appId = entityAppId(entity, item)
-        await upsertRecord(entity, appId, item)
+      await upsertRecord(entity, appId, item, runBusinessId)
       }
       // A missing item is ambiguous across devices. Only explicit tombstones
       // may delete a remote record.
-      await pruneExplicitlyDeleted(entity)
+      await pruneExplicitlyDeleted(entity, runBusinessId)
     } else {
-      await upsertRecord(entity, entity, value)
-      await pruneExplicitlyDeleted(entity)
+      await upsertRecord(entity, entity, value, runBusinessId)
+      await pruneExplicitlyDeleted(entity, runBusinessId)
     }
   }
   await acknowledgeOutbox(Object.values(KEYS).map((key) => scopedStorageKey(key)))
