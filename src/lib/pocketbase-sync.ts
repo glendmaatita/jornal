@@ -115,9 +115,10 @@ export function resolveSyncConflict(id: string, choice: "local" | "remote") {
 }
 
 function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>) {
-  if (!String(error).startsWith("Error: Conflict") && !String(error).startsWith("Conflict")) return
+  const errorText = String(error)
+  if (!errorText.startsWith("Error: Conflict") && !errorText.startsWith("Conflict") && !errorText.includes("PocketBase 409")) return
   const existing = loadSyncConflicts()
-  const message = String(error).replace(/^Error:\s*/, "")
+  const message = errorText.replace(/^Error:\s*/, "")
   if (existing.some((item) =>
     details?.entity && details.appId
       ? item.entity === details.entity && item.appId === details.appId
@@ -414,32 +415,32 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
     }
   }
   const hasAttachment = entity === "transactions" && payload && typeof payload === "object" && isDataUrl((payload as Transaction).attachmentDataUrl)
-  if (found) {
-    await requestJson(
-      `/api/collections/${COLLECTION}/records/${found.id}`,
-      hasAttachment
-        ? {
-            method: "PATCH",
-            body: formData,
-          }
-        : {
-            method: "PATCH",
-            body: JSON.stringify(body),
-          },
-    )
-  } else {
-    await requestJson(
-      `/api/collections/${COLLECTION}/records`,
-      hasAttachment
-        ? {
-            method: "POST",
-            body: formData,
-          }
-        : {
-            method: "POST",
-            body: JSON.stringify(body),
-          },
-    )
+  try {
+    if (found) {
+      await requestJson(
+        `/api/collections/${COLLECTION}/records/${found.id}`,
+        hasAttachment
+          ? { method: "PATCH", body: formData }
+          : { method: "PATCH", body: JSON.stringify(body) },
+      )
+    } else {
+      await requestJson(
+        `/api/collections/${COLLECTION}/records`,
+        hasAttachment
+          ? { method: "POST", body: formData }
+          : { method: "POST", body: JSON.stringify(body) },
+      )
+    }
+  } catch (error) {
+    if (String(error).includes("PocketBase 409")) {
+      recordSyncConflict(error, {
+        entity,
+        appId,
+        localPayload: sanitizedPayload,
+        remotePayload: found?.payload,
+      })
+    }
+    throw error
   }
 }
 
