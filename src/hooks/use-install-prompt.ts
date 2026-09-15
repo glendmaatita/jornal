@@ -5,42 +5,58 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>
 }
 
+let deferredPrompt: BeforeInstallPromptEvent | null = null
+const subscribers = new Set<() => void>()
+const notify = () => subscribers.forEach((subscriber) => subscriber())
+
+// Capture the one-shot browser event as soon as the app module loads. A
+// route component may mount later (for example after OAuth), but should still
+// be able to offer installation.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault()
+    deferredPrompt = event as BeforeInstallPromptEvent
+    notify()
+  })
+  window.addEventListener("appinstalled", () => {
+    deferredPrompt = null
+    notify()
+  })
+}
+
 export function useInstallPrompt() {
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(deferredPrompt)
   const [isInstalled, setIsInstalled] = useState(() =>
     window.matchMedia("(display-mode: standalone)").matches ||
     ("standalone" in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone)),
   )
 
   useEffect(() => {
-    const handlePrompt = (event: Event) => {
-      event.preventDefault()
-      setInstallPrompt(event as BeforeInstallPromptEvent)
+    const sync = () => {
+      setInstallPrompt(deferredPrompt)
+      if (window.matchMedia("(display-mode: standalone)").matches) setIsInstalled(true)
     }
-    const handleInstalled = () => {
-      setIsInstalled(true)
-      setInstallPrompt(null)
-    }
+    subscribers.add(sync)
     const media = window.matchMedia("(display-mode: standalone)")
     const handleDisplayMode = () => setIsInstalled(media.matches)
 
-    window.addEventListener("beforeinstallprompt", handlePrompt)
-    window.addEventListener("appinstalled", handleInstalled)
     media.addEventListener?.("change", handleDisplayMode)
     return () => {
-      window.removeEventListener("beforeinstallprompt", handlePrompt)
-      window.removeEventListener("appinstalled", handleInstalled)
+      subscribers.delete(sync)
       media.removeEventListener?.("change", handleDisplayMode)
     }
   }, [])
 
   const install = async () => {
-    if (!installPrompt) return
-    await installPrompt.prompt()
-    await installPrompt.userChoice
+    const prompt = deferredPrompt
+    if (!prompt) return
+    await prompt.prompt()
+    await prompt.userChoice
     // beforeinstallprompt is one-shot; clear it after either outcome so a
     // dismissed prompt does not leave a dead install button on screen.
+    deferredPrompt = null
     setInstallPrompt(null)
+    notify()
   }
 
   return { canInstall: Boolean(installPrompt) && !isInstalled, install }
