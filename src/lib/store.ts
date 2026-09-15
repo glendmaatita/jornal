@@ -18,6 +18,7 @@ import type {
 } from "./types"
 import { patternToken, DEFAULT_THRESHOLDS } from "./classification"
 import { todayIsoDate } from "./format"
+import { mirrorState } from "./local-db"
 
 export const KEYS = {
   transactions: "jornal.transactions.v1",
@@ -63,11 +64,15 @@ function read<T>(key: string, fallback: T): T {
 }
 
 function write<T>(key: string, value: T) {
+  const storageKey = scopedStorageKey(key)
   try {
-    window.localStorage.setItem(scopedStorageKey(key), JSON.stringify(value))
+    window.localStorage.setItem(storageKey, JSON.stringify(value))
   } catch {
     // Storage unavailable — keep in-memory usage working for the session
   }
+  // IndexedDB is asynchronous and unavailable in the test/SSR shims; it is a
+  // durable second copy for browser restarts and quota recovery.
+  void mirrorState(storageKey, value).catch(() => undefined)
 }
 
 // ── Event architecture (§57) ──

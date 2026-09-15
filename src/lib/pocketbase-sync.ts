@@ -1,6 +1,7 @@
 import type { Account, AppSettings, BusinessProfile, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
 import { KEYS, scopedStorageKey } from "./store"
 import { pb } from "./pb"
+import { restoreState } from "./local-db"
 
 type EntityName =
   | "profile"
@@ -98,6 +99,16 @@ function writeLocalJson<T>(key: string, value: T) {
     window.localStorage.setItem(scopedStorageKey(key), JSON.stringify(value))
   } catch {
     // ignore
+  }
+}
+
+async function restoreMissingLocalState() {
+  for (const key of Object.values(KEYS)) {
+    const storageKey = scopedStorageKey(key)
+    if (window.localStorage.getItem(storageKey) !== null) continue
+    const value = await restoreState(storageKey).catch(() => undefined)
+    if (value === undefined) continue
+    try { window.localStorage.setItem(storageKey, JSON.stringify(value)) } catch { /* quota remains unavailable */ }
   }
 }
 
@@ -450,6 +461,7 @@ export async function initializePocketBaseSync() {
   if (hydrationStarted) return false
   hydrationStarted = true
   try {
+    await restoreMissingLocalState()
     await hydrateFromPocketBase()
     return true
   } catch {
