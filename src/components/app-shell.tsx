@@ -33,6 +33,10 @@ export function AppShell() {
 
   useEffect(() => {
     const onAuthChange = () => {
+      // Switch the storage partition before queries can render after a login,
+      // logout, or token refresh. This prevents a stale tenant's data from
+      // briefly appearing while React invalidates the previous cache.
+      setDataScope(pb.authStore.record?.id)
       queryClient.cancelQueries()
       queryClient.clear()
     }
