@@ -74,15 +74,20 @@ const server = Bun.serve({
     if (url.pathname === "/pb" || url.pathname.startsWith("/pb/")) {
       const pocketBaseOrigin = process.env.POCKETBASE_INTERNAL_URL ?? "http://127.0.0.1:8090"
       const pathAndQuery = `${url.pathname.replace(/^\/pb/, "") || "/"}${url.search}`
-      const upstream = await fetch(new URL(pathAndQuery, pocketBaseOrigin), {
-        method: request.method,
-        headers: request.headers,
-        body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
-      })
-      return new Response(upstream.body, {
-        status: upstream.status,
-        headers: upstream.headers,
-      })
+      try {
+        const upstream = await fetch(new URL(pathAndQuery, pocketBaseOrigin), {
+          method: request.method,
+          headers: request.headers,
+          body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
+          signal: AbortSignal.timeout(30_000),
+        })
+        return new Response(upstream.body, {
+          status: upstream.status,
+          headers: upstream.headers,
+        })
+      } catch {
+        return Response.json({ error: "PocketBase tidak merespons." }, { status: 504, headers: securityHeaders })
+      }
     }
 
     const relativePath = decodeURIComponent(url.pathname).replace(/^\/+/, "") || "index.html"
