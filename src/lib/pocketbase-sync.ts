@@ -257,7 +257,7 @@ function transactionPayloadForLocal(record: PocketBaseRecord, payload: Transacti
   }
 }
 
-async function listRecords(entity: EntityName): Promise<PocketBaseRecord[]> {
+async function listRecords(entity: EntityName, appId?: string): Promise<PocketBaseRecord[]> {
   const records: PocketBaseRecord[] = []
   let page = 1
   const perPage = 200
@@ -266,7 +266,7 @@ async function listRecords(entity: EntityName): Promise<PocketBaseRecord[]> {
       perPage: String(perPage),
       page: String(page),
       sort: "-updated",
-      filter: `business_id = "${businessId()}" && entity = "${entity}"`,
+      filter: `business_id = "${businessId()}" && entity = "${entity}"${appId ? ` && app_id = "${appId}"` : ""}`,
     })
     const result = await requestJson<{ items: PocketBaseRecord[]; totalPages?: number }>(
       `/api/collections/${COLLECTION}/records?${query.toString()}`,
@@ -280,7 +280,10 @@ async function listRecords(entity: EntityName): Promise<PocketBaseRecord[]> {
 }
 
 async function upsertRecord(entity: EntityName, appId: string, payload: unknown): Promise<void> {
-  const existing = await listRecords(entity)
+  // Look up only the tenant/entity/app key being written. Full entity scans
+  // made a 100-row sync issue hundreds of unnecessary reads and enlarged the
+  // race window between two devices.
+  const existing = await listRecords(entity, appId)
   const found = existing.find((record) => record.app_id === appId)
   const sanitizedPayload =
     entity === "transactions" && payload && typeof payload === "object"
