@@ -37,6 +37,7 @@ RUN case "$TARGETARCH" in \
     && rm /tmp/pocketbase.zip
 
 COPY backend/pocketbase/pb_migrations /pb/pb_migrations
+COPY backend/pocketbase/pb_hooks /pb/pb_hooks
 COPY supervisord.conf /etc/supervisord.conf
 
 COPY --from=build --chown=bun:bun /app/dist ./dist
