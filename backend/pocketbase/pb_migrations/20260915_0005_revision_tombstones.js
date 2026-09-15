@@ -7,7 +7,10 @@ migrate(
     collection.fields.add(new Field({
       name: "revision",
       type: "number",
-      required: true,
+      // Existing rows need to migrate before the request hook can populate
+      // this value. The hook treats an absent value as revision 0 and assigns
+      // the first revision on the next write.
+      required: false,
       min: 0,
     }))
     collection.fields.add(new Field({
