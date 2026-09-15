@@ -52,7 +52,7 @@ export function TaxPage() {
         <CardContent className="p-6">
           <h1 className="flex items-center gap-2 text-xl tracking-tight"><FontAwesomeIcon icon={faScaleBalanced} className="size-5 text-primary" aria-hidden="true" />Tax Overview {profile.fiscalYear}</h1>
           <dl className="mt-4 space-y-3 text-sm">
-            <Row label="Revenue YTD" value={formatRupiah(overview.revenueYTD)} />
+              <Row label="Omzet tahun ini" value={formatRupiah(overview.revenueYTD)} />
             <Row label="Proyeksi Omzet Setahun" value={formatRupiah(overview.projectedAnnualRevenue)} />
             <Row label="Estimasi Pajak" value={formatRupiah(overview.estimatedTax)} strong />
             <Row label="Pajak Terbayar" value={formatRupiah(overview.taxPaid)} />

@@ -85,15 +85,14 @@ export function HomePage() {
       {safeToSpend && (
         <Link to="/safe-to-spend" className="block" aria-label="Lihat rincian Safe To Spend">
           <Card
-            className="border border-[#e2a9cb]/60 text-white shadow-lg transition-transform active:scale-[0.99]"
-            style={{ background: "var(--gradient-card)" }}
+            className="border border-[#e2a9cb]/60 bg-[var(--main-dark)] text-white shadow-lg transition-transform active:scale-[0.99]"
           >
             <CardContent className="p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="flex items-center gap-1.5 text-xs font-semibold tracking-[2px] text-white/75 uppercase">
                     <FontAwesomeIcon icon={faShieldHalved} className="size-3.5" aria-hidden="true" />
-                    Safe To Spend
+                    Dana aman dipakai
                   </p>
                   <p className="mt-2 text-4xl font-bold tracking-tight tabular-nums">
                     {safeToSpend.confidence !== "HIGH_CONFIDENCE" && "~"}
@@ -178,7 +177,7 @@ export function HomePage() {
               <p className="mt-1 text-sm font-semibold tabular-nums">{formatRupiah(moneyOut)}</p>
             </div>
             <div className="rounded-xl bg-secondary/60 p-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Net Cash Flow</p>
+              <p className="text-[11px] font-medium text-muted-foreground">Arus kas bersih</p>
               <p className={cnNet(netCashFlow, "mt-1 text-sm font-semibold tabular-nums")}>{formatSignedRupiah(netCashFlow)}</p>
             </div>
           </div>

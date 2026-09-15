@@ -128,8 +128,8 @@ export function InsightsPage() {
         <CardContent className="p-5">
           <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{period.label}</h2>
           <div className="mt-3 space-y-3">
-            <OverviewRow label="Revenue" value={formatRupiah(revenue)} />
-            <OverviewRow label="Business Expense" value={formatRupiah(businessExpense)} />
+            <OverviewRow label="Omzet" value={formatRupiah(revenue)} />
+            <OverviewRow label="Biaya usaha" value={formatRupiah(businessExpense)} />
             <OverviewRow label="Cash Surplus" value={formatRupiah(cashSurplus)} strong />
           </div>
         </CardContent>

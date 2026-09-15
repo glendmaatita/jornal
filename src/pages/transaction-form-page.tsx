@@ -234,7 +234,7 @@ export function TransactionFormPage() {
               hint="Contoh: bayar iklan meta 3jt, penjualan 12.5jt, bensin 500rb"
             />
             <Button size="sm" type="button" className="mt-2 w-full" onClick={applySmartInput} disabled={!smartText.trim()}>
-              Parse
+              Terapkan
             </Button>
           </CardContent>
         </Card>
@@ -373,13 +373,13 @@ export function TransactionFormPage() {
             </div>
           )}
 
-          {/* More Options (§15) */}
+          {/* Opsi tambahan (§15) */}
           <button
             type="button"
             onClick={() => setShowMore((current) => !current)}
             className="flex w-full items-center justify-center gap-1 text-sm font-semibold text-[var(--link)]"
           >
-            {showMore ? "Sembunyikan" : "More Options"}
+            {showMore ? "Sembunyikan" : "Opsi tambahan"}
             <ChevronDown className={cn("size-4 transition-transform", showMore && "rotate-180")} aria-hidden="true" />
           </button>
 
