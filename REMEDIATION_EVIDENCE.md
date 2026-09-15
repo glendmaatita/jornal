@@ -6,7 +6,7 @@ This index records evidence from the current `develop` branch. A local pass does
 
 | Evidence | Command / scenario | Result |
 | --- | --- | --- |
-| Regression suite | `bun test` | 218 tests passed, 0 failed |
+| Regression suite | `bun test` | 220 tests passed, 0 failed |
 | Type safety | `bun run typecheck` | Passed |
 | Static checks | `bun run lint` | Passed |
 | Production bundle | `bun run build` | Passed; 48 precache entries, editor remains lazy |
