@@ -33,6 +33,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Backup exports now append and remove their temporary download anchor, avoiding DOM accumulation during repeated exports (W05).
 - Remaining English financial labels were localized to Indonesian, including tax reserve and reserve status summaries (U08).
 - Foreground sync now resumes on `visibilitychange` when a tab becomes visible, covering mobile resume paths without relying on focus events (F09, W04).
+- Shortcut and share routes are now preserved through first-time onboarding, so the requested entry action resumes after setup (W06, W07).
 - Transaction search now has an explicit associated label for assistive technology (U07).
 - The static server now sends clickjacking, referrer, permissions, and opener isolation headers while retaining OAuth popup compatibility (F06, U07).
 - Hydrated receipt records now persist a stable file endpoint without a signed token; detail view requests a fresh token only when opening the file (F05).
