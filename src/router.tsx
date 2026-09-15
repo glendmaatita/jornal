@@ -7,6 +7,7 @@ import { OnboardingPage } from "@/pages/onboarding-page"
 import { LoginPage } from "@/pages/login-page"
 import { isOnboarded, setDataScope } from "@/lib/store"
 import { pb } from "@/lib/pb"
+import { initializePocketBaseSync } from "@/lib/pocketbase-sync"
 
 const HomePage = lazy(() => import("@/pages/home-page").then((m) => ({ default: m.HomePage })))
 const InsightsPage = lazy(() => import("@/pages/insights-page").then((m) => ({ default: m.InsightsPage })))
@@ -35,11 +36,14 @@ const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "_app",
   component: AppShell,
-  beforeLoad: ({ location }) => {
+  beforeLoad: async ({ location }) => {
     setDataScope(pb.authStore.record?.id)
     if (!pb.authStore.isValid) {
       throw redirect({ to: "/login", replace: true })
     }
+    // A new device has no local profile yet. Hydrate the tenant before making
+    // the onboarding decision so an existing account is not treated as new.
+    await initializePocketBaseSync()
     // Onboarding gate before any route component loads, so the redirect does
     // not pay for lazy chunks of the originally matched route (§66 item 1–3)
     if (!isOnboarded() && location.pathname !== "/onboarding") {
