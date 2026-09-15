@@ -104,9 +104,8 @@ export default defineConfig({
         // page creates a review draft; it never uploads without user review.
         share_target: {
           action: "/add?shared=1",
-          method: "POST",
-          enctype: "multipart/form-data",
-          params: { files: [{ name: "receipt", accept: ["image/*", "application/pdf"] }] },
+          method: "GET",
+          params: { title: "title", text: "text", url: "url" },
         },
       },
       workbox: {

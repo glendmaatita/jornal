@@ -65,6 +65,7 @@ export function TransactionFormPage() {
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
   const [attachmentDataUrl, setAttachmentDataUrl] = useState<string | null>(null)
   const [showMore, setShowMore] = useState(false)
+  const [captureRequested, setCaptureRequested] = useState(false)
   const [classificationOverride, setClassificationOverride] = useState<TransactionClassification | null>(null)
   const [smartText, setSmartText] = useState("")
   const [showSmart, setShowSmart] = useState(false)
@@ -113,6 +114,23 @@ export function TransactionFormPage() {
     }
     draftRestoredRef.current = true
   }, [draftKey])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  /* eslint-disable react-hooks/set-state-in-effect -- consume validated shortcut/share intent once */
+  useEffect(() => {
+    if (editing) return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("capture") === "receipt") {
+      setCaptureRequested(true)
+      setShowMore(true)
+    }
+    if (params.get("shared") === "1") {
+      const sharedText = [params.get("title"), params.get("text"), params.get("url")]
+        .filter((value): value is string => Boolean(value?.trim()))
+        .join("\n")
+      if (sharedText) setDescription((current) => current || sharedText)
+    }
+  }, [editing])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
@@ -539,6 +557,11 @@ export function TransactionFormPage() {
               </Suspense>
               <div className="space-y-2">
                 <span className="field-label">Lampiran</span>
+                {captureRequested && !attachmentDataUrl && (
+                  <p className="rounded-lg bg-secondary/60 px-3 py-2 text-xs text-muted-foreground" role="status">
+                    Mode foto siap. Tekan “Buka kamera” untuk mengambil struk.
+                  </p>
+                )}
                 <input
                   ref={uploadInputRef}
                   type="file"
