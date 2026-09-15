@@ -118,7 +118,11 @@ function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>) {
   if (!String(error).startsWith("Error: Conflict") && !String(error).startsWith("Conflict")) return
   const existing = loadSyncConflicts()
   const message = String(error).replace(/^Error:\s*/, "")
-  if (details?.entity && details.appId && existing.some((item) => item.entity === details.entity && item.appId === details.appId)) return
+  if (existing.some((item) =>
+    details?.entity && details.appId
+      ? item.entity === details.entity && item.appId === details.appId
+      : item.message === message,
+  )) return
   const conflicts = [...existing, {
     id: crypto.randomUUID(),
     message,

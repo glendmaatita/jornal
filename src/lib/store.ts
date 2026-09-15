@@ -727,6 +727,9 @@ export function importLocalData(candidate: unknown): { imported: number } {
   if (envelope.format !== "jornal-local-export" || envelope.version !== 1 || !envelope.data || typeof envelope.data !== "object") {
     throw new Error("Format backup Jornal tidak dikenali")
   }
+  if (envelope.scope !== activeScope) {
+    throw new Error("Backup ini milik ruang data lain. Masuk ke akun yang sesuai lalu coba lagi.")
+  }
   const draftPrefix = activeScope === "local" ? "jornal.transaction-draft." : `jornal.${activeScope}.jornal.transaction-draft.`
   const entries = Object.entries(envelope.data).filter(([key]) =>
     Object.values(KEYS).includes(key as typeof KEYS[keyof typeof KEYS]) || key.startsWith(draftPrefix),
@@ -735,7 +738,10 @@ export function importLocalData(candidate: unknown): { imported: number } {
   for (const [storageKey, value] of entries) {
     const key = Object.entries(KEYS).find(([, valueKey]) => valueKey === storageKey)?.[0] as keyof typeof KEYS | undefined
     if (key) write(KEYS[key], value)
-    else window.localStorage.setItem(storageKey, JSON.stringify(value))
+    else {
+      window.localStorage.setItem(storageKey, JSON.stringify(value))
+      void mirrorState(storageKey, value).catch(() => undefined)
+    }
   }
   emitFinancialEvent("TAX_PROFILE_UPDATED")
   schedulePocketBaseSync()
