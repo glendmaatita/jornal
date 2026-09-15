@@ -189,8 +189,10 @@ export function TransactionFormPage() {
   // Validation (shown after first submit attempt)
   const amountValue = parseNumberValue(amount)
   const amountError = amountValue <= 0 ? "Jumlah wajib diisi (lebih dari nol)." : undefined
+  const selectedAccountId = accountId && accounts.some((account) => account.id === accountId) ? accountId : null
+  const selectedTransferAccountId = transferAccountId && accounts.some((account) => account.id === transferAccountId) ? transferAccountId : null
   const transferError =
-    mode === "transfer" && (!accountId || !transferAccountId || accountId === transferAccountId)
+    mode === "transfer" && (!selectedAccountId || !selectedTransferAccountId || selectedAccountId === selectedTransferAccountId)
       ? "Pilih akun asal dan tujuan yang berbeda."
       : undefined
   const descriptionError = mode !== "transfer" && !description.trim() ? "Keterangan membantu sistem mengklasifikasi transaksi." : undefined
@@ -250,8 +252,8 @@ export function TransactionFormPage() {
         paymentMethod: paymentMethod.trim(),
         supplierCustomer: supplierCustomer.trim(),
         tags: tags.trim(),
-        accountId,
-        transferAccountId: mode === "transfer" ? transferAccountId : null,
+        accountId: selectedAccountId,
+        transferAccountId: mode === "transfer" ? selectedTransferAccountId : null,
         attachmentName,
         attachmentDataUrl: attachmentDataUrl ?? editing?.attachmentDataUrl ?? null,
         taxClassification: effectiveClassification,
@@ -267,7 +269,7 @@ export function TransactionFormPage() {
       } else {
         createTransaction(payload)
       }
-      writeEntryPreference("account", accountId)
+      writeEntryPreference("account", selectedAccountId)
       writeEntryPreference("payment", paymentMethod.trim())
     },
     onSuccess: async () => {
