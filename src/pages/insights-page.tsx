@@ -48,20 +48,24 @@ export function InsightsPage() {
   const trends = useMemo(() => monthlyTrends(transactions, 6), [transactions])
   const insights = useMemo(() => generateInsights(transactions, 6), [transactions])
 
-  const stsSeries = useMemo(() => {
+  const stsHistoryData = useMemo(() => {
     if (!profile) return []
-    const history = stsHistory({ transactions, accounts, profile, reserves }, 30)
-    return history.map((snapshot) => ({ label: formatShortDateLabel(snapshot.date), value: snapshot.safeToSpend }))
+    return stsHistory({ transactions, accounts, profile, reserves }, 30)
   }, [transactions, accounts, profile, reserves])
+
+  const stsSeries = useMemo(
+    () => stsHistoryData.map((snapshot) => ({ label: formatShortDateLabel(snapshot.date), value: snapshot.safeToSpend })),
+    [stsHistoryData],
+  )
 
   const stsDeltaMonth = useMemo(() => {
     if (!profile) return null
-    const history = stsHistory({ transactions, accounts, profile, reserves }, 30)
+    const history = stsHistoryData
     if (history.length === 0) return null
     const current = history[history.length - 1]
     const monthStart = history.find((snapshot) => snapshot.date >= current.date.slice(0, 7) + "-01") ?? current
     return { delta: current.safeToSpend - monthStart.safeToSpend, current: current.safeToSpend }
-  }, [transactions, accounts, profile, reserves])
+  }, [profile, stsHistoryData])
 
   const expenseBreakdown = useMemo(() => {
     const byCategory = new Map<string, number>()

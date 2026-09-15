@@ -17,7 +17,6 @@ import {
 } from "@/lib/store"
 import { ALL_CATEGORIES } from "@/lib/categories"
 import { computeSafeToSpend } from "@/lib/safe-to-spend"
-import { CHANGED_EVENT } from "@/lib/types"
 
 // Keys include the active tenant. This prevents React Query from briefly
 // rendering the previous account while auth and local storage switch.
@@ -41,11 +40,9 @@ export function useFinancialEvents() {
       }
     }
     const unsubscribe = subscribeFinancialEvents(invalidateAll)
-    window.addEventListener(CHANGED_EVENT, invalidateAll)
     window.addEventListener("storage", invalidateAll)
     return () => {
       unsubscribe()
-      window.removeEventListener(CHANGED_EVENT, invalidateAll)
       window.removeEventListener("storage", invalidateAll)
     }
   }, [queryClient])
