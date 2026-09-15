@@ -18,7 +18,7 @@ import type {
 } from "./types"
 import { patternToken, DEFAULT_THRESHOLDS } from "./classification"
 import { todayIsoDate } from "./format"
-import { mirrorState } from "./local-db"
+import { clearMirroredState, mirrorState } from "./local-db"
 
 export const KEYS = {
   transactions: "jornal.transactions.v1",
@@ -678,11 +678,13 @@ export function isOnboarded(): boolean {
 
 export function resetAllData() {
   for (const key of Object.values(KEYS)) {
+    const storageKey = scopedStorageKey(key)
     try {
-      window.localStorage.removeItem(scopedStorageKey(key))
+      window.localStorage.removeItem(storageKey)
     } catch {
       // ignore
     }
+    void clearMirroredState(storageKey).catch(() => undefined)
   }
   emitFinancialEvent("TAX_PROFILE_UPDATED")
   schedulePocketBaseSync()
