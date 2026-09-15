@@ -63,6 +63,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - PocketBase update hooks now reject changes to `business_id`, `entity`, or `app_id`, preserving tenant ownership and stable logical identity after authorization (F01, F02). A hook invariant test covers the guard.
 - PocketBase revisions now start at `1` and must advance exactly one step per update; skipped or replayed revisions receive `409` instead of corrupting ordering (F02, F03).
 - PocketBase metadata migrations now tolerate pre-existing fields and use non-destructive rollback behavior, protecting populated upgrades from duplicate-field failures or accidental data removal (F03). Migration invariant coverage passes.
+- PocketBase runtime directories now contain only `.js` migrations/hooks; Bun/TypeScript test files live under `backend/pocketbase/tests`, preventing PocketBase startup from parsing test files as migrations. The two moved invariant tests still pass.
 - Transient sync retries now use capped exponential backoff with bounded jitter to avoid synchronized retry storms (F09, W04).
 - Choosing the local side of a sync conflict now reads the current tenant-scoped record, preserving a pending local receipt even though conflict logs omit attachment data (F02, F05).
 - Lazy onboarding/editor routes, explicit icon imports, bounded transaction rendering, solid surfaces, Indonesian document language, and mobile camera activation (P02–P07, U04, U06–U09, W02–W03).

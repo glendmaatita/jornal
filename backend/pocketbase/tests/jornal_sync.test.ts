@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-const hook = await Bun.file(new URL("./jornal_sync.js", import.meta.url)).text()
+const hook = await Bun.file(new URL("../pb_hooks/jornal_sync.js", import.meta.url)).text()
 
 describe("PocketBase sync hook invariants", () => {
   test("keeps tenant and logical record identity immutable", () => {
