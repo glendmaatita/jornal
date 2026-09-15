@@ -24,6 +24,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Explicit data reset now removes all active-tenant draft keys from localStorage and the durable mirror before clearing the outbox (F13, W05).
 - Reset now acknowledges only the active tenant's outbox keys, so one account cannot discard another account's pending operations (F01, F13).
 - Reset navigation now waits for scoped IndexedDB mirrors and outbox cleanup to complete before opening onboarding (F13).
+- Reset regression now awaits `resetAllData()` completion, proving the durable cleanup contract at the store boundary (F13).
 - Backup import rejects files larger than 10 MB before reading them, keeping recovery responsive under oversized input (F04, W05).
 - Backup import now validates each known key's expected array/object shape before writing any data (F04, W05).
 - Remaining English financial labels were localized to Indonesian, including tax reserve and reserve status summaries (U08).
