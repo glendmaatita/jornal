@@ -426,8 +426,7 @@ export function SettingsPage() {
             type="button"
             onClick={() => {
               if (window.confirm("Hapus SEMUA data (profil, transaksi, akun, reserve)? Tindakan ini tidak bisa dibatalkan.")) {
-                resetAllData()
-                window.location.href = "/onboarding"
+                void resetAllData().then(() => { window.location.href = "/onboarding" })
               }
             }}
             className="w-full rounded-xl border border-destructive/40 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"

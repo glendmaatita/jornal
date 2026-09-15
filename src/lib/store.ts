@@ -692,7 +692,8 @@ export function isOnboarded(): boolean {
   return loadProfile().onboardingCompletedAt !== null
 }
 
-export function resetAllData() {
+export async function resetAllData() {
+  const cleanup: Promise<unknown>[] = []
   for (const key of Object.values(KEYS)) {
     const storageKey = scopedStorageKey(key)
     try {
@@ -700,7 +701,7 @@ export function resetAllData() {
     } catch {
       // ignore
     }
-    void clearMirroredState(storageKey).catch(() => undefined)
+    cleanup.push(clearMirroredState(storageKey).catch(() => undefined))
   }
   const draftPrefix = activeScope === "local" ? "jornal.transaction-draft." : `jornal.${activeScope}.jornal.transaction-draft.`
   try {
@@ -709,9 +710,11 @@ export function resetAllData() {
       if (key?.startsWith(draftPrefix)) window.localStorage.removeItem(key)
     }
   } catch { /* storage may be unavailable; durable cleanup still runs */ }
-  void clearMirroredStateByPrefix(draftPrefix).catch(() => undefined)
-  void acknowledgeOutbox(Object.values(KEYS).map((key) => scopedStorageKey(key))).then(() => schedulePocketBaseSync()).catch(() => undefined)
+  cleanup.push(clearMirroredStateByPrefix(draftPrefix).catch(() => undefined))
+  cleanup.push(acknowledgeOutbox(Object.values(KEYS).map((key) => scopedStorageKey(key))).catch(() => undefined))
   emitFinancialEvent("TAX_PROFILE_UPDATED")
+  await Promise.all(cleanup)
+  schedulePocketBaseSync()
 }
 
 export interface LocalDataExport {
