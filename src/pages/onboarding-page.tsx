@@ -91,7 +91,13 @@ export function OnboardingPage() {
         })
       }
     }
-    void navigate({ to: "/" })
+    let pendingRoute = ""
+    try {
+      pendingRoute = window.sessionStorage.getItem("jornal.pending-route") ?? ""
+      window.sessionStorage.removeItem("jornal.pending-route")
+    } catch { /* continue to home when session storage is unavailable */ }
+    if (pendingRoute.startsWith("/")) window.location.assign(pendingRoute)
+    else void navigate({ to: "/" })
   }
 
   return (

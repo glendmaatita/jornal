@@ -22,7 +22,16 @@ export function LoginPage() {
       setDataScope(pb.authStore.record?.id)
       // Fresh hydration/sync cycle for this tenant.
       resetPocketBaseSyncState()
-      await navigate({ to: "/" })
+      let pendingRoute = ""
+      try {
+        pendingRoute = window.sessionStorage.getItem("jornal.pending-route") ?? ""
+        window.sessionStorage.removeItem("jornal.pending-route")
+      } catch { /* continue to the home route when storage is unavailable */ }
+      if (pendingRoute.startsWith("/")) {
+        window.location.assign(pendingRoute)
+      } else {
+        await navigate({ to: "/" })
+      }
     } catch (loginError) {
       // Keep deployment details out of the user-facing flow; retain the
       // diagnostic for local debugging without exposing configuration names.

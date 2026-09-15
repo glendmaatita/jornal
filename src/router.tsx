@@ -39,6 +39,11 @@ const appLayoutRoute = createRoute({
   beforeLoad: async ({ location }) => {
     setDataScope(pb.authStore.record?.id)
     if (!pb.authStore.isValid) {
+      try {
+        if (location.href && location.pathname !== "/login") {
+          window.sessionStorage.setItem("jornal.pending-route", location.href)
+        }
+      } catch { /* private browsing can disable session storage */ }
       throw redirect({ to: "/login", replace: true })
     }
     // A new device has no local profile yet. Hydrate the tenant before making
