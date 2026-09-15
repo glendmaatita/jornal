@@ -54,6 +54,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Editing a transaction preserves its stable receipt reference, while the form now offers an explicit Hapus action that removes the attachment on save (F05, U04).
 - Local-only startup restores the IndexedDB mirror even when PocketBase is disabled; storage and IndexedDB failures raise a visible recovery notice (F04, W01, W05).
 - Revision/tombstone metadata, tenant PocketBase rules, server 409 conflict persistence, bounded retries, caller-aware request timeouts, and merge-preserving hydration (F02, F03, F09, W04).
+- PocketBase update hooks now reject changes to `business_id`, `entity`, or `app_id`, preserving tenant ownership and stable logical identity after authorization (F01, F02). A hook invariant test covers the guard.
 - Transient sync retries now use capped exponential backoff with bounded jitter to avoid synchronized retry storms (F09, W04).
 - Choosing the local side of a sync conflict now reads the current tenant-scoped record, preserving a pending local receipt even though conflict logs omit attachment data (F02, F05).
 - Lazy onboarding/editor routes, explicit icon imports, bounded transaction rendering, solid surfaces, Indonesian document language, and mobile camera activation (P02–P07, U04, U06–U09, W02–W03).

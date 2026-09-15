@@ -16,6 +16,14 @@ onRecordUpdateRequest((event) => {
   if (!isJornalRecord(event)) return
   const collection = event.record.collection()
   const previous = $app.findRecordById(collection.id, event.record.id)
+  // These fields define ownership and the stable client identity. Collection
+  // rules authorize the existing row; they must not permit an update to move
+  // it to another tenant or change which logical record it represents.
+  for (const field of ["business_id", "entity", "app_id"]) {
+    if (event.record.get(field) !== previous.get(field)) {
+      throw new ApiError(400, `${field} cannot be changed`)
+    }
+  }
   const incomingRevision = Number(event.record.get("revision") || 0)
   const currentRevision = Number(previous.get("revision") || 0)
   if (incomingRevision <= currentRevision) {
