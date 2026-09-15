@@ -17,6 +17,7 @@ This index records evidence from the current `develop` branch. A local pass does
 ## Implemented and locally evidenced
 
 - Account-scoped local storage and query keys, auth partition switching, durable IndexedDB mirror, drafts, backup/restore validation, and reset outbox clearing (F01, F04, F12, W01, W05).
+- Business mutations now persist their IndexedDB mirror and sync outbox in one read/write transaction; a failed transaction raises the existing storage recovery notice instead of silently acknowledging durability (F04, W01).
 - Local-only startup restores the IndexedDB mirror even when PocketBase is disabled; storage and IndexedDB failures raise a visible recovery notice (F04, W01, W05).
 - Revision/tombstone metadata, tenant PocketBase rules, server 409 conflict persistence, bounded retries, caller-aware request timeouts, and merge-preserving hydration (F02, F03, F09, W04).
 - Lazy onboarding/editor routes, explicit icon imports, bounded transaction rendering, solid surfaces, Indonesian document language, and mobile camera activation (P02–P07, U04, U06–U09, W02–W03).
