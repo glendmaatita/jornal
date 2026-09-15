@@ -691,3 +691,40 @@ export function resetAllData() {
   emitFinancialEvent("TAX_PROFILE_UPDATED")
   schedulePocketBaseSync()
 }
+
+export interface LocalDataExport {
+  format: "jornal-local-export"
+  version: 1
+  scope: string
+  exportedAt: string
+  data: Record<string, unknown>
+}
+
+/** Create a credential-free backup of the active tenant's local data. */
+export function exportLocalData(): LocalDataExport {
+  const data: Record<string, unknown> = {}
+  for (const key of Object.values(KEYS)) data[key] = read<unknown>(key, null)
+  return { format: "jornal-local-export", version: 1, scope: activeScope, exportedAt: nowIso(), data }
+}
+
+/**
+ * Validate and restore a backup into the currently selected tenant. The
+ * envelope is checked before any write occurs; credentials and signed URLs
+ * are intentionally not part of the export format.
+ */
+export function importLocalData(candidate: unknown): { imported: number } {
+  if (!candidate || typeof candidate !== "object") throw new Error("File backup tidak valid")
+  const envelope = candidate as Partial<LocalDataExport>
+  if (envelope.format !== "jornal-local-export" || envelope.version !== 1 || !envelope.data || typeof envelope.data !== "object") {
+    throw new Error("Format backup Jornal tidak dikenali")
+  }
+  const entries = Object.entries(envelope.data).filter(([key]) => Object.values(KEYS).includes(key as typeof KEYS[keyof typeof KEYS]))
+  if (entries.length === 0) throw new Error("Backup tidak berisi data Jornal")
+  for (const [storageKey, value] of entries) {
+    const key = Object.entries(KEYS).find(([, valueKey]) => valueKey === storageKey)?.[0] as keyof typeof KEYS | undefined
+    if (key) write(KEYS[key], value)
+  }
+  emitFinancialEvent("TAX_PROFILE_UPDATED")
+  schedulePocketBaseSync()
+  return { imported: entries.length }
+}

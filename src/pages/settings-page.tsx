@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Plus, Trash2 } from "lucide-react"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
@@ -16,7 +16,7 @@ import { categoryName } from "@/lib/categories"
 import { parseAmountInput, formatNumberInput } from "@/lib/format"
 
 import { queryKeys, useAccounts, useCorrections, useProfile, useSettings, useTransactions } from "@/lib/queries"
-import { clearCorrections, deleteAccount, deleteCorrection, resetAllData, saveProfile, saveSettings, upsertAccount } from "@/lib/store"
+import { clearCorrections, deleteAccount, deleteCorrection, exportLocalData, importLocalData, resetAllData, saveProfile, saveSettings, upsertAccount } from "@/lib/store"
 import { allowedTaxSchemes } from "@/lib/tax"
 import { BUSINESS_TYPE_LABELS, CLASSIFICATION_LABELS, type AccountType, type BusinessType } from "@/lib/types"
 
@@ -42,6 +42,31 @@ export function SettingsPage() {
   const { data: accounts = [] } = useAccounts()
   const { data: settings } = useSettings()
   const { data: transactions = [] } = useTransactions()
+  const importInputRef = useRef<HTMLInputElement | null>(null)
+  const [dataMessage, setDataMessage] = useState<string | null>(null)
+
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify(exportLocalData(), null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `jornal-backup-${new Date().toISOString().slice(0, 10)}.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    setDataMessage("Backup berhasil dibuat.")
+  }
+
+  const importData = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown
+      const result = importLocalData(parsed)
+      setDataMessage(`${result.imported} bagian data dipulihkan.`)
+      invalidate()
+    } catch (error) {
+      setDataMessage(error instanceof Error ? error.message : "Backup tidak dapat dipulihkan.")
+    }
+  }
   const { data: corrections = [] } = useCorrections()
 
   const [autoAccept, setAutoAccept] = useState<string | null>(null)
@@ -376,6 +401,12 @@ export function SettingsPage() {
           <p className="text-xs leading-relaxed text-muted-foreground">
             Semua data tersimpan di perangkat ini (offline-ready). Total transaksi tercatat: {transactions.length}.
           </p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Button type="button" variant="outline" onClick={exportData}>Unduh backup</Button>
+            <Button type="button" variant="outline" onClick={() => importInputRef.current?.click()}>Pulihkan backup</Button>
+          </div>
+          <input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => { void importData(event.target.files?.[0]); event.target.value = "" }} />
+          {dataMessage && <p className="text-xs text-muted-foreground" role="status">{dataMessage}</p>}
           <button
             type="button"
             onClick={() => {
