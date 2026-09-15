@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
-import { faArrowRight, faArrowTrendDown, faArrowTrendUp, faCalendarDays, faChartLine, faClipboardList, faPiggyBank, faPlus, faShieldHalved } from "@fortawesome/free-solid-svg-icons"
+import { faArrowRight } from "@fortawesome/free-solid-svg-icons/faArrowRight"
+import { faArrowTrendDown } from "@fortawesome/free-solid-svg-icons/faArrowTrendDown"
+import { faArrowTrendUp } from "@fortawesome/free-solid-svg-icons/faArrowTrendUp"
+import { faCalendarDays } from "@fortawesome/free-solid-svg-icons/faCalendarDays"
+import { faChartLine } from "@fortawesome/free-solid-svg-icons/faChartLine"
+import { faClipboardList } from "@fortawesome/free-solid-svg-icons/faClipboardList"
+import { faPiggyBank } from "@fortawesome/free-solid-svg-icons/faPiggyBank"
+import { faPlus } from "@fortawesome/free-solid-svg-icons/faPlus"
+import { faShieldHalved } from "@fortawesome/free-solid-svg-icons/faShieldHalved"
 
 import { AlertTriangle, ArrowRight } from "lucide-react"
 
