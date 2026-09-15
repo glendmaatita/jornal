@@ -6,5 +6,7 @@ describe("PocketBase sync hook invariants", () => {
   test("keeps tenant and logical record identity immutable", () => {
     expect(hook).toContain('for (const field of ["business_id", "entity", "app_id"])')
     expect(hook).toContain("cannot be changed")
+    expect(hook).toContain("incomingRevision !== currentRevision + 1")
+    expect(hook).toContain('event.record.set("revision", 1)')
   })
 })

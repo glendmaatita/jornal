@@ -7,8 +7,9 @@ function isJornalRecord(event) {
 
 onRecordCreateRequest((event) => {
   if (!isJornalRecord(event)) return
-  const revision = Number(event.record.get("revision") || 0)
-  event.record.set("revision", revision > 0 ? revision : 1)
+  // A new logical record always starts at revision 1. Clients cannot reserve
+  // an arbitrarily large revision and disrupt ordering for later writes.
+  event.record.set("revision", 1)
   event.next()
 })
 
@@ -26,8 +27,8 @@ onRecordUpdateRequest((event) => {
   }
   const incomingRevision = Number(event.record.get("revision") || 0)
   const currentRevision = Number(previous.get("revision") || 0)
-  if (incomingRevision <= currentRevision) {
-    throw new ApiError(409, "A newer revision already exists")
+  if (incomingRevision !== currentRevision + 1) {
+    throw new ApiError(409, "Revision is out of date")
   }
   event.next()
 })
