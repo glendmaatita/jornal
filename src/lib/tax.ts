@@ -291,13 +291,13 @@ export const TAX_TREATMENTS: Partial<Record<Transaction["classification"], strin
   OWNER_WITHDRAWAL: "Bukan biaya bisnis — tidak mengurangi pajak.",
   ASSET_PURCHASE: "Pembelian aset — perlakuan penyusutan tidak dihitung otomatis.",
   LOAN_RECEIVED: "Bukan omzet — pokok pinjaman tidak dikenakan pajak.",
-  LOAN_PAYMENT: "Cicilan pokok — bukan biaya. Bunga belum dipisahkan otomatis.",
+  LOAN_PAYMENT: "Cicilan pokok; bunga belum dipisahkan otomatis.",
   TAX_PAYMENT: "Pembayaran pajak — mengurangi sisa estimasi pajak.",
   INTERNAL_TRANSFER: "Transfer antar rekening — tidak memengaruhi omzet, biaya, atau pajak.",
   REFUND: "Pengembalian dana.",
   OTHER_INCOME: "Pemasukan di luar omzet utama.",
   OTHER_OUTFLOW: "Pengeluaran di luar klasifikasi lain.",
-  OPENING_BALANCE: "Saldo awal — bukan omzet.",
+  OPENING_BALANCE: "Saldo awal tidak masuk perhitungan omzet.",
   UNKNOWN: "Belum ada perlakuan pajak — konfirmasi klasifikasinya.",
 }
 

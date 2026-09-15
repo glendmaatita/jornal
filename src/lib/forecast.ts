@@ -206,7 +206,7 @@ export function computeForecast(
       ? `Pemasukan yang diharapkan dipotong pajak ${Math.round(rate * 100)}% lebih dulu (konservatif).`
       : "Tidak ada pemasukan yang diharapkan dalam horizon.",
     "Kewajiban yang belum jatuh tempo tetap dihitung penuh sebagai reserve.",
-    "Proyeksi adalah estimasi — bukan jaminan, dan tidak memperhitungkan tagihan yang belum dicatat.",
+    "Proyeksi adalah estimasi. Hasilnya bergantung pada data dan belum mencakup tagihan yang belum dicatat.",
   ]
 
   return {
