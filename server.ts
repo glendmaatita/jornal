@@ -18,6 +18,15 @@ const contentTypes: Record<string, string> = {
   ".webmanifest": "application/manifest+json; charset=utf-8",
 }
 
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(self), microphone=(), geolocation=()",
+  // Keep OAuth popups functional while isolating the app's browsing context.
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+}
+
 async function responseFor(filePath: string, request: Request) {
   const file = Bun.file(filePath)
   const extension = extname(filePath)
@@ -31,7 +40,7 @@ async function responseFor(filePath: string, request: Request) {
   const headers = new Headers({
       "Cache-Control": cacheControl,
       ...(contentTypes[extension] ? { "Content-Type": contentTypes[extension] } : {}),
-      "X-Content-Type-Options": "nosniff",
+      ...securityHeaders,
     })
   const compressible = new Set([".js", ".css", ".html", ".json", ".webmanifest"])
   const acceptsGzip = request.headers.get("accept-encoding")?.toLowerCase().includes("gzip")
@@ -86,7 +95,7 @@ const server = Bun.serve({
         headers: {
           "Cache-Control": "no-cache",
           "Content-Type": "text/html; charset=utf-8",
-          "X-Content-Type-Options": "nosniff",
+          ...securityHeaders,
         },
       })
     }
