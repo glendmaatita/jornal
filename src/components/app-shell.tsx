@@ -47,8 +47,14 @@ export function AppShell() {
   useEffect(() => {
     // Ask once per browser profile after login. Persistence is feature
     // detected; denial must not block the local-first app.
-    if (!navigator.storage?.persist || sessionStorage.getItem("jornal.storage-requested") === "1") return
-    sessionStorage.setItem("jornal.storage-requested", "1")
+    if (!navigator.storage?.persist) return
+    try {
+      if (sessionStorage.getItem("jornal.storage-requested") === "1") return
+      sessionStorage.setItem("jornal.storage-requested", "1")
+    } catch {
+      // Session storage can be disabled in private browsing; persistence is
+      // still safe to request once for this render.
+    }
     void navigator.storage.persist().catch(() => false)
   }, [])
 
