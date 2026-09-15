@@ -53,8 +53,6 @@
   --header-height: 50px;
   --tab-bar-height: 68px;
   --screen-width: 600px;
-  --gradient-primary: #16579d;
-  --gradient-card: #1b1d4d;
 }
 
 * {
@@ -144,12 +142,6 @@ button:disabled {
   border: none;
   border-radius: 10px;
   box-shadow: 0 1px 2px rgb(27 29 77 / 0.04);
-}
-
-/* ── Primary button ── */
-.btn-gradient {
-  background: var(--gradient-primary);
-  color: var(--white-color);
 }
 
 /* ── Field primitives (custom, no native browser chrome) ── */
