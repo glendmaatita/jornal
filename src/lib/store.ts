@@ -37,6 +37,7 @@ export const KEYS = {
 
 let activeScope = "local"
 export const STORAGE_WARNING_EVENT = "jornal-storage-warning"
+export const RESET_PENDING_KEY = "jornal.reset-pending.v1"
 
 function notifyStorageWarning() {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORAGE_WARNING_EVENT))
@@ -698,6 +699,9 @@ export function isOnboarded(): boolean {
 
 export async function resetAllData() {
   const cleanup: Promise<unknown>[] = []
+  const resetKey = scopedStorageKey(RESET_PENDING_KEY)
+  try { window.localStorage.setItem(resetKey, new Date().toISOString()) } catch { notifyStorageWarning() }
+  cleanup.push(mirrorState(resetKey, new Date().toISOString()).catch(() => notifyStorageWarning()))
   for (const key of Object.values(KEYS)) {
     const storageKey = scopedStorageKey(key)
     try {

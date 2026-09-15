@@ -11,7 +11,7 @@ import {
   setPocketBaseUrl,
   syncToPocketBase,
 } from "./pocketbase-sync"
-import { KEYS, saveProfile, emptyProfile, createTransaction } from "./store"
+import { KEYS, RESET_PENDING_KEY, scopedStorageKey, saveProfile, emptyProfile, createTransaction } from "./store"
 import type { Transaction } from "./types"
 
 type FetchCall = { url: string; method: string; body?: unknown }
@@ -91,6 +91,19 @@ describe("syncToPocketBase", () => {
     setEnv("http://pb.test")
     await syncToPocketBase()
     expect(calls.filter((call) => call.method !== "GET")).toHaveLength(0)
+  })
+
+  test("pending reset removes remote rows before clearing its marker", async () => {
+    setEnv("http://pb.test")
+    const resetKey = scopedStorageKey(RESET_PENDING_KEY)
+    localStorageShim.setItem(resetKey, new Date().toISOString())
+    expect(localStorageShim.getItem(resetKey)).toBeTruthy()
+    respond = (url) => url.includes("/records?")
+      ? { status: 200, body: { items: [{ id: "remote-row", entity: "profile", app_id: "profile", business_id: "local", payload: {} }], totalPages: 1 } }
+      : { status: 200, body: {} }
+    await syncToPocketBase()
+    expect(calls.filter((call) => call.method === "DELETE")).toHaveLength(11)
+    expect(localStorageShim.getItem(resetKey)).toBeNull()
   })
 
   test("upserts profile, transactions and reserves as POST records", async () => {

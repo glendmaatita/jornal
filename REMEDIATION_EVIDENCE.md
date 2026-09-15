@@ -6,7 +6,7 @@ This index records evidence from the current `develop` branch. A local pass does
 
 | Evidence | Command / scenario | Result |
 | --- | --- | --- |
-| Regression suite | `bun test` | 220 tests passed, 0 failed |
+| Regression suite | `bun test` | 221 tests passed, 0 failed |
 | Type safety | `bun run typecheck` | Passed |
 | Static checks | `bun run lint` | Passed |
 | Production bundle | `bun run build` | Passed; 48 precache entries, editor remains lazy |
@@ -27,6 +27,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Transaction drafts are mirrored to IndexedDB and restored when localStorage is empty, so a refresh or service-worker restart can recover an unfinished entry (F12, W01, W05).
 - Successful transaction saves now remove both the localStorage draft and its durable mirror, preventing stale drafts from resurfacing after recovery (F12).
 - Explicit data reset now removes all active-tenant draft keys from localStorage and the durable mirror before clearing the outbox (F13, W05).
+- Reset now leaves a durable tenant-scoped marker; the next sync deletes that tenant's remote rows before clearing the marker, and failed deletion keeps it for retry (F02, F13).
 - Reset now acknowledges only the active tenant's outbox keys, so one account cannot discard another account's pending operations (F01, F13).
 - Reset navigation now waits for scoped IndexedDB mirrors and outbox cleanup to complete before opening onboarding (F13).
 - Reset regression now awaits `resetAllData()` completion, proving the durable cleanup contract at the store boundary (F13).

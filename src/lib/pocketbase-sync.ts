@@ -1,7 +1,7 @@
 import type { Account, AppSettings, BusinessProfile, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
-import { KEYS, scopedStorageKey } from "./store"
+import { KEYS, RESET_PENDING_KEY, scopedStorageKey } from "./store"
 import { pb } from "./pb"
-import { acknowledgeOutbox, listOutbox, mirrorState, restoreState } from "./local-db"
+import { acknowledgeOutbox, clearMirroredState, listOutbox, mirrorState, restoreState } from "./local-db"
 
 type EntityName =
   | "profile"
@@ -471,8 +471,27 @@ async function pruneExplicitlyDeleted(entity: EntityName) {
   )
 }
 
+async function processPendingReset() {
+  const markerKey = scopedStorageKey(RESET_PENDING_KEY)
+  // The marker is an ISO string written directly so it remains readable even
+  // if a previous localStorage JSON payload was corrupted.
+  if (!window.localStorage.getItem(markerKey)) return false
+  for (const entity of ["profile", "settings", "accounts", "transactions", "reserves", "corrections", "recurringRules", "profileHistory", "accountHistory", "transactionHistory", "reserveHistory"] as EntityName[]) {
+    const records = await listRecords(entity)
+    for (const record of records) await requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" })
+  }
+  try { window.localStorage.removeItem(markerKey) } catch { /* durable mirror cleanup still follows */ }
+  await clearResetMarker(markerKey)
+  return true
+}
+
+async function clearResetMarker(markerKey: string) {
+  await clearMirroredState(markerKey).catch(() => undefined)
+}
+
 async function syncToPocketBaseUnsafe(runGeneration: number, runBusinessId: string) {
   if (!enabled() || typeof window === "undefined") return
+  await processPendingReset()
   const states: Partial<LocalStateMap> = {
     profile: localJson(KEYS.profile, null),
     settings: localJson(KEYS.settings, null),
