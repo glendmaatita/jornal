@@ -370,6 +370,14 @@ describe("settings & misc", () => {
     expect(() => importLocalData({ ...backup, scope: "another-user" })).toThrow("ruang data lain")
   })
 
+  test("backup import rejects malformed core value shapes", () => {
+    const backup = exportLocalData()
+    expect(() => importLocalData({
+      ...backup,
+      data: { ...backup.data, [KEYS.transactions]: { id: "not-an-array" } },
+    })).toThrow("tidak valid")
+  })
+
   test("loadProfileHistory seeds once from current profile", () => {
     saveProfile({ ...emptyProfile(), businessName: "seed" })
     const first = loadProfileHistory()
