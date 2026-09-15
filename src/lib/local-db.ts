@@ -65,6 +65,23 @@ export async function clearMirroredState(key: string): Promise<void> {
   }).finally(() => db.close())
 }
 
+/** Remove all durable state entries whose keys belong to a scoped prefix. */
+export async function clearMirroredStateByPrefix(prefix: string): Promise<void> {
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(STORE, "readwrite")
+    const objectStore = transaction.objectStore(STORE)
+    const request = objectStore.getAllKeys()
+    request.onsuccess = () => {
+      for (const key of request.result) if (typeof key === "string" && key.startsWith(prefix)) objectStore.delete(key)
+    }
+    request.onerror = () => reject(request.error ?? new Error("IndexedDB key lookup failed"))
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB prefix delete failed"))
+  }).finally(() => db.close())
+}
+
 export async function enqueueOutbox(key: string, value: unknown): Promise<void> {
   const db = await database()
   if (!db) return

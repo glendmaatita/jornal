@@ -18,7 +18,7 @@ import type {
 } from "./types"
 import { patternToken, DEFAULT_THRESHOLDS } from "./classification"
 import { todayIsoDate } from "./format"
-import { clearMirroredState, clearOutbox, mirrorState, persistState } from "./local-db"
+import { clearMirroredState, clearMirroredStateByPrefix, clearOutbox, mirrorState, persistState } from "./local-db"
 
 export const KEYS = {
   transactions: "jornal.transactions.v1",
@@ -702,6 +702,14 @@ export function resetAllData() {
     }
     void clearMirroredState(storageKey).catch(() => undefined)
   }
+  const draftPrefix = activeScope === "local" ? "jornal.transaction-draft." : `jornal.${activeScope}.jornal.transaction-draft.`
+  try {
+    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.localStorage.key(index)
+      if (key?.startsWith(draftPrefix)) window.localStorage.removeItem(key)
+    }
+  } catch { /* storage may be unavailable; durable cleanup still runs */ }
+  void clearMirroredStateByPrefix(draftPrefix).catch(() => undefined)
   void clearOutbox().then(() => schedulePocketBaseSync()).catch(() => undefined)
   emitFinancialEvent("TAX_PROFILE_UPDATED")
 }
