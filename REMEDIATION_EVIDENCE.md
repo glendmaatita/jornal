@@ -29,6 +29,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Backup import now validates each known key's expected array/object shape before writing any data (F04, W05).
 - The reverse proxy rejects request bodies over 12 MB with `413` before buffering or forwarding them; a 13 MB live probe confirmed the response (F04, F09).
 - Transaction save failures now render an inline alert while retaining the draft for retry (F04, U03, U07).
+- Backup object URLs now remain alive for one second after download start, improving mobile/Safari export reliability (W05).
 - Remaining English financial labels were localized to Indonesian, including tax reserve and reserve status summaries (U08).
 - Foreground sync now resumes on `visibilitychange` when a tab becomes visible, covering mobile resume paths without relying on focus events (F09, W04).
 - Transaction search now has an explicit associated label for assistive technology (U07).
