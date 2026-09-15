@@ -46,6 +46,7 @@ import {
   KEYS,
   exportLocalData,
   importLocalData,
+  setDataScope,
   updateReserve as patchReserve,
 } from "./store"
 import type { NewTransaction, Transaction } from "./types"
@@ -98,6 +99,18 @@ describe("profile", () => {
     // Save again appends a second record
     saveProfile({ ...profile, businessName: "Kedai 2" })
     expect(loadProfileHistory().length).toBe(2)
+  })
+
+  test("profile and transactions use the active tenant identity", () => {
+    setDataScope("user-123")
+    const profile = emptyProfile()
+    expect(profile.businessId).toBe("user-123")
+    saveProfile({ ...profile, businessName: "Kedai" })
+    expect(loadProfile().businessId).toBe("user-123")
+    expect(loadProfileHistory()[0]?.id).toBe("user-123")
+    const transaction = createTransaction(makeInput())
+    expect(transaction.businessId).toBe("user-123")
+    setDataScope(null)
   })
 
   test("resolveProfileAsOf returns historical version or fallback", () => {

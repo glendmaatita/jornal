@@ -35,7 +35,6 @@ export const KEYS = {
   syncConflicts: "jornal.sync-conflicts.v1",
 } as const
 
-const BUSINESS_ID = "local"
 let activeScope = "local"
 export const STORAGE_WARNING_EVENT = "jornal-storage-warning"
 
@@ -50,6 +49,11 @@ export function setDataScope(scope: string | null | undefined) {
 
 /** Current tenant partition, used to scope all client-side caches as well. */
 export function getDataScope() {
+  return activeScope
+}
+
+/** The business identity must follow the active authenticated partition. */
+function currentBusinessId() {
   return activeScope
 }
 
@@ -147,7 +151,7 @@ function resolveVersionRecordsAsOf<T>(records: VersionRecord<T>[], asOf: string)
 
 export function emptyProfile(): BusinessProfile {
   return {
-    businessId: BUSINESS_ID,
+    businessId: currentBusinessId(),
     businessName: "",
     businessType: "INDIVIDUAL",
     pkpStatus: false,
@@ -184,10 +188,10 @@ export function loadProfile(): BusinessProfile {
 
 export function saveProfile(profile: BusinessProfile, event: FinancialEvent = "TAX_PROFILE_UPDATED") {
   const timestamp = nowIso()
-  const nextProfile = { ...profile, businessId: BUSINESS_ID, updatedAt: timestamp }
+  const nextProfile = { ...profile, businessId: currentBusinessId(), updatedAt: timestamp }
   write(KEYS.profile, nextProfile)
   appendVersionRecord<BusinessProfile>(KEYS.profileHistory, {
-    id: BUSINESS_ID,
+    id: currentBusinessId(),
     effectiveAt: timestamp,
     deletedAt: null,
     value: nextProfile,
@@ -330,7 +334,7 @@ export function createTransaction(input: NewTransaction): Transaction {
     taxClassification: input.taxClassification ?? input.classification,
     attachmentDataUrl: input.attachmentDataUrl ?? null,
     id: newId(),
-    businessId: BUSINESS_ID,
+    businessId: currentBusinessId(),
     createdAt: timestamp,
     updatedAt: timestamp,
   }
