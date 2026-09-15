@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { ArrowLeft, Copy, Pencil, Trash2 } from "lucide-react"
@@ -11,6 +12,7 @@ import { queryKeys, useAccountMap, useTransactions } from "@/lib/queries"
 import { deleteTransaction, duplicateTransaction } from "@/lib/store"
 import { TAX_TREATMENTS } from "@/lib/tax"
 import { CLASSIFICATION_LABELS, type Transaction } from "@/lib/types"
+import { pb } from "@/lib/pb"
 
 export function TransactionDetailPage({ transactionId }: { transactionId: string }) {
   const navigate = useNavigate()
@@ -19,6 +21,22 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
   const accountMap = useAccountMap()
 
   const transaction = transactions.find((candidate) => candidate.id === transactionId)
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(transaction?.attachmentDataUrl ?? null)
+
+  /* eslint-disable react-hooks/set-state-in-effect -- reset when the viewed record changes */
+  useEffect(() => {
+    let cancelled = false
+    const currentUrl = transaction?.attachmentDataUrl ?? null
+    setAttachmentUrl(currentUrl)
+    if (!currentUrl || currentUrl.startsWith("data:")) return () => { cancelled = true }
+    void pb.files.getToken().then((token) => {
+      if (cancelled || !token) return
+      const separator = currentUrl.includes("?") ? "&" : "?"
+      setAttachmentUrl(`${currentUrl.split("?")[0]}${separator}token=${encodeURIComponent(token)}`)
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [transaction?.attachmentDataUrl])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const remove = useMutation({
     mutationFn: async () => deleteTransaction(transactionId),
@@ -94,8 +112,8 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
               <div className="flex gap-3">
                 <dt className="w-36 shrink-0 text-muted-foreground">Lampiran</dt>
                 <dd className="flex-1">
-                  {transaction.attachmentDataUrl ? (
-                    <a href={transaction.attachmentDataUrl} download={transaction.attachmentName} className="text-primary underline">
+                  {attachmentUrl ? (
+                    <a href={attachmentUrl} download={transaction.attachmentName} className="text-primary underline">
                       {transaction.attachmentName}
                     </a>
                   ) : (
