@@ -44,6 +44,8 @@ import {
   upsertAccount,
   needsReviewTransactions,
   KEYS,
+  exportLocalData,
+  importLocalData,
   updateReserve as patchReserve,
 } from "./store"
 import type { NewTransaction, Transaction } from "./types"
@@ -350,6 +352,15 @@ describe("settings & misc", () => {
     resetAllData()
     expect(loadProfile().businessName).toBe("")
     expect(loadTransactions()).toHaveLength(0)
+  })
+
+  test("backup roundtrip accepts the active scope and rejects foreign scope", () => {
+    saveProfile({ ...emptyProfile(), businessName: "Backup test" })
+    const backup = exportLocalData()
+    resetAllData()
+    expect(importLocalData(backup).imported).toBeGreaterThan(0)
+    expect(loadProfile().businessName).toBe("Backup test")
+    expect(() => importLocalData({ ...backup, scope: "another-user" })).toThrow("ruang data lain")
   })
 
   test("loadProfileHistory seeds once from current profile", () => {
