@@ -760,6 +760,18 @@ export function importLocalData(candidate: unknown): { imported: number } {
     Object.values(KEYS).includes(key as typeof KEYS[keyof typeof KEYS]) || key.startsWith(draftPrefix),
   )
   if (entries.length === 0) throw new Error("Backup tidak berisi data Jornal")
+  const arrayKeys = new Set<string>([
+    KEYS.transactions, KEYS.transactionHistory, KEYS.accounts, KEYS.accountHistory, KEYS.profileHistory,
+    KEYS.reserves, KEYS.reserveHistory, KEYS.corrections, KEYS.recurringRules, KEYS.syncConflicts,
+  ])
+  for (const [storageKey, value] of entries) {
+    const valid = value === null || (storageKey.startsWith(draftPrefix)
+      ? Boolean(value && typeof value === "object" && !Array.isArray(value))
+      : arrayKeys.has(storageKey)
+        ? Array.isArray(value)
+        : typeof value === "object" && !Array.isArray(value))
+    if (!valid) throw new Error(`Data backup untuk ${storageKey} tidak valid`)
+  }
   for (const [storageKey, value] of entries) {
     const key = Object.entries(KEYS).find(([, valueKey]) => valueKey === storageKey)?.[0] as keyof typeof KEYS | undefined
     if (key) write(KEYS[key], value)
