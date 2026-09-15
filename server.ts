@@ -76,6 +76,13 @@ const server = Bun.serve({
     if (url.pathname === "/pb" || url.pathname.startsWith("/pb/")) {
       const pocketBaseOrigin = process.env.POCKETBASE_INTERNAL_URL ?? "http://127.0.0.1:8090"
       const pathAndQuery = `${url.pathname.replace(/^\/pb/, "") || "/"}${url.search}`
+      const contentLength = Number(request.headers.get("content-length") ?? 0)
+      if (contentLength > 12 * 1024 * 1024) {
+        return Response.json({ error: "Permintaan terlalu besar." }, {
+          status: 413,
+          headers: { ...securityHeaders, "Cache-Control": "no-store" },
+        })
+      }
       try {
         const upstream = await fetch(new URL(pathAndQuery, pocketBaseOrigin), {
           method: request.method,
