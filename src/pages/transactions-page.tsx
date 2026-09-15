@@ -67,11 +67,12 @@ export function TransactionsPage() {
   const [dateRange, setDateRange] = useState<{ start: string; end: string } | null>(null)
   const [amountRange, setAmountRange] = useState<{ min: string; max: string } | null>(null)
   const [reviewOnly, setReviewOnly] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(100)
 
   const isReviewMode = search.filter === "review"
 
   const filtered = useMemo(() => {
-    let result = transactions
+    let result = [...transactions]
     if (isReviewMode) {
       result = result.filter((transaction) => transaction.reviewStatus === "NEEDS_REVIEW")
     } else if (reviewOnly) {
@@ -110,13 +111,13 @@ export function TransactionsPage() {
 
   const grouped = useMemo(() => {
     const groups = new Map<string, typeof filtered>()
-    for (const transaction of filtered) {
+    for (const transaction of filtered.slice(0, visibleCount)) {
       const list = groups.get(transaction.transactionDate) ?? []
       list.push(transaction)
       groups.set(transaction.transactionDate, list)
     }
     return [...groups.entries()]
-  }, [filtered])
+  }, [filtered, visibleCount])
 
   const reviewItems = useMemo(
     () => transactions.filter((transaction) => transaction.reviewStatus === "NEEDS_REVIEW"),
@@ -261,6 +262,12 @@ export function TransactionsPage() {
             </Card>
           </section>
         ))}
+
+      {!isReviewMode && filtered.length > visibleCount && (
+        <Button type="button" variant="outline" className="w-full" onClick={() => setVisibleCount((count) => count + 100)}>
+          Tampilkan 100 transaksi lagi
+        </Button>
+      )}
 
       {!isReviewMode && filtered.length === 0 && (
         <Card className="border-dashed">
