@@ -66,7 +66,9 @@ const server = Bun.serve({
     const url = new URL(request.url)
 
     if (url.pathname === "/healthz") {
-      return Response.json({ status: "ok" })
+      return Response.json({ status: "ok" }, {
+        headers: { ...securityHeaders, "Cache-Control": "no-store" },
+      })
     }
 
     // Reverse proxy /pb/* to the PocketBase instance managed by supervisord,
@@ -86,7 +88,10 @@ const server = Bun.serve({
           headers: upstream.headers,
         })
       } catch {
-        return Response.json({ error: "PocketBase tidak merespons." }, { status: 504, headers: securityHeaders })
+        return Response.json({ error: "PocketBase tidak merespons." }, {
+          status: 504,
+          headers: { ...securityHeaders, "Cache-Control": "no-store" },
+        })
       }
     }
 
