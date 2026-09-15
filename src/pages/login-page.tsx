@@ -32,10 +32,10 @@ export function LoginPage() {
       } else {
         await navigate({ to: "/" })
       }
-    } catch (loginError) {
+    } catch {
       // Keep deployment details out of the user-facing flow; retain the
       // diagnostic for local debugging without exposing configuration names.
-      console.error("Google login failed", loginError)
+      console.error("Google login failed")
       setError(
         pocketBaseConfigured
           ? "Login Google gagal. Periksa koneksi lalu coba lagi."
