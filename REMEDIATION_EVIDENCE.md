@@ -27,6 +27,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Reset regression now awaits `resetAllData()` completion, proving the durable cleanup contract at the store boundary (F13).
 - Backup import rejects files larger than 10 MB before reading them, keeping recovery responsive under oversized input (F04, W05).
 - Backup import now validates each known key's expected array/object shape before writing any data (F04, W05).
+- The reverse proxy rejects request bodies over 12 MB with `413` before buffering or forwarding them; a 13 MB live probe confirmed the response (F04, F09).
 - Remaining English financial labels were localized to Indonesian, including tax reserve and reserve status summaries (U08).
 - Foreground sync now resumes on `visibilitychange` when a tab becomes visible, covering mobile resume paths without relying on focus events (F09, W04).
 - Transaction search now has an explicit associated label for assistive technology (U07).
