@@ -48,7 +48,7 @@ export function PwaStatus() {
       </span>
       <p className="min-w-0 flex-1 text-sm leading-snug">
         {hasConflict
-          ? "Ada perubahan dari perangkat lain. Data lokal tetap tersimpan; tinjau lalu coba lagi."
+          ? `Perubahan bentrok pada ${conflicts[0]?.entity ?? "data"}${conflicts[0]?.appId ? ` (${conflicts[0].appId})` : ""}. Data lokal tetap tersimpan.`
           : syncFailed
           ? "Sinkronisasi tertunda. Data tetap tersimpan di perangkat."
           : needRefresh

@@ -58,7 +58,15 @@ let syncQueued = false
 let hydrationStarted = false
 let syncGeneration = 0
 export type SyncStatus = "idle" | "syncing" | "synced" | "retrying" | "failed"
-export interface SyncConflict { message: string; occurredAt: string }
+export interface SyncConflict {
+  id: string
+  message: string
+  entity?: string
+  appId?: string
+  localPayload?: unknown
+  remotePayload?: unknown
+  occurredAt: string
+}
 let syncStatus: SyncStatus = "idle"
 const syncStatusListeners = new Set<(status: SyncStatus) => void>()
 
@@ -83,9 +91,17 @@ export function loadSyncConflicts(): SyncConflict[] {
   } catch { return [] }
 }
 
-function recordSyncConflict(error: unknown) {
+function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>) {
   if (!String(error).startsWith("Error: Conflict") && !String(error).startsWith("Conflict")) return
-  const conflicts = [...loadSyncConflicts(), { message: String(error).replace(/^Error:\s*/, ""), occurredAt: new Date().toISOString() }]
+  const existing = loadSyncConflicts()
+  const message = String(error).replace(/^Error:\s*/, "")
+  if (details?.entity && details.appId && existing.some((item) => item.entity === details.entity && item.appId === details.appId)) return
+  const conflicts = [...existing, {
+    id: crypto.randomUUID(),
+    message,
+    occurredAt: new Date().toISOString(),
+    ...details,
+  }]
   try {
     window.localStorage.setItem(scopedStorageKey(KEYS.syncConflicts), JSON.stringify(conflicts.slice(-20)))
   } catch { /* local work remains available even when storage is full */ }
@@ -338,6 +354,12 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown)
     const localUpdatedAt = (payload as { updatedAt?: unknown }).updatedAt
     if (typeof remoteUpdatedAt === "string" && typeof localUpdatedAt === "string") {
       if (remoteUpdatedAt > localUpdatedAt) {
+        recordSyncConflict(new Error(`Conflict: remote ${entity}/${appId} is newer`), {
+          entity,
+          appId,
+          localPayload: sanitizedPayload,
+          remotePayload: found.payload,
+        })
         throw new Error(`Conflict: remote ${entity}/${appId} is newer`)
       }
     }
