@@ -169,6 +169,13 @@ describe("transactions", () => {
     expect(events).toContain("TRANSACTION_RECLASSIFIED")
   })
 
+  test("update classification keeps tax classification aligned", () => {
+    const transaction = createTransaction(makeInput({ classification: "OTHER_INCOME", taxClassification: "OTHER_INCOME" }))
+    const updated = updateTransaction(transaction.id, { classification: "REVENUE" })
+    expect(updated?.classification).toBe("REVENUE")
+    expect(updated?.taxClassification).toBe("REVENUE")
+  })
+
   test("update with USER source records correction", () => {
     const created = createTransaction(makeInput({ classificationSource: "RULE" }))
     updateTransaction(created.id, { classificationSource: "USER", description: "bensin sales" })

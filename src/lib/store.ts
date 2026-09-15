@@ -355,7 +355,16 @@ export function updateTransaction(id: string, patch: Partial<NewTransaction>): T
   const index = transactions.findIndex((candidate) => candidate.id === id)
   if (index < 0) return null
   const before = transactions[index]
-  const updated: Transaction = { ...before, ...patch, updatedAt: nowIso() }
+  const updated = normalizeTransaction({
+    ...before,
+    ...patch,
+    // Changing the classification without an explicit tax override should
+    // update the derived tax classification instead of retaining stale data.
+    taxClassification: patch.taxClassification ?? (patch.classification !== undefined && patch.classification !== before.classification
+      ? patch.classification
+      : before.taxClassification ?? before.classification),
+    updatedAt: nowIso(),
+  })
   transactions[index] = updated
   persistTransactions(transactions)
   appendTransactionVersion(updated)
