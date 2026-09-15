@@ -34,18 +34,21 @@ export const queryKeys = {
 export function useFinancialEvents() {
   const queryClient = useQueryClient()
   useEffect(() => {
+    const syncBadge = () => {
+      const badge = (navigator as Navigator & { setAppBadge?: (count?: number) => Promise<void> }).setAppBadge
+      if (!badge) return
+      const pending = loadTransactions().filter((transaction) => transaction.reviewStatus === "NEEDS_REVIEW").length
+      void badge(pending).catch(() => undefined)
+    }
     const invalidateAll = () => {
       for (const key of Object.values(queryKeys)) {
         void queryClient.invalidateQueries({ queryKey: key })
       }
-      const badge = (navigator as Navigator & { setAppBadge?: (count?: number) => Promise<void> }).setAppBadge
-      if (badge) {
-        const pending = loadTransactions().filter((transaction) => transaction.reviewStatus === "NEEDS_REVIEW").length
-        void badge(pending).catch(() => undefined)
-      }
+      syncBadge()
     }
     const unsubscribe = subscribeFinancialEvents(invalidateAll)
     window.addEventListener("storage", invalidateAll)
+    syncBadge()
     return () => {
       unsubscribe()
       window.removeEventListener("storage", invalidateAll)

@@ -63,6 +63,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Choosing the local side of a sync conflict now reads the current tenant-scoped record, preserving a pending local receipt even though conflict logs omit attachment data (F02, F05).
 - Lazy onboarding/editor routes, explicit icon imports, bounded transaction rendering, solid surfaces, Indonesian document language, and mobile camera activation (P02–P07, U04, U06–U09, W02–W03).
 - Install prompt handling on login and authenticated routes, offline status/retry UI, persistent storage request, and pending-review app badge (W02–W05, W08). Shortcut/share intent now survives login and onboarding; device acceptance remains pending (W06–W07).
+- Pending-review badges now synchronize on app mount as well as mutations and cross-tab changes, including clearing the badge at zero (W08).
 
 ## Still requires external evidence
 
