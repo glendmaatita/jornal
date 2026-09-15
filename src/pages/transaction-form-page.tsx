@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
 import { ArrowLeft, ChevronDown, Sparkles } from "lucide-react"
@@ -25,6 +25,7 @@ import { createTransaction, updateTransaction } from "@/lib/store"
 import type { ClassificationSource, TransactionClassification, TransactionDirection } from "@/lib/types"
 import { CLASSIFICATION_LABELS } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { scopedStorageKey } from "@/lib/store"
 
 type Mode = "money_in" | "money_out" | "transfer"
 
@@ -69,6 +70,58 @@ export function TransactionFormPage() {
   const attachmentInputRef = useRef<HTMLInputElement | null>(null)
   const [paymentMethodListId] = useState(() => `payment-methods-${crypto.randomUUID()}`)
   const [supplierCustomerListId] = useState(() => `supplier-customer-${crypto.randomUUID()}`)
+  const draftKey = scopedStorageKey(`jornal.transaction-draft.${transactionId ?? "new"}.v1`)
+  const draftRestoredRef = useRef(false)
+
+  // Keep an unfinished entry available across navigation, refresh, and a
+  // service-worker update. Drafts are tenant-scoped through scopedStorageKey.
+  /* eslint-disable react-hooks/set-state-in-effect -- restore an external draft once on mount */
+  useEffect(() => {
+    if (draftRestoredRef.current) return
+    try {
+      const raw = window.localStorage.getItem(draftKey)
+      if (raw) {
+        const draft = JSON.parse(raw) as Partial<{
+          mode: Mode; amount: string; description: string; transactionDate: string; categoryId: string | null
+          accountId: string | null; transferAccountId: string | null; paymentMethod: string; supplierCustomer: string
+          tags: string; notes: string; attachmentName: string | null; attachmentDataUrl: string | null
+          classificationOverride: TransactionClassification | null
+        }>
+        if (draft.mode) setMode(draft.mode)
+        if (typeof draft.amount === "string") setAmount(draft.amount)
+        if (typeof draft.description === "string") setDescription(draft.description)
+        if (typeof draft.transactionDate === "string") setTransactionDate(draft.transactionDate)
+        if ("categoryId" in draft) setCategoryId(draft.categoryId ?? null)
+        if ("accountId" in draft) setAccountId(draft.accountId ?? null)
+        if ("transferAccountId" in draft) setTransferAccountId(draft.transferAccountId ?? null)
+        if (typeof draft.paymentMethod === "string") setPaymentMethod(draft.paymentMethod)
+        if (typeof draft.supplierCustomer === "string") setSupplierCustomer(draft.supplierCustomer)
+        if (typeof draft.tags === "string") setTags(draft.tags)
+        if (typeof draft.notes === "string") setNotes(draft.notes)
+        if ("attachmentName" in draft) setAttachmentName(draft.attachmentName ?? null)
+        if ("attachmentDataUrl" in draft) setAttachmentDataUrl(draft.attachmentDataUrl ?? null)
+        if ("classificationOverride" in draft) setClassificationOverride(draft.classificationOverride ?? null)
+      }
+    } catch {
+      // A corrupt draft must never prevent a new transaction from opening.
+      window.localStorage.removeItem(draftKey)
+    }
+    draftRestoredRef.current = true
+  }, [draftKey])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (!draftRestoredRef.current || editing) return
+    try {
+      window.localStorage.setItem(draftKey, JSON.stringify({
+        mode, amount, description, transactionDate, categoryId, accountId, transferAccountId,
+        paymentMethod, supplierCustomer, tags, notes, attachmentName, attachmentDataUrl,
+        classificationOverride,
+      }))
+    } catch {
+      // Save still reports its own durable result; draft persistence is best effort.
+    }
+  }, [draftKey, editing, mode, amount, description, transactionDate, categoryId, accountId, transferAccountId, paymentMethod, supplierCustomer, tags, notes, attachmentName, attachmentDataUrl, classificationOverride])
 
   // Load the transaction being edited — adapted during render (no effect needed)
   if (editing && editing.id !== loadedId) {
@@ -180,6 +233,7 @@ export function TransactionFormPage() {
       }
     },
     onSuccess: async () => {
+      try { window.localStorage.removeItem(draftKey) } catch { /* ignore */ }
       await queryClient.invalidateQueries({ queryKey: queryKeys.transactions })
       await queryClient.invalidateQueries({ queryKey: queryKeys.corrections })
       void navigate({ to: "/transactions" })

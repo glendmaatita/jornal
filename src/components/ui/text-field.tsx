@@ -95,6 +95,8 @@ export function TextField({
         disabled={disabled}
         autoFocus={autoFocus}
         list={list}
+        aria-label={label}
+        aria-invalid={Boolean(error)}
         className={cn(
           "w-full bg-transparent outline-none placeholder:text-[var(--placeholder)]",
           size === "amount" ? "text-2xl font-semibold tabular-nums" : "text-[15px]",

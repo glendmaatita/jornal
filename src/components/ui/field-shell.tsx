@@ -32,7 +32,7 @@ export function FieldShell({
   return (
     <div className={cn("w-full", disabled && "opacity-60", className)}>
       {label && (
-        <span className="field-label">
+        <span className="field-label" aria-hidden="true">
           {label}
           {required && <span className="text-destructive"> *</span>}
         </span>
