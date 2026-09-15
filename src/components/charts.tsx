@@ -32,14 +32,14 @@ export function BarChart({ data, height = 140, color = "var(--primary)" }: { dat
           )
         })}
       </svg>
-      <div className="mt-1 flex text-[10px] text-muted-foreground">
+      <div className="mt-1 flex text-[11px] text-muted-foreground">
         {data.map((datum, index) => (
           <span key={datum.label + index} className="flex-1 text-center">
             {datum.label}
           </span>
         ))}
       </div>
-      <div className="flex justify-between text-[10px] text-muted-foreground">
+      <div className="flex justify-between text-[11px] text-muted-foreground">
         <span>0</span>
         <span>{formatCompactRupiah(max)}</span>
       </div>
@@ -84,14 +84,14 @@ export function DualBarChart({ data, height = 140 }: { data: { label: string; in
           )
         })}
       </svg>
-      <div className="mt-1 flex text-[10px] text-muted-foreground">
+      <div className="mt-1 flex text-[11px] text-muted-foreground">
         {data.map((datum, index) => (
           <span key={datum.label + index} className="flex-1 text-center">
             {datum.label}
           </span>
         ))}
       </div>
-      <div className="mt-0.5 flex items-center gap-3 text-[10px] text-muted-foreground">
+      <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1">
           <span className="inline-block size-2 rounded-full bg-[var(--mint)]" /> Masuk
         </span>
@@ -124,7 +124,7 @@ export function LineChart({ data, height = 100 }: { data: ChartDatum[]; height?:
         <path d={area} fill="var(--primary)" opacity={0.08} />
         <path d={path} fill="none" stroke="var(--primary)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
       </svg>
-      <div className="flex justify-between text-[10px] text-muted-foreground">
+      <div className="flex justify-between text-[11px] text-muted-foreground">
         <span>{data[0].label}</span>
         <span>{formatCompactRupiah(max)}</span>
         <span>{data[data.length - 1].label}</span>
