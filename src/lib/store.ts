@@ -37,6 +37,11 @@ export const KEYS = {
 
 const BUSINESS_ID = "local"
 let activeScope = "local"
+export const STORAGE_WARNING_EVENT = "jornal-storage-warning"
+
+function notifyStorageWarning() {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORAGE_WARNING_EVENT))
+}
 
 /** Select the local data partition for the authenticated tenant. */
 export function setDataScope(scope: string | null | undefined) {
@@ -70,11 +75,12 @@ function write<T>(key: string, value: T) {
     window.localStorage.setItem(storageKey, JSON.stringify(value))
   } catch {
     // Storage unavailable — keep in-memory usage working for the session
+    notifyStorageWarning()
   }
   // IndexedDB is asynchronous and unavailable in the test/SSR shims; it is a
   // durable second copy for browser restarts and quota recovery.
-  void mirrorState(storageKey, value).catch(() => undefined)
-  void enqueueOutbox(storageKey, value).catch(() => undefined)
+  void mirrorState(storageKey, value).catch(() => notifyStorageWarning())
+  void enqueueOutbox(storageKey, value).catch(() => notifyStorageWarning())
 }
 
 // ── Event architecture (§57) ──

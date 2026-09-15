@@ -4,6 +4,7 @@ import { useRegisterSW } from "virtual:pwa-register/react"
 
 import { Button } from "@/components/ui/button"
 import { getSyncStatus, loadSyncConflicts, resolveSyncConflict, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
+import { STORAGE_WARNING_EVENT } from "@/lib/store"
 
 export function PwaStatus() {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
@@ -24,13 +25,19 @@ export function PwaStatus() {
   }, [])
 
   const [dismissed, setDismissed] = useState(false)
+  const [storageWarning, setStorageWarning] = useState(false)
   const [syncStatus, setSyncStatus] = useState(getSyncStatus)
   const [conflicts, setConflicts] = useState(loadSyncConflicts)
   useEffect(() => subscribeSyncStatus(setSyncStatus), [])
   useEffect(() => subscribeSyncStatus(() => setConflicts(loadSyncConflicts())), [])
+  useEffect(() => {
+    const onStorageWarning = () => { setStorageWarning(true); setDismissed(false) }
+    window.addEventListener(STORAGE_WARNING_EVENT, onStorageWarning)
+    return () => window.removeEventListener(STORAGE_WARNING_EVENT, onStorageWarning)
+  }, [])
   const syncFailed = syncStatus === "failed"
   const hasConflict = conflicts.length > 0
-  if (dismissed || (isOnline && !offlineReady && !needRefresh && !syncFailed && !hasConflict)) return null
+  if (dismissed || (isOnline && !offlineReady && !needRefresh && !syncFailed && !hasConflict && !storageWarning)) return null
 
   const dismiss = () => {
     setDismissed(true)
@@ -47,7 +54,9 @@ export function PwaStatus() {
         {needRefresh || syncFailed ? <RefreshCw /> : isOnline ? <Download /> : <CloudOff />}
       </span>
       <p className="min-w-0 flex-1 text-sm leading-snug">
-        {hasConflict
+        {storageWarning
+          ? "Penyimpanan perangkat bermasalah. Unduh backup agar data tetap aman."
+          : hasConflict
           ? `Perubahan bentrok pada ${conflicts[0]?.entity ?? "data"}${conflicts[0]?.appId ? ` (${conflicts[0].appId})` : ""}. Data lokal tetap tersimpan.`
           : syncFailed
           ? "Sinkronisasi tertunda. Data tetap tersimpan di perangkat."
@@ -62,7 +71,10 @@ export function PwaStatus() {
           Update
         </Button>
       )}
-      {syncFailed && isOnline && (
+      {storageWarning && (
+        <a href="/settings" className="shrink-0 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs font-semibold">Buka data</a>
+      )}
+      {syncFailed && isOnline && !storageWarning && (
         <Button size="sm" variant="secondary" onClick={() => { setDismissed(false); schedulePocketBaseSync() }}>
           Coba lagi
         </Button>
