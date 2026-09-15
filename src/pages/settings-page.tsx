@@ -44,6 +44,15 @@ export function SettingsPage() {
   const { data: transactions = [] } = useTransactions()
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const [dataMessage, setDataMessage] = useState<string | null>(null)
+  const [storageInfo, setStorageInfo] = useState<{ usage?: number; quota?: number } | null>(null)
+
+  useEffect(() => {
+    const estimate = navigator.storage?.estimate
+    if (!estimate) return
+    void estimate.call(navigator.storage).then(({ usage, quota }) => {
+      setStorageInfo({ usage, quota })
+    }).catch(() => undefined)
+  }, [])
 
   const exportData = () => {
     const blob = new Blob([JSON.stringify(exportLocalData(), null, 2)], { type: "application/json" })
@@ -402,6 +411,11 @@ export function SettingsPage() {
           <p className="text-xs leading-relaxed text-muted-foreground">
             Semua data tersimpan di perangkat ini (offline-ready). Total transaksi tercatat: {transactions.length}.
           </p>
+          <p className="text-xs text-muted-foreground" role="status">
+            {storageInfo?.usage !== undefined && storageInfo.quota
+              ? `Penyimpanan terpakai ${formatStorageSize(storageInfo.usage)} dari ${formatStorageSize(storageInfo.quota)}.`
+              : "Status kapasitas penyimpanan belum tersedia di browser ini."}
+          </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button type="button" variant="outline" onClick={exportData}>Unduh backup</Button>
             <Button type="button" variant="outline" onClick={() => importInputRef.current?.click()}>Pulihkan backup</Button>
@@ -424,4 +438,16 @@ export function SettingsPage() {
       </Card>
     </div>
   )
+}
+
+function formatStorageSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`
+  const units = ["KB", "MB", "GB"]
+  let value = bytes / 1024
+  let unit = units[0]
+  for (let index = 1; index < units.length && value >= 1024; index += 1) {
+    value /= 1024
+    unit = units[index]
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`
 }
