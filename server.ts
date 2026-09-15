@@ -76,12 +76,17 @@ const server = Bun.serve({
 
     if (url.pathname === "/share-target") {
       if (request.method === "POST") {
+        const now = Date.now()
+        for (const [key, value] of sharedIntake) if (value.expiresAt < now) sharedIntake.delete(key)
         const form = await request.formData().catch(() => null)
         if (!form) return Response.json({ error: "Data yang dibagikan tidak valid." }, { status: 400, headers: securityHeaders })
         const candidate = form.get("files")
         let file: { name: string; type: string; data: string } | undefined
         if (candidate instanceof File && candidate.size > 0) {
           if (candidate.size > shareLimit) return Response.json({ error: "File terlalu besar." }, { status: 413, headers: securityHeaders })
+          if (!(candidate.type.startsWith("image/") || candidate.type === "application/pdf")) {
+            return Response.json({ error: "Jenis file tidak didukung." }, { status: 415, headers: securityHeaders })
+          }
           const bytes = new Uint8Array(await candidate.arrayBuffer())
           let binary = ""
           for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
