@@ -26,6 +26,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Transaction search now has an explicit associated label for assistive technology (U07).
 - The static server now sends clickjacking, referrer, permissions, and opener isolation headers while retaining OAuth popup compatibility (F06, U07).
 - Hydrated receipt records now persist a stable file endpoint without a signed token; detail view requests a fresh token only when opening the file (F05).
+- Editing a transaction preserves its stable receipt reference, while the form now offers an explicit Hapus action that removes the attachment on save (F05, U04).
 - Local-only startup restores the IndexedDB mirror even when PocketBase is disabled; storage and IndexedDB failures raise a visible recovery notice (F04, W01, W05).
 - Revision/tombstone metadata, tenant PocketBase rules, server 409 conflict persistence, bounded retries, caller-aware request timeouts, and merge-preserving hydration (F02, F03, F09, W04).
 - Transient sync retries now use capped exponential backoff with bounded jitter to avoid synchronized retry storms (F09, W04).
