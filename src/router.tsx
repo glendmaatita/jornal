@@ -3,13 +3,13 @@ import { lazy } from "react"
 import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 
 import { AppShell } from "@/components/app-shell"
-import { OnboardingPage } from "@/pages/onboarding-page"
 import { LoginPage } from "@/pages/login-page"
 import { isOnboarded, setDataScope } from "@/lib/store"
 import { pb } from "@/lib/pb"
 import { initializePocketBaseSync } from "@/lib/pocketbase-sync"
 
 const HomePage = lazy(() => import("@/pages/home-page").then((m) => ({ default: m.HomePage })))
+const OnboardingPage = lazy(() => import("@/pages/onboarding-page").then((m) => ({ default: m.OnboardingPage })))
 const InsightsPage = lazy(() => import("@/pages/insights-page").then((m) => ({ default: m.InsightsPage })))
 const SafeToSpendPage = lazy(() => import("@/pages/safe-to-spend-page").then((m) => ({ default: m.SafeToSpendPage })))
 const ForecastPage = lazy(() => import("@/pages/forecast-page").then((m) => ({ default: m.ForecastPage })))
