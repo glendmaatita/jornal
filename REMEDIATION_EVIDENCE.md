@@ -53,6 +53,7 @@ This index records evidence from the current `develop` branch. A local pass does
 - Static asset `HEAD` requests now return headers only with an explicit content length, while `GET` retains negotiated gzip delivery (P05).
 - Login now provides iOS Safari installation guidance when the native install prompt API is unavailable (W03).
 - The `/pb` reverse proxy now bounds upstream requests to 30 seconds and returns a localized `504` JSON error on an unavailable PocketBase (F09, P05).
+- OAuth callback proxy responses now override PocketBase's `COOP: same-origin` with `same-origin-allow-popups` and `no-store`, preserving `window.opener` for the SDK handoff. A live local proxy probe confirmed the header (F06, W04).
 - Calendar day controls now announce full dates and expose selected state to assistive technology (U07).
 - Health and PocketBase proxy error responses now send `Cache-Control: no-store`, preventing stale operational status from being cached (F09, P05).
 - Financial explanation copy now states loan, opening-balance, and forecast treatment directly without repeated contrast phrasing (U08).

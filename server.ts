@@ -143,9 +143,18 @@ const server = Bun.serve({
           body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer(),
           signal: AbortSignal.timeout(30_000),
         })
+        const proxyHeaders = new Headers(upstream.headers)
+        // PocketBase sends COOP: same-origin on its callback HTML. That
+        // severs window.opener in the OAuth popup before the SDK can receive
+        // its postMessage. Keep the callback compatible with the app shell's
+        // OAuth popup policy.
+        if (url.pathname === "/pb/api/oauth2-redirect") {
+          proxyHeaders.set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
+          proxyHeaders.set("Cache-Control", "no-store")
+        }
         return new Response(upstream.body, {
           status: upstream.status,
-          headers: upstream.headers,
+          headers: proxyHeaders,
         })
       } catch {
         return Response.json({ error: "PocketBase tidak merespons." }, {
