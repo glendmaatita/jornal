@@ -67,6 +67,11 @@ export function PwaStatus() {
           Coba lagi
         </Button>
       )}
+      {hasConflict && (
+        <a href="/transactions" className="text-xs font-semibold underline underline-offset-2">
+          Tinjau transaksi
+        </a>
+      )}
       {(!isOnline || needRefresh) && (
         <Button size="icon" variant="ghost" className="size-8 hover:bg-white/10" onClick={dismiss}>
           <X aria-hidden="true" />
