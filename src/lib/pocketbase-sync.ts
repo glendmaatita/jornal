@@ -201,11 +201,17 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 15_000)
-  const response = await fetch(`${baseUrl()}${path}`, {
-    ...init,
-    headers,
-    signal: init?.signal ?? controller.signal,
-  })
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl()}${path}`, {
+      ...init,
+      headers,
+      signal: init?.signal ?? controller.signal,
+    })
+  } catch (error) {
+    clearTimeout(timeout)
+    throw error
+  }
   clearTimeout(timeout)
   if (!response.ok) {
     const text = await response.text().catch(() => "")
