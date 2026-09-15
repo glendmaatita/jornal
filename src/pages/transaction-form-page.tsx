@@ -357,6 +357,7 @@ export function TransactionFormPage() {
       </div>
 
       <Card>
+        <form onSubmit={(event) => { event.preventDefault(); submit() }}>
         <CardContent className="space-y-4 p-4">
           <TextField
             label="Jumlah"
@@ -567,7 +568,7 @@ export function TransactionFormPage() {
             </div>
           )}
 
-          <Button size="lg" className="w-full" disabled={save.isPending} onClick={submit}>
+          <Button type="submit" size="lg" className="w-full" disabled={save.isPending}>
             Simpan
           </Button>
           {editing && (
@@ -576,6 +577,7 @@ export function TransactionFormPage() {
             </Link>
           )}
         </CardContent>
+        </form>
       </Card>
 
       {editing && (
