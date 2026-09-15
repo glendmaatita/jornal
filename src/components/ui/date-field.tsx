@@ -165,6 +165,8 @@ export function DateField({
                   setOpen(false)
                   onBlur?.()
                 }}
+                aria-label={formatDateShort(cell.iso)}
+                aria-pressed={cell.iso === value}
                 className={cn(
                   "calendar-day",
                   cell.outside && "calendar-day--outside",
