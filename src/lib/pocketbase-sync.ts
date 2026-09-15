@@ -57,6 +57,7 @@ let testUrlOverride: string | null = null
 let syncQueued = false
 let hydrationStarted = false
 let syncGeneration = 0
+let hydrationState: "idle" | "ready" | "unavailable" = "idle"
 export type SyncStatus = "idle" | "syncing" | "synced" | "retrying" | "failed"
 export interface SyncConflict {
   id: string
@@ -72,6 +73,11 @@ const syncStatusListeners = new Set<(status: SyncStatus) => void>()
 
 export function getSyncStatus() {
   return syncStatus
+}
+
+/** Distinguishes a known empty account from a backend we could not reach. */
+export function getHydrationState() {
+  return hydrationState
 }
 
 export function subscribeSyncStatus(listener: (status: SyncStatus) => void) {
@@ -148,6 +154,7 @@ export function setPocketBaseUrl(url: string | null) {
 export function resetPocketBaseSyncState() {
   syncQueued = false
   hydrationStarted = false
+  hydrationState = "idle"
   syncGeneration += 1
   setSyncStatus("idle")
 }
@@ -622,12 +629,15 @@ export async function initializePocketBaseSync() {
     await restoreMissingLocalState()
     if (!enabled()) {
       hydrationStarted = false
+      hydrationState = "ready"
       return false
     }
     await hydrateFromPocketBase()
+    hydrationState = "ready"
     return true
   } catch {
     hydrationStarted = false
+    hydrationState = "unavailable"
     return false
   }
 }

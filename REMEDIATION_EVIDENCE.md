@@ -18,6 +18,7 @@ This index records evidence from the current `develop` branch. A local pass does
 
 - Account-scoped local storage and query keys, auth partition switching, durable IndexedDB mirror, drafts, backup/restore validation, and reset outbox clearing (F01, F04, F12, W01, W05).
 - Record and profile business IDs now derive from the active tenant scope; a regression test verifies a logged-in partition cannot create records tagged as `local` (F01).
+- Bootstrap now distinguishes an unavailable configured PocketBase from an empty account and routes authenticated users to a retryable data-unavailable screen instead of onboarding (F14).
 - Auth storage changes from another tab now reset the sync generation, switch the tenant partition, and clear React Query caches before the next render (F01, F09).
 - Business mutations now persist their IndexedDB mirror and sync outbox in one read/write transaction; a failed transaction raises the existing storage recovery notice instead of silently acknowledging durability (F04, W01).
 - Transaction drafts are mirrored to IndexedDB and restored when localStorage is empty, so a refresh or service-worker restart can recover an unfinished entry (F12, W01, W05).

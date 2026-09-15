@@ -5,6 +5,7 @@ import { resetStorage, localStorageShim } from "./test-setup"
 import {
   hydrateFromPocketBase,
   initializePocketBaseSync,
+  getHydrationState,
   resetPocketBaseSyncState,
   schedulePocketBaseSync,
   setPocketBaseUrl,
@@ -263,6 +264,7 @@ describe("initializePocketBaseSync", () => {
     respond = () => ({ status: 200, body: { items: [], totalPages: 1 } })
     expect(await initializePocketBaseSync()).toBe(true)
     expect(await initializePocketBaseSync()).toBe(false)
+    expect(getHydrationState()).toBe("ready")
   })
 
   test("returns false when hydration throws (after state reset)", async () => {
@@ -270,6 +272,7 @@ describe("initializePocketBaseSync", () => {
     setEnv("http://pb.test")
     respond = () => ({ status: 500, body: {} })
     expect(await initializePocketBaseSync()).toBe(false)
+    expect(getHydrationState()).toBe("unavailable")
   })
 })
 

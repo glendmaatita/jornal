@@ -6,7 +6,8 @@ import { AppShell } from "@/components/app-shell"
 import { LoginPage } from "@/pages/login-page"
 import { isOnboarded, setDataScope } from "@/lib/store"
 import { pb } from "@/lib/pb"
-import { initializePocketBaseSync } from "@/lib/pocketbase-sync"
+import { getHydrationState, initializePocketBaseSync } from "@/lib/pocketbase-sync"
+import { pocketBaseConfigured } from "@/lib/pb"
 
 const HomePage = lazy(() => import("@/pages/home-page").then((m) => ({ default: m.HomePage })))
 const OnboardingPage = lazy(() => import("@/pages/onboarding-page").then((m) => ({ default: m.OnboardingPage })))
@@ -35,12 +36,32 @@ function NotFoundPage() {
   )
 }
 
+function BackendUnavailablePage() {
+  return (
+    <main className="grid min-h-dvh place-items-center bg-[var(--background)] px-5 text-center">
+      <div className="max-w-sm">
+        <h1 className="text-2xl tracking-tight">Data belum bisa dimuat</h1>
+        <p className="mt-2 text-sm text-[var(--body-text)]">Periksa koneksi ke server, lalu coba lagi. Data di perangkat tetap aman.</p>
+        <button type="button" className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground" onClick={() => window.location.reload()}>
+          Coba lagi
+        </button>
+      </div>
+    </main>
+  )
+}
+
 const rootRoute = createRootRoute({ notFoundComponent: NotFoundPage })
 
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
   component: LoginPage,
+})
+
+const unavailableRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/data-unavailable",
+  component: BackendUnavailablePage,
 })
 
 // Pathless authenticated layout: everything below requires a logged-in tenant.
@@ -61,6 +82,9 @@ const appLayoutRoute = createRoute({
     // A new device has no local profile yet. Hydrate the tenant before making
     // the onboarding decision so an existing account is not treated as new.
     await initializePocketBaseSync()
+    if (pocketBaseConfigured && getHydrationState() === "unavailable") {
+      throw redirect({ to: "/data-unavailable", replace: true })
+    }
     // Onboarding gate before any route component loads, so the redirect does
     // not pay for lazy chunks of the originally matched route (§66 item 1–3)
     if (!isOnboarded() && location.pathname !== "/onboarding") {
@@ -146,6 +170,7 @@ const settingsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  unavailableRoute,
   appLayoutRoute.addChildren([
     indexRoute,
     onboardingRoute,
