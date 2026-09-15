@@ -353,10 +353,10 @@ describe("settings & misc", () => {
     expect(loadTransactions()).toEqual([])
   })
 
-  test("resetAllData clears everything", () => {
+  test("resetAllData clears everything before completion", async () => {
     saveProfile({ ...emptyProfile(), businessName: "x" })
     createTransaction(makeInput())
-    resetAllData()
+    await resetAllData()
     expect(loadProfile().businessName).toBe("")
     expect(loadTransactions()).toHaveLength(0)
   })
