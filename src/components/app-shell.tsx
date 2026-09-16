@@ -107,6 +107,16 @@ export function AppShell() {
               </button>
             )}
             <Link
+              to="/accounts"
+              className={cn(
+                "grid size-9 place-items-center rounded-full transition-colors hover:bg-white",
+                pathname === "/accounts" && "text-[var(--link)]",
+              )}
+              aria-label="Rekening"
+            >
+              <Wallet className="size-[18px]" aria-hidden="true" />
+            </Link>
+            <Link
               to="/settings"
               className={cn(
                 "grid size-9 place-items-center rounded-full transition-colors hover:bg-white",

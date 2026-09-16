@@ -47,7 +47,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-[var(--background)] px-5">
+    <main className="grid min-h-dvh place-items-center bg-[var(--background)] px-5">
       <div className="w-full max-w-[360px] text-center">
         <BrandMark className="mx-auto size-16" />
         <h1 className="mt-4 text-xl font-bold tracking-tight">Jornal</h1>
@@ -84,7 +84,7 @@ export function LoginPage() {
         )}
       </div>
       <PwaStatus />
-    </div>
+    </main>
   )
 }
 

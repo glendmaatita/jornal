@@ -2,14 +2,11 @@
 import { lazy } from "react"
 import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 
-import { AppShell } from "@/components/app-shell"
-import { LoginPage } from "@/pages/login-page"
-import { isOnboarded, setDataScope } from "@/lib/store"
-import { pb } from "@/lib/pb"
-import { getHydrationState, initializePocketBaseSync } from "@/lib/pocketbase-sync"
-import { pocketBaseConfigured } from "@/lib/pb"
 
 const HomePage = lazy(() => import("@/pages/home-page").then((m) => ({ default: m.HomePage })))
+const AccountsPage = lazy(() => import("@/pages/accounts-page").then((m) => ({ default: m.AccountsPage })))
+const AppShell = lazy(() => import("@/components/app-shell").then((m) => ({ default: m.AppShell })))
+const LoginPage = lazy(() => import("@/pages/login-page").then((m) => ({ default: m.LoginPage })))
 const OnboardingPage = lazy(() => import("@/pages/onboarding-page").then((m) => ({ default: m.OnboardingPage })))
 const InsightsPage = lazy(() => import("@/pages/insights-page").then((m) => ({ default: m.InsightsPage })))
 const SafeToSpendPage = lazy(() => import("@/pages/safe-to-spend-page").then((m) => ({ default: m.SafeToSpendPage })))
@@ -70,6 +67,13 @@ const appLayoutRoute = createRoute({
   id: "_app",
   component: AppShell,
   beforeLoad: async ({ location }) => {
+    // Keep the public login entry lightweight. The auth, local-store, and
+    // sync graph is only needed after a protected route is actually matched.
+    const [{ pb, pocketBaseConfigured }, { isOnboarded, setDataScope }, { getHydrationState, initializePocketBaseSync }] = await Promise.all([
+      import("@/lib/pb"),
+      import("@/lib/store"),
+      import("@/lib/pocketbase-sync"),
+    ])
     setDataScope(pb.authStore.record?.id)
     if (!pb.authStore.isValid) {
       try {
@@ -112,6 +116,15 @@ const addRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/add",
   component: TransactionFormPage,
+})
+
+const accountsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/accounts",
+  component: AccountsPage,
+  validateSearch: (search: Record<string, unknown>): { account?: string } => ({
+    account: typeof search.account === "string" ? search.account : undefined,
+  }),
 })
 
 const transactionsRoute = createRoute({
@@ -175,6 +188,7 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     onboardingRoute,
     addRoute,
+    accountsRoute,
     transactionsRoute,
     transactionDetailRoute,
     transactionEditRoute,

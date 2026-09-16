@@ -1,4 +1,4 @@
-import { Component, StrictMode, type ReactNode } from "react"
+import { Component, StrictMode, Suspense, type ReactNode } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RouterProvider } from "@tanstack/react-router"
@@ -53,7 +53,9 @@ createRoot(rootElement).render(
   <StrictMode>
     <AppErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <Suspense fallback={<div className="grid min-h-dvh place-items-center bg-[var(--background)] text-sm text-[var(--body-text)]">Memuat…</div>}>
+          <RouterProvider router={router} />
+        </Suspense>
       </QueryClientProvider>
     </AppErrorBoundary>
   </StrictMode>,
