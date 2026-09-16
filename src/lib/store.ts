@@ -401,6 +401,21 @@ export function createTransaction(input: NewTransaction): Transaction {
   return createTransactionRecord(input)
 }
 
+/** Reconcile a transaction that was atomically created by a backend command.
+ * It is already persisted remotely, so this deliberately does not enqueue a
+ * second sync mutation. */
+export function reconcileServerTransaction(transaction: Transaction): boolean {
+  if (transaction.businessId !== currentBusinessId() || transaction.companyId !== currentCompanyId()) return false
+  const normalized = normalizeTransaction(transaction)
+  const existing = loadTransactions()
+  const previous = existing.find((item) => item.id === normalized.id)
+  if (previous && JSON.stringify(previous) === JSON.stringify(normalized)) return true
+  persistTransactions([normalized, ...existing.filter((item) => item.id !== normalized.id)])
+  appendTransactionVersion(normalized)
+  emitFinancialEvent(previous ? "TRANSACTION_UPDATED" : "TRANSACTION_CREATED")
+  return true
+}
+
 function createTransactionRecord(input: NewTransaction, stableId: string = newId()): Transaction {
   assertCompanyWritable()
   validateTransactionLinks(input)

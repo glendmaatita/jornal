@@ -153,6 +153,16 @@ describe("computeForecast (§61)", () => {
   test("empty scenario object is the default", () => {
     expect(EMPTY_SCENARIO).toEqual({ extraIncome: 0, extraExpense: 0, extraReserve: 0 })
   })
+
+  test("uses actual tax obligations without stacking the legacy projection", () => {
+    const input = {
+      ...forecastInput(),
+      taxCompliance: { configured: true, sharedSubject: false, knownRemaining: 750_000, hasUnknownAmounts: false },
+    }
+    const forecast = computeForecast(input, { horizonDays: 30 }, new Date("2026-09-10T00:00:00"))
+    expect(forecast.currentTaxReserve).toBe(750_000)
+    expect(forecast.projectedTaxReserve).toBe(750_000)
+  })
 })
 
 // ── upcoming obligations (§64 P2) ──

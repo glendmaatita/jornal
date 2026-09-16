@@ -8,6 +8,7 @@ import { faScaleBalanced } from "@fortawesome/free-solid-svg-icons/faScaleBalanc
 import { faTriangleExclamation } from "@fortawesome/free-solid-svg-icons/faTriangleExclamation"
 
 import { Card, CardContent } from "@/components/ui/card"
+import { TaxCompliancePanel } from "@/components/tax/tax-compliance-panel"
 import { TextField } from "@/components/ui/text-field"
 import { formatRupiah, parseAmountInput, todayIsoDate } from "@/lib/format"
 import { queryKeys, useProfile, useTransactions } from "@/lib/queries"
@@ -29,7 +30,7 @@ export function TaxPage() {
       onDate: todayIsoDate(),
       revenueYTD: revenueYTD(transactions, profile.fiscalYear),
       businessExpenseYTD: businessExpenseYTD(transactions, profile.fiscalYear),
-      taxPaid: taxPaidYTD(transactions, profile.fiscalYear),
+      taxPaid: taxPaidYTD(transactions, profile.fiscalYear, profile.taxScheme),
       monthsElapsed: monthsElapsedThisYear(),
     })
   }, [profile, transactions])
@@ -51,9 +52,14 @@ export function TaxPage() {
 
   return (
     <div className="space-y-4 pb-8">
+      <TaxCompliancePanel profile={profile} transactions={transactions} />
+      <div className="pt-2">
+        <h2 className="text-lg tracking-tight">Proyeksi dan cadangan</h2>
+        <p className="text-xs text-muted-foreground">Perkiraan ini bukan nominal tagihan pada agenda di atas.</p>
+      </div>
       <Card>
         <CardContent className="p-6">
-          <h1 className="flex items-center gap-2 text-xl tracking-tight"><FontAwesomeIcon icon={faScaleBalanced} className="size-5 text-primary" aria-hidden="true" />Tax Overview {profile.fiscalYear}</h1>
+          <h2 className="flex items-center gap-2 text-xl tracking-tight"><FontAwesomeIcon icon={faScaleBalanced} className="size-5 text-primary" aria-hidden="true" />Proyeksi Pajak {profile.fiscalYear}</h2>
           <dl className="mt-4 space-y-3 text-sm">
               <Row label="Omzet tahun ini" value={formatRupiah(overview.revenueYTD)} />
             <Row label="Proyeksi Omzet Setahun" value={formatRupiah(overview.projectedAnnualRevenue)} />

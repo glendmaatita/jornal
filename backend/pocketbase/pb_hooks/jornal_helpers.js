@@ -71,6 +71,15 @@ function validateNoInboundReferences(event, companyId) {
       if (referenced) throw new ApiError(409, entity === "accounts" ? "Account is still referenced" : "Receivable is still referenced")
     }
   }
+  if (entity === "transactions") {
+    const linked = $app.findRecordsByFilter(
+      "tax_settlements",
+      "tenant_id = {:tenant} && ledger_company_id = {:company} && ledger_transaction_id = {:transaction} && status = 'ACTIVE'",
+      "", 1, 0,
+      { tenant: event.auth.id, company: companyId, transaction: targetId },
+    )
+    if (linked.length > 0) throw new ApiError(409, "Tax payment is still allocated; correct it from the tax agenda")
+  }
 }
 
 module.exports = { isJornalRecord, ownedActiveCompany, requireProtocolScope, validateNoInboundReferences, validatePayloadReferences }

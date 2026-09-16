@@ -16,7 +16,16 @@ bun run lint
 bun run test
 bun run typecheck
 bun run build
+bun run test:tax:integration # requires POCKETBASE_BIN=.../pocketbase 0.40.2
+bun run test:tax:e2e         # also requires Playwright Chromium
 ```
+
+The tax compliance module supports tenant-owned tax subjects spanning one or
+more companies, monthly/annual/document-driven obligations, confirmed amounts,
+payment and filing history, protected evidence, in-app/email reminders, CSV,
+and checksum-protected backup/restore. Operational setup and limitations are
+documented in `TAX_REMINDERS_RUNBOOK.md`; legal-source provenance is in
+`docs/tax/rules.md`.
 
 The production server uses Bun and serves the SPA with cache headers and a health endpoint at `/healthz`:
 

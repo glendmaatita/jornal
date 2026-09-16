@@ -33,12 +33,20 @@ Do not create collections manually. PocketBase applies the versioned files in
 - `companies`: tenant-owned company catalog and lifecycle state;
 - `jornal_records`: company-scoped ledger envelope with revision and data epoch;
 - `company_audit`: private lifecycle audit trail.
+- private `tax_*` collections for subjects, effective company memberships,
+  registrations, period inputs, obligations, filings, settlements/allocations,
+  evidence, notification delivery, commands, and audit history.
 
 Every ledger request from the current client uses protocol `2` and an explicit
 company scope. Collection rules and request hooks enforce tenant ownership,
 company status, immutable identity, revision, epoch, file access, and
 cross-record references. Raw public company create/update/delete is disabled;
 use the `/api/jornal/companies/*` endpoints.
+
+Raw tax collection access is also disabled. Use `/api/jornal/tax/*`; these
+commands enforce tenant ownership, revision checks, idempotency, amount/date
+provenance, and cross-record invariants. Evidence downloads are served only by
+an authenticated ownership-checking endpoint.
 
 ## Frontend env
 
@@ -77,6 +85,26 @@ docker run -e JORNAL_MULTI_COMPANY_ENABLED=true ... jornal
 
 Setting both flags to `false` pauses creation of company tambahan. Initial
 onboarding and access to companies already created continue to work.
+
+Tax compliance has a build-time UI flag and two runtime kill switches:
+
+```bash
+docker build \
+  --build-arg VITE_POCKETBASE_URL=/pb \
+  --build-arg VITE_TAX_COMPLIANCE_ENABLED=true \
+  -t jornal .
+
+docker run \
+  -e JORNAL_TAX_COMPLIANCE_ENABLED=true \
+  -e JORNAL_TAX_EMAIL_ENABLED=false \
+  ... jornal
+```
+
+Keep email disabled until PocketBase SMTP is configured and an opt-in test
+tenant has passed the mail-sink/dedupe checks. The tax scheduler runs in the
+PocketBase process and does not depend on an open browser. See
+`TAX_REMINDERS_RUNBOOK.md` for rollout, health, recovery, backup, and exact
+verification commands.
 
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the optional
 `POCKETBASE_SUPERUSER_*` values are runtime variables. Pass them as secrets

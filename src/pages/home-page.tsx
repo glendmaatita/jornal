@@ -11,7 +11,7 @@ import { faPiggyBank } from "@fortawesome/free-solid-svg-icons/faPiggyBank"
 import { faPlus } from "@fortawesome/free-solid-svg-icons/faPlus"
 import { faShieldHalved } from "@fortawesome/free-solid-svg-icons/faShieldHalved"
 
-import { AlertTriangle, ArrowRight } from "lucide-react"
+import { AlertTriangle, ArrowRight, CalendarClock } from "lucide-react"
 
 import { ConfidenceBadge, TransactionItem } from "@/components/transaction-item"
 import { PeriodSelector } from "@/components/period-selector"
@@ -20,19 +20,18 @@ import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent } from "@/components/ui/card"
 import { formatRupiah, formatSignedRupiah, todayIsoDate } from "@/lib/format"
-import { useAccounts, useProfile, useReserves, useTransactions } from "@/lib/queries"
+import { useProfile, useReserves, useSafeToSpendResult, useTransactions } from "@/lib/queries"
 import { receivablesFromTransactions } from "@/lib/receivables"
-import { computeSafeToSpend } from "@/lib/safe-to-spend"
-import { computeTaxOverview, businessExpenseYTD, revenueYTD, taxPaidYTD } from "@/lib/tax"
-import { monthsElapsedThisYear } from "@/lib/format"
+import { useTaxAgenda } from "@/lib/tax-compliance-queries"
 export function HomePage() {
   const [preset, setPreset] = useState<PeriodPreset>("month")
   const [custom, setCustom] = useState(() => ({ start: todayIsoDate(), end: todayIsoDate() }))
 
   const { data: transactions = [] } = useTransactions()
-  const { data: accounts = [] } = useAccounts()
   const { data: reserves = [] } = useReserves()
   const { data: profile } = useProfile()
+  const { data: safeToSpend } = useSafeToSpendResult()
+  const { data: taxAgenda } = useTaxAgenda()
 
   const period = useMemo(() => resolvePeriod(preset, custom), [preset, custom])
   const periodTransactions = useMemo(
@@ -64,26 +63,10 @@ export function HomePage() {
   const revenue = periodTransactions.filter((t) => t.classification === "REVENUE").reduce((sum, t) => sum + t.amount, 0)
   const businessExpense = periodTransactions.filter((t) => t.classification === "OPERATING_EXPENSE").reduce((sum, t) => sum + t.amount, 0)
 
-  const safeToSpend = useMemo(
-    () =>
-      profile
-        ? computeSafeToSpend({ transactions, accounts, profile, reserves })
-        : null,
-    [transactions, accounts, profile, reserves],
-  )
-
-  const taxReserve = useMemo(() => {
-    if (!profile) return null
-    return computeTaxOverview({
-      scheme: profile.taxScheme,
-      businessType: profile.businessType,
-      onDate: todayIsoDate(),
-      revenueYTD: revenueYTD(transactions, profile.fiscalYear),
-      businessExpenseYTD: businessExpenseYTD(transactions, profile.fiscalYear),
-      taxPaid: taxPaidYTD(transactions, profile.fiscalYear),
-      monthsElapsed: monthsElapsedThisYear(),
-    })
-  }, [profile, transactions])
+  const nextTax = useMemo(() => [
+    ...(taxAgenda?.obligations ?? []).filter((item) => !["PAID", "OVERPAID", "NOT_REQUIRED"].includes(item.paymentStatus) && item.effectiveDueDate).map((item) => ({ id: item.id, label: item.kind.replaceAll("_", " "), period: item.period, due: item.effectiveDueDate!, action: item.amountState === "UNKNOWN" ? "Lengkapi nominal" : "Bayar", amount: item.remainingPayable })),
+    ...(taxAgenda?.filings ?? []).filter((item) => !["FILED", "FULFILLED_BY_PAYMENT", "NOT_REQUIRED"].includes(item.status) && item.effectiveDueDate).map((item) => ({ id: item.id, label: item.filingGroup.replaceAll("_", " "), period: item.period, due: item.effectiveDueDate!, action: "Lapor", amount: null as number | null })),
+  ].sort((a, b) => a.due.localeCompare(b.due))[0] ?? null, [taxAgenda])
 
   if (!profile) return null
 
@@ -128,6 +111,7 @@ export function HomePage() {
           </Card>
         </Link>
       )}
+      {nextTax && <Link to="/tax" className="block" aria-label="Lihat agenda pajak berikutnya"><Card><CardContent className="flex items-center justify-between gap-3 p-4"><div className="flex min-w-0 items-start gap-3"><span className="rounded-xl bg-amber-50 p-2 text-amber-700"><CalendarClock className="size-5" /></span><div className="min-w-0"><p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Pajak berikutnya · {nextTax.action}</p><p className="truncate font-semibold">{nextTax.label} · {nextTax.period}</p><p className="text-xs text-muted-foreground">{nextTax.due.slice(0, 10)} · {nextTax.amount === null ? "nominal belum tersedia/tidak berlaku" : formatRupiah(nextTax.amount)}</p></div></div><ArrowRight className="size-4 shrink-0 text-muted-foreground" /></CardContent></Card></Link>}
 
       {outstandingReceivables > 0 && (
         <Link to="/receivables" className="flex items-center justify-between rounded-xl border border-[#df1769]/20 bg-[#fff1f7] px-4 py-3 text-sm">
@@ -214,7 +198,7 @@ export function HomePage() {
       </Card>
 
       {/* Tax reserve widget (§10.5) */}
-      {taxReserve && (
+      {safeToSpend && (
         <Link to="/tax" className="block">
           <Card className="transition-transform active:scale-[0.99]">
             <CardContent className="flex items-center gap-3 p-4">
@@ -222,9 +206,9 @@ export function HomePage() {
                 <FontAwesomeIcon icon={faPiggyBank} className="size-5 text-primary" aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">Estimasi Dana Pajak</p>
-                <p className="font-semibold tabular-nums">{formatRupiah(taxReserve.recommendedTaxReserve)}</p>
-                <p className="text-[11px] text-muted-foreground">Saran alokasi virtual untuk pajak</p>
+                <p className="text-xs text-muted-foreground">{safeToSpend.taxReserveSource === "ACTUAL_OBLIGATIONS" ? "Kewajiban Pajak Aktual" : safeToSpend.taxReserveSource === "SHARED_SUBJECT_UNATTRIBUTED" ? "Pajak Subject Bersama" : "Estimasi Dana Pajak"}</p>
+                <p className="font-semibold tabular-nums">{safeToSpend.taxReserveSource === "SHARED_SUBJECT_UNATTRIBUTED" ? "Belum dialokasikan" : formatRupiah(safeToSpend.recommendedTaxReserve)}</p>
+                <p className="text-[11px] text-muted-foreground">{safeToSpend.taxReserveSource === "ACTUAL_OBLIGATIONS" ? "Berasal dari agenda, tanpa menambah reserve kedua" : safeToSpend.taxReserveSource === "SHARED_SUBJECT_UNATTRIBUTED" ? "Atur atribusi sebelum memakai angka per-company" : "Proyeksi, bukan nominal kewajiban aktual"}</p>
               </div>
               <FontAwesomeIcon icon={faArrowRight} className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             </CardContent>

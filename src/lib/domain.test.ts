@@ -113,8 +113,8 @@ describe("nlp", () => {
 describe("tax engine", () => {
   test("rule versioning picks effective rule", () => {
     const rule = resolveTaxRule("UMKM_FINAL", "2026-09-03")
-    expect(rule?.id).toBe("UMKM_FINAL_05_P55_2022")
-    expect(rule?.effectiveFrom).toBe("2022-01-01")
+    expect(rule?.id).toBe("UMKM_FINAL_05_PP20_2026")
+    expect(rule?.effectiveFrom).toBe("2026-04-22")
     expect(resolveTaxRule("UMKM_FINAL", "2021-12-31")).toBeNull()
   })
 
@@ -303,6 +303,28 @@ describe("safe to spend", () => {
       now: new Date("2026-09-03T00:00:00"),
     })
     expect(result.safeToSpend).toBe(-5_000_000)
+  })
+
+  test("uses actual obligations without stacking the projection", () => {
+    const result = computeSafeToSpend({
+      transactions: [], accounts: [], profile: makeProfile({ openingBalance: 20_000_000 }), reserves: [],
+      taxCompliance: { configured: true, sharedSubject: false, knownRemaining: 1_250_000, hasUnknownAmounts: false },
+      now: new Date("2026-09-03T00:00:00"),
+    })
+    expect(result.recommendedTaxReserve).toBe(1_250_000)
+    expect(result.safeToSpend).toBe(18_750_000)
+    expect(result.taxReserveSource).toBe("ACTUAL_OBLIGATIONS")
+  })
+
+  test("does not duplicate an unattributed shared-subject reserve per company", () => {
+    const result = computeSafeToSpend({
+      transactions: [], accounts: [], profile: makeProfile({ openingBalance: 20_000_000 }), reserves: [],
+      taxCompliance: { configured: true, sharedSubject: true, knownRemaining: 1_250_000, hasUnknownAmounts: false },
+      now: new Date("2026-09-03T00:00:00"),
+    })
+    expect(result.recommendedTaxReserve).toBe(0)
+    expect(result.taxReserveSource).toBe("SHARED_SUBJECT_UNATTRIBUTED")
+    expect(result.confidence).toBe("LOW_CONFIDENCE")
   })
 
   test("confidence stays high when a zero opening balance is intentional", () => {

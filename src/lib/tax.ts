@@ -9,7 +9,7 @@ import { resolveProfileAsOf, resolveTransactionsAsOf } from "./store"
 import { assertSingleCompany } from "./company-scope"
 import type { BusinessProfile, BusinessType, TaxScheme, Transaction } from "./types"
 
-export type TaxRuleId = "UMKM_FINAL_05_P55_2022" | "PPH_PROG_2022" | "PPH_BADAN_22"
+export type TaxRuleId = "UMKM_FINAL_05_P55_2022" | "UMKM_FINAL_05_PP20_2026" | "PPH_PROG_2022" | "PPH_BADAN_22"
 
 export interface TaxRule {
   id: TaxRuleId
@@ -36,11 +36,23 @@ export const TAX_RULES: TaxRule[] = [
     name: "PPh Final UMKM 0,5% (PP 55/2022)",
     version: "2022.1",
     effectiveFrom: "2022-01-01",
-    effectiveUntil: null,
+    effectiveUntil: "2026-04-21",
     ratePercent: 0.5,
     brackets: null,
     base: "REVENUE",
     note: "PPh final 0,5% dari peredaran bruto untuk Wajib Pajak UMKM yang memenuhi syarat. Untuk Wajib Pajak Orang Pribadi, omzet kumulatif sampai Rp500 juta per tahun tidak dikenai pajak.",
+  },
+  {
+    id: "UMKM_FINAL_05_PP20_2026",
+    scheme: "UMKM_FINAL",
+    name: "PPh Final UMKM 0,5% (PP 20/2026)",
+    version: "2026.1",
+    effectiveFrom: "2026-04-22",
+    effectiveUntil: null,
+    ratePercent: 0.5,
+    brackets: null,
+    base: "REVENUE",
+    note: "Proyeksi PPh final 0,5% untuk Wajib Pajak UMKM yang telah mengonfirmasi kelayakan. Nominal kewajiban aktual tetap berasal dari rekonsiliasi agenda pajak.",
   },
   {
     id: "PPH_PROG_2022",
@@ -145,10 +157,9 @@ function resolveAppliedScheme(
   }
 
   if (taxScheme === "UMKM_FINAL" && projectedAnnualRevenue > UMKM_ANNUAL_LIMIT) {
-    const fallback = fallbackTaxScheme(businessType)
     return {
-      appliedScheme: fallback,
-      note: `Proyeksi omzet tahunan melebihi batas Rp4,8 miliar sehingga fasilitas PPh Final UMKM tidak lagi dipakai. Estimasi beralih ke skema ${fallback === "PROGRESSIVE" ? "progresif" : "badan"}.`,
+      appliedScheme: taxScheme,
+      note: "Proyeksi omzet tahunan melewati Rp4,8 miliar. Jornal tidak mengganti skema dari proyeksi saja; periksa masa transisi dan kelayakan sebelum mengubah registrasi pajak.",
     }
   }
 
@@ -326,13 +337,22 @@ export function businessExpenseYTD(transactions: Transaction[], fiscalYear: numb
     .reduce((sum, t) => sum + t.amount, 0)
 }
 
-export function taxPaidYTD(transactions: Transaction[], fiscalYear: number): number {
+export function taxPaidYTD(transactions: Transaction[], fiscalYear: number, scheme: TaxScheme): number {
+  const applicableKinds = scheme === "UMKM_FINAL"
+    ? new Set(["PPH_FINAL_UMKM"])
+    : scheme === "PROGRESSIVE" || scheme === "CORPORATE"
+      ? new Set(["PPH_25", "PPH_29"])
+      : new Set<string>()
   return transactions
     .filter(
       (t) =>
         t.direction === "MONEY_OUT" &&
         t.classification === "TAX_PAYMENT" &&
-        t.transactionDate.startsWith(String(fiscalYear)),
+        // Only an explicitly allocated tax period may reduce that period's
+        // liability. Cash paid in January can settle the preceding December;
+        // legacy payments without allocation remain visible in cashflow but
+        // are not guessed into the tax calculation.
+        t.taxPeriod?.startsWith(String(fiscalYear)) && applicableKinds.has(t.taxKind ?? ""),
     )
     .reduce((sum, t) => sum + t.amount, 0)
 }
@@ -355,7 +375,7 @@ export function computeTaxOverviewAsOf(
     onDate: asOf,
     revenueYTD: revenueYTD(txnsUpTo, year),
     businessExpenseYTD: businessExpenseYTD(txnsUpTo, year),
-    taxPaid: taxPaidYTD(txnsUpTo, year),
+    taxPaid: taxPaidYTD(txnsUpTo, year, resolvedProfile.taxScheme),
     monthsElapsed,
   })
 }
@@ -385,7 +405,7 @@ export function taxAlerts(profile: { taxScheme: TaxScheme; businessType: Busines
     onDate: todayIsoDate(now),
     revenueYTD: ytd,
     businessExpenseYTD: businessExpenseYTD(transactions, year),
-    taxPaid: taxPaidYTD(transactions, year),
+    taxPaid: taxPaidYTD(transactions, year, profile.taxScheme),
     monthsElapsed: monthsElapsedThisYear(now),
   })
   const projected = overview.projectedAnnualRevenue

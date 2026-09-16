@@ -281,7 +281,7 @@ export function SafeToSpendPage() {
           </h2>
           <div className="mt-3 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Disarankan (dari tax engine)</span>
+              <span className="text-muted-foreground">{result.taxReserveSource === "ACTUAL_OBLIGATIONS" ? "Kewajiban aktual di agenda" : result.taxReserveSource === "SHARED_SUBJECT_UNATTRIBUTED" ? "Subject bersama—belum dialokasikan" : "Disarankan (proyeksi)"}</span>
               <span className="font-medium tabular-nums">{formatRupiah(result.recommendedTaxReserve)}</span>
             </div>
             <div className="flex justify-between">
@@ -306,8 +306,7 @@ export function SafeToSpendPage() {
             </div>
           </div>
           <p className="mt-3 rounded-xl bg-secondary/60 p-3 text-xs leading-relaxed text-muted-foreground">
-            Reserve adalah <strong>alokasi virtual</strong>. Gunakan angka ini sebagai
-            pengingat berapa yang sebaiknya tidak dibelanjakan.
+            {result.taxReserveSource === "SHARED_SUBJECT_UNATTRIBUTED" ? "Cadangan otomatis dinonaktifkan karena satu wajib pajak dipakai beberapa company. Buat reserve manual per company sampai atribusi disepakati." : <>Reserve adalah <strong>alokasi virtual</strong>. Gunakan angka ini sebagai pengingat berapa yang sebaiknya tidak dibelanjakan.</>}
           </p>
         </CardContent>
       </Card>

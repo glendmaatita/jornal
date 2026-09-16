@@ -26,6 +26,7 @@ import {
   loadTransactionHistory,
   loadTransactions,
   processRecurringRules,
+  reconcileServerTransaction,
   recordCorrection,
   removeReserve,
   resetAllData,
@@ -165,6 +166,25 @@ describe("transactions", () => {
   test("SYSTEM-sourced transactions do not create corrections", () => {
     createTransaction(makeInput({ classificationSource: "SYSTEM" }))
     expect(loadCorrections()).toHaveLength(0)
+  })
+
+  test("reconciles a server-created tax payment into local cash state", () => {
+    const now = "2026-09-03T10:00:00.000Z"
+    const transaction: Transaction = {
+      ...makeInput({
+        direction: "MONEY_OUT", amount: 50_000, classification: "TAX_PAYMENT", taxClassification: "TAX_PAYMENT",
+        taxKind: "PPH_FINAL_UMKM", taxPeriod: "2026-08", taxSettlementId: "settlement-1",
+      }),
+      id: "server-tax-payment", businessId: "local", companyId: "local", createdAt: now, updatedAt: now,
+    }
+    const events: string[] = []
+    const unsubscribe = subscribeFinancialEvents((event) => events.push(event))
+    expect(reconcileServerTransaction(transaction)).toBe(true)
+    unsubscribe()
+    expect(loadTransactions()).toHaveLength(1)
+    expect(loadTransactions()[0]).toMatchObject(transaction)
+    expect(events).toContain("TRANSACTION_CREATED")
+    expect(reconcileServerTransaction({ ...transaction, companyId: "other" })).toBe(false)
   })
 
   test("create with empty description does not record correction", () => {

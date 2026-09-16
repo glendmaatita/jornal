@@ -85,3 +85,22 @@ integrationTest("migrates a populated single-company database without changing l
     await rm(root, { recursive: true, force: true })
   }
 }, 30_000)
+
+integrationTest("reapplies the non-destructive tax migration after migrate down", async () => {
+  const root = await mkdtemp(join(tmpdir(), "jornal-pb-tax-reapply-"))
+  const data = join(root, "data")
+  const migrations = resolve(import.meta.dir, "../pb_migrations")
+  const hooks = resolve(import.meta.dir, "../pb_hooks")
+  const run = (args: string[]) => {
+    const result = Bun.spawnSync([pocketBaseBin!, ...args], { stdout: "pipe", stderr: "pipe" })
+    if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+  }
+  try {
+    run(["migrate", "up", "--dir", data, "--migrationsDir", migrations, "--hooksDir", hooks])
+    run(["migrate", "down", "1", "--dir", data, "--migrationsDir", migrations, "--hooksDir", hooks])
+    run(["migrate", "up", "--dir", data, "--migrationsDir", migrations, "--hooksDir", hooks])
+    run(["migrate", "up", "--dir", data, "--migrationsDir", migrations, "--hooksDir", hooks])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}, 30_000)

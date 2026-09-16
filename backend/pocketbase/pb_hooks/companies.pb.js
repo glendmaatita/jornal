@@ -157,6 +157,7 @@ routerAdd("PATCH", "/api/jornal/companies/{id}", (event) => {
 
 routerAdd("POST", "/api/jornal/companies/{id}/reset", (event) => {
   const { audit, companyResponse } = require(`${__hooks}/company_helpers.js`)
+  const taxHelpers = require(`${__hooks}/tax_helpers.js`)
   const tenantId = event.auth.id
   const companyId = event.request.pathValue("id")
   let response
@@ -165,9 +166,26 @@ routerAdd("POST", "/api/jornal/companies/{id}/reset", (event) => {
     try { company = tx.findRecordById("companies", companyId) } catch { throw event.notFoundError("Company not found", {}) }
     if (company.getString("tenant_id") !== tenantId) throw event.notFoundError("Company not found", {})
     if (company.getString("status") !== "ACTIVE") throw new ApiError(409, "Company is archived")
+    const nextEpoch = company.getInt("data_epoch") + 1
+    const settlements = tx.findRecordsByFilter("tax_settlements", "tenant_id = {:tenant} && ledger_company_id = {:company} && ledger_transaction_id != ''", "", 0, 0, { tenant: tenantId, company: companyId })
+    for (const settlement of settlements) {
+      settlement.set("ledger_transaction_id", ""); settlement.set("revision", settlement.getInt("revision") + 1); tx.save(settlement)
+    }
+    const periodInputs = tx.findRecordsByFilter("tax_period_inputs", "tenant_id = {:tenant} && company_id = {:company}", "", 0, 0, { tenant: tenantId, company: companyId })
+    for (const input of periodInputs) {
+      input.set("data_status", "NEEDS_RECONCILIATION"); input.set("data_epoch", nextEpoch); input.set("fingerprint", $security.sha256(`reset:${companyId}:${nextEpoch}:${input.id}`)); tx.save(input)
+    }
+    const memberships = tx.findRecordsByFilter("tax_company_memberships", "tenant_id = {:tenant} && company_id = {:company}", "", 0, 0, { tenant: tenantId, company: companyId })
+    for (const membership of memberships) {
+      const obligations = tx.findRecordsByFilter("tax_obligations", "tenant_id = {:tenant} && subject_id = {:subject} && kind = 'PPH_FINAL_UMKM'", "", 0, 0, { tenant: tenantId, subject: membership.getString("subject_id") })
+      for (const obligation of obligations) {
+        obligation.set("data_status", "NEEDS_RECONCILIATION"); obligation.set("amount_state", "NEEDS_REVIEW"); obligation.set("revision", obligation.getInt("revision") + 1); tx.save(obligation)
+      }
+      taxHelpers.audit(tx, tenantId, membership.getString("subject_id"), "tax-ledger-reset", "", "company", companyId, "Ledger company was reset", null, { dataEpoch: nextEpoch })
+    }
     const records = tx.findRecordsByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company}", "", 0, 0, { tenant: tenantId, company: companyId })
     for (const record of records) tx.delete(record)
-    company.set("data_epoch", company.getInt("data_epoch") + 1)
+    company.set("data_epoch", nextEpoch)
     company.set("onboarding_completed_at", "")
     company.set("revision", company.getInt("revision") + 1)
     tx.save(company)

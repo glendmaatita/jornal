@@ -13,6 +13,12 @@ export interface SafeToSpendInput {
   profile: BusinessProfile
   reserves: Reserve[]
   now?: Date
+  taxCompliance?: {
+    configured: boolean
+    sharedSubject: boolean
+    knownRemaining: number
+    hasUnknownAmounts: boolean
+  }
 }
 
 export interface SafeToSpendBreakdownLine {
@@ -30,6 +36,7 @@ export interface SafeToSpendResult {
   breakdown: SafeToSpendBreakdownLine[]
   confidence: ConfidenceStatus
   confidenceReasons: string[]
+  taxReserveSource: "PROJECTED" | "ACTUAL_OBLIGATIONS" | "SHARED_SUBJECT_UNATTRIBUTED"
 }
 
 function transactionsOnOrBefore(transactions: Transaction[], asOfIso: string): Transaction[] {
@@ -188,19 +195,26 @@ export function computeSafeToSpend(input: SafeToSpendInput): SafeToSpendResult {
     onDate: today,
     revenueYTD: revenueYTD(currentTransactions, profile.fiscalYear),
     businessExpenseYTD: businessExpenseYTD(currentTransactions, profile.fiscalYear),
-    taxPaid: taxPaidYTD(currentTransactions, profile.fiscalYear),
+    taxPaid: taxPaidYTD(currentTransactions, profile.fiscalYear, profile.taxScheme),
     monthsElapsed: monthsElapsedThisYear(now),
   })
 
   const activeReserves = reserves.filter((reserve) => reserve.status === "ACTIVE")
   const otherReservedFunds = activeReserves.reduce((sum, reserve) => sum + reserve.amount, 0)
+  const compliance = input.taxCompliance
+  const taxReserveSource: SafeToSpendResult["taxReserveSource"] = compliance?.configured
+    ? compliance.sharedSubject ? "SHARED_SUBJECT_UNATTRIBUTED" : "ACTUAL_OBLIGATIONS"
+    : "PROJECTED"
+  const recommendedTaxReserve = taxReserveSource === "ACTUAL_OBLIGATIONS" ? compliance!.knownRemaining
+    : taxReserveSource === "SHARED_SUBJECT_UNATTRIBUTED" ? 0
+      : overview.recommendedTaxReserve
 
   // §46.2 — Safe To Spend = Cash Position − Recommended Tax Reserve − Other Reserved Funds
-  const safeToSpend = cashPosition - overview.recommendedTaxReserve - otherReservedFunds
+  const safeToSpend = cashPosition - recommendedTaxReserve - otherReservedFunds
 
   const breakdown: SafeToSpendBreakdownLine[] = [
     { label: "Posisi Kas", amount: cashPosition, kind: "cash" },
-    { label: "Dana Pajak (disarankan)", amount: -overview.recommendedTaxReserve, kind: "tax" },
+    { label: taxReserveSource === "ACTUAL_OBLIGATIONS" ? "Kewajiban pajak aktual" : taxReserveSource === "SHARED_SUBJECT_UNATTRIBUTED" ? "Pajak subject bersama (belum dialokasikan)" : "Dana Pajak (proyeksi)", amount: -recommendedTaxReserve, kind: "tax" },
     ...activeReserves.map((reserve) => ({
       label: reserve.name,
       amount: -reserve.amount,
@@ -210,14 +224,22 @@ export function computeSafeToSpend(input: SafeToSpendInput): SafeToSpendResult {
   ]
 
   const confidence = computeConfidence(currentTransactions, accounts, profile, reserves, now)
+  if (taxReserveSource === "SHARED_SUBJECT_UNATTRIBUTED") {
+    confidence.reasons.push("Cadangan pajak subject bersama belum dialokasikan ke company ini")
+    confidence.status = "LOW_CONFIDENCE"
+  } else if (taxReserveSource === "ACTUAL_OBLIGATIONS" && compliance?.hasUnknownAmounts) {
+    confidence.reasons.push("Ada kewajiban pajak aktual yang nominalnya belum tersedia")
+    if (confidence.status === "HIGH_CONFIDENCE") confidence.status = "MEDIUM_CONFIDENCE"
+  }
 
   return {
     cashPosition,
-    recommendedTaxReserve: overview.recommendedTaxReserve,
+    recommendedTaxReserve,
     otherReservedFunds,
     safeToSpend,
     breakdown,
     confidence: confidence.status,
     confidenceReasons: confidence.reasons,
+    taxReserveSource,
   }
 }

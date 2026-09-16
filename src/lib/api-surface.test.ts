@@ -121,7 +121,7 @@ describe("api surface", () => {
   })
 
   test("tax exports", () => {
-    expect(tax.TAX_RULES.length).toBe(3)
+    expect(tax.TAX_RULES.length).toBe(4)
     expect(tax.allowedTaxSchemes("INDIVIDUAL")).toBeTruthy()
     expect(tax.resolveTaxRule("UMKM_FINAL", "2026-01-01")?.id).toBe("UMKM_FINAL_05_P55_2022")
     const overview = tax.computeTaxOverview({
@@ -136,7 +136,7 @@ describe("api surface", () => {
     expect(overview.appliedScheme).toBe("UMKM_FINAL")
     expect(tax.revenueYTD([], 2026)).toBe(0)
     expect(tax.businessExpenseYTD([], 2026)).toBe(0)
-    expect(tax.taxPaidYTD([], 2026)).toBe(0)
+    expect(tax.taxPaidYTD([], 2026, "UMKM_FINAL")).toBe(0)
     expect(tax.computeTaxOverviewAsOf(makeProfile(), [], "2026-09-03").revenueYTD).toBe(0)
     expect(tax.TAX_TREATMENTS.REVENUE).toBeTruthy()
     expect(tax.taxAlerts({ taxScheme: "UMKM_FINAL", businessType: "INDIVIDUAL", pkpStatus: false }, [], new Date("2026-09-03T00:00:00"))).toHaveLength(0)
@@ -304,12 +304,19 @@ describe("multi-element closure paths", () => {
     const transactions = [
       makeTransaction({ transactionDate: "2026-03-01", amount: 100, classification: "REVENUE" }),
       makeTransaction({ transactionDate: "2026-04-01", amount: 200, classification: "OPERATING_EXPENSE", direction: "MONEY_OUT", categoryId: "exp-other" }),
-      makeTransaction({ transactionDate: "2026-03-15", amount: 50, classification: "TAX_PAYMENT", direction: "MONEY_OUT", categoryId: "exp-tax" }),
+      makeTransaction({ transactionDate: "2026-03-15", amount: 50, classification: "TAX_PAYMENT", direction: "MONEY_OUT", categoryId: "exp-tax", taxPeriod: "2026-02", taxKind: "PPH_FINAL_UMKM" }),
       makeTransaction({ transactionDate: "2026-03-02", amount: 300, classification: "OPERATING_EXPENSE", direction: "MONEY_OUT", categoryId: "exp-other" }),
     ]
     expect(tax.revenueYTD(transactions, 2026)).toBe(100)
     expect(tax.businessExpenseYTD(transactions, 2026)).toBe(500)
-    expect(tax.taxPaidYTD(transactions, 2026)).toBe(50)
+    expect(tax.taxPaidYTD(transactions, 2026, "UMKM_FINAL")).toBe(50)
+    expect(tax.taxPaidYTD([
+      ...transactions,
+      makeTransaction({ transactionDate: "2026-03-20", amount: 900, classification: "TAX_PAYMENT", direction: "MONEY_OUT", categoryId: "exp-tax", taxPeriod: "2026-02", taxKind: "PPN_PPNBM" }),
+    ], 2026, "UMKM_FINAL")).toBe(50)
+    expect(tax.taxPaidYTD([
+      makeTransaction({ transactionDate: "2026-03-15", amount: 50, classification: "TAX_PAYMENT", direction: "MONEY_OUT", categoryId: "exp-tax" }),
+    ], 2026, "UMKM_FINAL")).toBe(0)
   })
 })
 

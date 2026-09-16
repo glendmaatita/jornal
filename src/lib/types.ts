@@ -101,6 +101,12 @@ export interface Transaction {
   receivableTransactionId?: string | null
   /** Optional agreed collection date on a money-lent transaction. */
   receivableDueDate?: string | null
+  /** Tax compliance metadata. Cash date and tax period are intentionally separate. */
+  taxSubjectId?: string | null
+  taxObligationId?: string | null
+  taxSettlementId?: string | null
+  taxKind?: string | null
+  taxPeriod?: string | null
   classification: TransactionClassification
   taxClassification: TransactionClassification
   businessRelevance: BusinessRelevance

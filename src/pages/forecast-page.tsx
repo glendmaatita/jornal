@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { TextField } from "@/components/ui/text-field"
 import { formatRupiah, formatDateShort, formatNumberInput, parseAmountInput } from "@/lib/format"
 import { computeForecast, detectUpcomingObligations, EMPTY_SCENARIO, type ScenarioInput } from "@/lib/forecast"
-import { useAccounts, useProfile, useReserves, useTransactions } from "@/lib/queries"
+import { useAccounts, useProfile, useReserves, useTaxComplianceSnapshot, useTransactions } from "@/lib/queries"
 import { cn } from "@/lib/utils"
 
 const HORIZONS = [
@@ -20,13 +20,14 @@ export function ForecastPage() {
   const { data: accounts = [] } = useAccounts()
   const { data: reserves = [] } = useReserves()
   const { data: profile } = useProfile()
+  const taxCompliance = useTaxComplianceSnapshot()
 
   const [horizonDays, setHorizonDays] = useState(30)
   const [scenario, setScenario] = useState<ScenarioInput>(EMPTY_SCENARIO)
 
   const input = useMemo(
-    () => (profile ? { transactions, accounts, profile, reserves } : null),
-    [transactions, accounts, profile, reserves],
+    () => (profile ? { transactions, accounts, profile, reserves, taxCompliance } : null),
+    [transactions, accounts, profile, reserves, taxCompliance],
   )
 
   const baseline = useMemo(

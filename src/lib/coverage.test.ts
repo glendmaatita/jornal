@@ -188,7 +188,7 @@ describe("tax scheme gating", () => {
     expect(overview.explanation).toContain("tidak tersedia")
   })
 
-  test("UMKM over limit falls back", () => {
+  test("UMKM over projected limit stays registered and warns", () => {
     const overview = computeTaxOverview({
       scheme: "UMKM_FINAL",
       businessType: "INDIVIDUAL",
@@ -198,7 +198,7 @@ describe("tax scheme gating", () => {
       taxPaid: 0,
       monthsElapsed: 9,
     })
-    expect(overview.appliedScheme).not.toBe("UMKM_FINAL")
+    expect(overview.appliedScheme).toBe("UMKM_FINAL")
     expect(overview.explanation).toContain("4,8")
   })
 
@@ -221,7 +221,9 @@ describe("tax scheme gating", () => {
 
   test("resolveTaxRule respects effectiveUntil window", () => {
     expect(resolveTaxRule("UMKM_FINAL", "2021-01-01")).toBeNull()
-    expect(TAX_RULES.every((rule) => rule.effectiveUntil === null)).toBe(true)
+    expect(resolveTaxRule("UMKM_FINAL", "2026-04-21")?.id).toBe("UMKM_FINAL_05_P55_2022")
+    expect(resolveTaxRule("UMKM_FINAL", "2026-04-22")?.id).toBe("UMKM_FINAL_05_PP20_2026")
+    expect(TAX_RULES.some((rule) => rule.effectiveUntil !== null)).toBe(true)
   })
 
   test("progressive with profit below PTKP yields zero", () => {
