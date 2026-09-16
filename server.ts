@@ -27,6 +27,28 @@ const securityHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
 }
 
+// PocketBase completes the OAuth handshake by publishing to the browser's
+// temporary realtime subscription and then redirects the popup to a dashboard
+// route whose script calls window.close().  When PocketBase is served below
+// /pb, that dashboard bundle is not a dependable completion surface (and can
+// be restricted by an upstream CSP).  Serve a tiny completion document at the
+// proxy boundary instead, after PocketBase has already published the result.
+function oauthPopupCompleteResponse() {
+  return new Response(
+    "<!doctype html><meta charset=\"utf-8\"><title>Login selesai</title><script>window.close()</script><p>Login selesai. Jendela ini dapat ditutup.</p>",
+    {
+      headers: {
+        ...securityHeaders,
+        "Cache-Control": "no-store",
+        // This document contains only the close action. Allow it explicitly
+        // because PocketBase's dashboard CSP may otherwise block inline code.
+        "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+        "Content-Type": "text/html; charset=utf-8",
+      },
+    },
+  )
+}
+
 const sharedIntake = new Map<string, { expiresAt: number; title: string; text: string; url: string; file?: { name: string; type: string; data: string } }>()
 const shareLimit = 8 * 1024 * 1024
 const maxPendingShares = 32
@@ -149,6 +171,13 @@ const server = Bun.serve({
         // its postMessage. Keep the callback compatible with the app shell's
         // OAuth popup policy.
         if (url.pathname === "/pb/api/oauth2-redirect") {
+          const location = proxyHeaders.get("location") ?? ""
+          // The realtime notification has already been sent by PocketBase at
+          // this point. Replace its dashboard success/failure redirect with a
+          // minimal popup document that can always close itself.
+          if (location.includes("/auth/oauth2-redirect-success") || location.includes("/auth/oauth2-redirect-failure")) {
+            return oauthPopupCompleteResponse()
+          }
           proxyHeaders.set("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
           proxyHeaders.set("Cache-Control", "no-store")
         }

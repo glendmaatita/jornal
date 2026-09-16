@@ -69,9 +69,9 @@ export function LoginPage() {
           <button
             type="button"
             onClick={() => void install()}
-            className="mt-4 w-full rounded-xl border border-[#ced6e1] bg-[#f1f5fd] px-4 py-3 text-sm font-semibold text-[#1b1d4d] transition-colors hover:bg-[#e8eefc]"
+            className="mt-4 flex min-h-20 w-full items-center justify-center border-y border-[#c8d0d9] bg-[#f0f2f4] px-4 py-5 text-[23px] font-bold leading-none text-[#df1769] transition-colors hover:bg-[#e6eaed] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#df1769]"
           >
-            Install Jornal di perangkat
+            Pasang aplikasi
           </button>
         )}
         {isIos && !isInstalled && !canInstall && (
