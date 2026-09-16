@@ -11,7 +11,9 @@ RUN bun install --frozen-lockfile
 FROM dependencies AS build
 # Same-origin path proxied to PocketBase by server.ts (/pb/* → 127.0.0.1:8090).
 ARG VITE_POCKETBASE_URL=/pb
+ARG VITE_MULTI_COMPANY_ENABLED=true
 ENV VITE_POCKETBASE_URL=${VITE_POCKETBASE_URL}
+ENV VITE_MULTI_COMPANY_ENABLED=${VITE_MULTI_COMPANY_ENABLED}
 COPY . .
 RUN bun run build
 

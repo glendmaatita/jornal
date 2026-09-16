@@ -1,14 +1,16 @@
-import { Suspense, lazy, useEffect } from "react"
+import { Suspense, lazy, useEffect, useRef } from "react"
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import { BarChart3, Home as HomeIcon, LogOut, Plus, ReceiptText, Settings, Wallet } from "lucide-react"
 
 import { BrandMark } from "@/components/brand-mark"
+import { CompanySwitcher } from "@/components/company-switcher"
 import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
 import { currentUser, logout, pb } from "@/lib/pb"
+import { activeCompany } from "@/lib/companies"
 import { resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
-import { setDataScope } from "@/lib/store"
+import { setDataScope, setTenantScope } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 // Deferred below the first paint: PocketBase sync + recurring rules pull in
@@ -30,22 +32,28 @@ export function AppShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const { canInstall, install } = useInstallPrompt()
   const user = currentUser()
+  const company = activeCompany()
+  const authUserIdRef = useRef(pb.authStore.record?.id ?? null)
 
   useEffect(() => {
     const onAuthChange = () => {
       // Switch the storage partition before queries can render after a login,
       // logout, or token refresh. This prevents a stale tenant's data from
       // briefly appearing while React invalidates the previous cache.
-      setDataScope(pb.authStore.record?.id)
-      resetPocketBaseSyncState()
-      queryClient.cancelQueries()
-      queryClient.clear()
+      const nextUserId = pb.authStore.record?.id ?? null
+      setTenantScope(nextUserId)
+      if (nextUserId !== authUserIdRef.current) {
+        authUserIdRef.current = nextUserId
+        resetPocketBaseSyncState()
+        queryClient.cancelQueries()
+        queryClient.clear()
+      }
     }
     const unsubscribe = pb.authStore.onChange(onAuthChange)
     const onStorage = (event: StorageEvent) => {
-      // PocketBase persists its auth store under pb_auth. React to another
+      // PocketBase LocalAuthStore persists under pocketbase_auth. React to another
       // tab clearing or replacing that value before rendering its data.
-      if (event.key === "pb_auth" || event.key === null) onAuthChange()
+      if (event.key === "pocketbase_auth" || event.key === null) onAuthChange()
     }
     window.addEventListener("storage", onStorage)
     return () => {
@@ -68,6 +76,14 @@ export function AppShell() {
     void navigator.storage.persist().catch(() => false)
   }, [])
 
+  useEffect(() => {
+    if (!company?.id || pathname.startsWith("/companies") || pathname === "/onboarding") return
+    const url = new URL(window.location.href)
+    if (url.searchParams.get("company") === company.id) return
+    url.searchParams.set("company", company.id)
+    window.history.replaceState(window.history.state, "", url)
+  }, [company?.id, pathname])
+
   function handleLogout() {
     queryClient.cancelQueries()
     queryClient.clear()
@@ -81,10 +97,13 @@ export function AppShell() {
     <div className="min-h-dvh pb-[calc(76px+env(safe-area-inset-bottom))]">
       <header className="sticky top-0 z-40 border-b border-[#e4e8ed] bg-[var(--background)]">
         <div className="mx-auto flex h-[50px] max-w-[600px] items-center justify-between px-5">
-          <Link to="/" className="flex items-center gap-2.5" aria-label="Jornal">
+          <div className="flex min-w-0 items-center gap-2">
+          <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label="Jornal">
             <BrandMark className="size-8" />
-            <span className="text-[15px] font-bold tracking-tight">Jornal</span>
+            <span className="hidden text-[15px] font-bold tracking-tight sm:inline">Jornal</span>
           </Link>
+          <CompanySwitcher />
+          </div>
           <div className="flex items-center gap-1">
             {canInstall && (
               <button
@@ -131,12 +150,17 @@ export function AppShell() {
       </header>
 
       <main className="mx-auto max-w-[600px] px-5 pt-5">
+        {company?.status === "ARCHIVED" && (
+          <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+            <strong>{company.name}</strong> diarsipkan. Data hanya dapat dilihat atau diekspor sampai company dipulihkan.
+          </div>
+        )}
         <Suspense fallback={<div className="t12 py-10 text-center">Memuat…</div>}>
           <Outlet />
         </Suspense>
       </main>
 
-      <BottomNav pathname={pathname} />
+      <BottomNav pathname={pathname} readOnly={company?.status === "ARCHIVED"} />
       <PwaStatus />
       <Suspense fallback={null}>
         <DeferredEffects />
@@ -145,7 +169,7 @@ export function AppShell() {
   )
 }
 
-function BottomNav({ pathname }: { pathname: string }) {
+function BottomNav({ pathname, readOnly }: { pathname: string; readOnly: boolean }) {
   const isActive = (to: string, exact: boolean) => (exact ? pathname === to : pathname.startsWith(to))
 
   return (
@@ -156,13 +180,19 @@ function BottomNav({ pathname }: { pathname: string }) {
         ))}
 
         <div className="relative flex justify-center">
-          <Link
-            to="/add"
-            className="absolute -top-7 grid size-[52px] place-items-center rounded-full bg-[#16579d] text-white shadow-lg shadow-[#16579d]/25 transition-transform active:scale-95"
-            aria-label="Tambah transaksi"
-          >
-            <Plus className="size-6" aria-hidden="true" />
-          </Link>
+          {readOnly ? (
+            <span className="absolute -top-7 grid size-[52px] place-items-center rounded-full bg-slate-300 text-white" aria-label="Company diarsipkan">
+              <Plus className="size-6" aria-hidden="true" />
+            </span>
+          ) : (
+            <Link
+              to="/add"
+              className="absolute -top-7 grid size-[52px] place-items-center rounded-full bg-[#16579d] text-white shadow-lg shadow-[#16579d]/25 transition-transform active:scale-95"
+              aria-label="Tambah transaksi"
+            >
+              <Plus className="size-6" aria-hidden="true" />
+            </Link>
+          )}
         </div>
 
         {tabs.slice(2).map((tab) => (

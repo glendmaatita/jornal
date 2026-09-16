@@ -20,6 +20,8 @@ const TransactionFormPage = lazy(() =>
   import("@/pages/transaction-form-page").then((m) => ({ default: m.TransactionFormPage })),
 )
 const TransactionsPage = lazy(() => import("@/pages/transactions-page").then((m) => ({ default: m.TransactionsPage })))
+const ReceivablesPage = lazy(() => import("@/pages/receivables-page").then((m) => ({ default: m.ReceivablesPage })))
+const CompaniesPage = lazy(() => import("@/pages/companies-page").then((m) => ({ default: m.CompaniesPage })))
 
 function NotFoundPage() {
   return (
@@ -69,12 +71,12 @@ const appLayoutRoute = createRoute({
   beforeLoad: async ({ location }) => {
     // Keep the public login entry lightweight. The auth, local-store, and
     // sync graph is only needed after a protected route is actually matched.
-    const [{ pb, pocketBaseConfigured }, { isOnboarded, setDataScope }, { getHydrationState, initializePocketBaseSync }] = await Promise.all([
+    const [{ pb, pocketBaseConfigured }, store, sync, companyStore] = await Promise.all([
       import("@/lib/pb"),
       import("@/lib/store"),
       import("@/lib/pocketbase-sync"),
+      import("@/lib/companies"),
     ])
-    setDataScope(pb.authStore.record?.id)
     if (!pb.authStore.isValid) {
       try {
         if (location.href && location.pathname !== "/login") {
@@ -83,19 +85,50 @@ const appLayoutRoute = createRoute({
       } catch { /* private browsing can disable session storage */ }
       throw redirect({ to: "/login", replace: true })
     }
-    // A new device has no local profile yet. Hydrate the tenant before making
-    // the onboarding decision so an existing account is not treated as new.
-    await initializePocketBaseSync()
-    if (pocketBaseConfigured && getHydrationState() === "unavailable") {
+    const tenantId = pb.authStore.record?.id ?? "local"
+    store.setTenantScope(tenantId)
+    let companies
+    try {
+      companies = await companyStore.loadCompanies()
+    } catch {
       throw redirect({ to: "/data-unavailable", replace: true })
     }
-    // Onboarding gate before any route component loads, so the redirect does
-    // not pay for lazy chunks of the originally matched route (§66 item 1–3)
-    if (!isOnboarded() && location.pathname !== "/onboarding") {
-      try {
-        if (location.href) window.sessionStorage.setItem("jornal.pending-route", location.href)
-      } catch { /* session storage may be unavailable in private browsing */ }
-      throw redirect({ to: "/onboarding", replace: true })
+    const companyIndependent = location.pathname === "/onboarding"
+      || location.pathname === "/companies"
+      || location.pathname === "/companies/new"
+      || /^\/companies\/[^/]+\/setup$/.test(location.pathname)
+    if (companies.length === 0) {
+      store.setCompanyScope(tenantId)
+      if (!companyIndependent) {
+        try { if (location.href) window.sessionStorage.setItem("jornal.pending-route", location.href) } catch { /* ignore */ }
+        throw redirect({ to: "/onboarding", replace: true })
+      }
+      return
+    }
+    const explicitId = new URL(location.href, window.location.origin).searchParams.get("company")
+    const selected = (explicitId ? companies.find((company) => company.id === explicitId) : null)
+      ?? companies.find((company) => company.id === companyStore.selectedCompanyId())
+      ?? companies.find((company) => company.status === "ACTIVE")
+      ?? companies[0]
+    if (explicitId && !companies.some((company) => company.id === explicitId)) {
+      throw redirect({ to: "/companies", replace: true })
+    }
+    companyStore.selectCompany(selected.id)
+    store.setCompanyScope(selected.id, selected.dataEpoch)
+    store.setCompanyWritable(selected.status === "ACTIVE")
+    store.setCompanyLegacyDefault(selected.legacyDefault)
+    store.setCompanyDisplayName(selected.name)
+    await companyStore.migrateLegacyCompanyData(selected)
+    if (companyIndependent) return
+    if (selected.status === "ARCHIVED" && (location.pathname === "/add" || /\/edit$/.test(location.pathname))) {
+      throw redirect({ to: "/companies", replace: true })
+    }
+    await sync.initializePocketBaseSync()
+    if (pocketBaseConfigured && sync.getHydrationState() === "unavailable") {
+      throw redirect({ to: "/data-unavailable", replace: true })
+    }
+    if (!selected.onboardingCompletedAt) {
+      throw redirect({ to: "/companies/$companyId/setup", params: { companyId: selected.id }, replace: true })
     }
   },
 })
@@ -109,6 +142,24 @@ const indexRoute = createRoute({
 const onboardingRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/onboarding",
+  component: OnboardingPage,
+})
+
+const companiesRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/companies",
+  component: CompaniesPage,
+})
+
+const newCompanyRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/companies/new",
+  component: OnboardingPage,
+})
+
+const companySetupRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/companies/$companyId/setup",
   component: OnboardingPage,
 })
 
@@ -134,6 +185,12 @@ const transactionsRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { filter?: string } => ({
     filter: typeof search.filter === "string" ? search.filter : undefined,
   }),
+})
+
+const receivablesRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/receivables",
+  component: ReceivablesPage,
 })
 
 const transactionDetailRoute = createRoute({
@@ -187,9 +244,13 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     indexRoute,
     onboardingRoute,
+    companiesRoute,
+    newCompanyRoute,
+    companySetupRoute,
     addRoute,
     accountsRoute,
     transactionsRoute,
+    receivablesRoute,
     transactionDetailRoute,
     transactionEditRoute,
     taxRoute,

@@ -424,7 +424,7 @@ describe("attachment handling", () => {
     expect(txns).toHaveLength(1)
     expect(txns[0].attachmentName).toBe("receipt.txt")
     expect(txns[0].attachmentDataUrl).toBeNull()
-    expect(txns[0].attachmentRemoteUrl).toBe("http://pb.test/api/files/jornal_records/pb-9/receipt.txt")
+    expect(txns[0].attachmentRemoteUrl).toBe("http://pb.test/api/files/jornal_records/pb-9/receipt.txt?protocol=2&company=local")
   })
 
   test("localJson falls back when stored payload is corrupt JSON", async () => {

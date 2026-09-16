@@ -1,7 +1,7 @@
-import type { Account, AppSettings, BusinessProfile, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
-import { KEYS, RESET_PENDING_KEY, scopedStorageKey } from "./store"
+import type { Account, AppSettings, BusinessProfile, CompanyScope, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
+import { getCompanyScope, KEYS, RESET_PENDING_KEY, scopedStorageKey, storageKeyForScope } from "./store"
 import { pb } from "./pb"
-import { acknowledgeOutbox, clearMirroredState, listOutbox, mirrorState, restoreState } from "./local-db"
+import { acknowledgeOutboxSnapshots, clearMirroredState, listOutbox, mirrorState, restoreState } from "./local-db"
 
 type EntityName =
   | "profile"
@@ -35,6 +35,8 @@ interface PocketBaseRecord {
   entity: EntityName
   app_id: string
   business_id: string
+  company_id?: string
+  data_epoch?: number
   payload: unknown
   attachment?: string | null
   updated: string
@@ -44,20 +46,24 @@ interface PocketBaseRecord {
 }
 
 const COLLECTION = "jornal_records"
+export const CLIENT_UPDATE_REQUIRED_EVENT = "jornal:client-update-required"
 
-/**
- * Every tenant (PocketBase user) owns their records: business_id = user id.
- * Falls back to "local" for unit tests / unauthenticated local-only usage.
- */
-function businessId(): string {
-  return pb.authStore.isValid ? (pb.authStore.record?.id ?? "local") : "local"
+function companyScope(): CompanyScope {
+  const scope = getCompanyScope()
+  return {
+    tenantId: pb.authStore.isValid ? (pb.authStore.record?.id ?? scope.tenantId) : scope.tenantId,
+    companyId: scope.companyId,
+    dataEpoch: scope.dataEpoch,
+  }
+}
+
+function sameScope(a: CompanyScope, b = companyScope()) {
+  return a.tenantId === b.tenantId && a.companyId === b.companyId && a.dataEpoch === b.dataEpoch
 }
 
 let testUrlOverride: string | null = null
-let syncQueued = false
-let hydrationStarted = false
 let syncGeneration = 0
-let hydrationState: "idle" | "ready" | "unavailable" = "idle"
+const activeRequestControllers = new Set<AbortController>()
 export type SyncStatus = "idle" | "syncing" | "synced" | "retrying" | "failed"
 export interface SyncConflict {
   id: string
@@ -68,16 +74,38 @@ export interface SyncConflict {
   remotePayload?: unknown
   occurredAt: string
 }
-let syncStatus: SyncStatus = "idle"
+interface ScopeRuntime {
+  syncQueued: boolean
+  hydrationStarted: boolean
+  hydrationState: "idle" | "ready" | "unavailable"
+  syncStatus: SyncStatus
+  running?: Promise<unknown>
+}
+
+const scopeRuntimes = new Map<string, ScopeRuntime>()
 const syncStatusListeners = new Set<(status: SyncStatus) => void>()
 
+function scopeId(scope: CompanyScope) {
+  return `${scope.tenantId}:${scope.companyId}:${scope.dataEpoch}`
+}
+
+function runtimeFor(scope = companyScope()) {
+  const id = scopeId(scope)
+  let runtime = scopeRuntimes.get(id)
+  if (!runtime) {
+    runtime = { syncQueued: false, hydrationStarted: false, hydrationState: "idle", syncStatus: "idle" }
+    scopeRuntimes.set(id, runtime)
+  }
+  return runtime
+}
+
 export function getSyncStatus() {
-  return syncStatus
+  return runtimeFor().syncStatus
 }
 
 /** Distinguishes a known empty account from a backend we could not reach. */
 export function getHydrationState() {
-  return hydrationState
+  return runtimeFor().hydrationState
 }
 
 export function subscribeSyncStatus(listener: (status: SyncStatus) => void) {
@@ -85,9 +113,9 @@ export function subscribeSyncStatus(listener: (status: SyncStatus) => void) {
   return () => { syncStatusListeners.delete(listener) }
 }
 
-function setSyncStatus(status: SyncStatus) {
-  syncStatus = status
-  for (const listener of syncStatusListeners) listener(status)
+function setSyncStatus(status: SyncStatus, scope = companyScope()) {
+  runtimeFor(scope).syncStatus = status
+  if (sameScope(scope)) for (const listener of syncStatusListeners) listener(status)
 }
 
 export function loadSyncConflicts(): SyncConflict[] {
@@ -124,10 +152,10 @@ export function resolveSyncConflict(id: string, choice: "local" | "remote") {
   } catch { return false }
 }
 
-function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>) {
+function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>, scope = companyScope()) {
   const errorText = String(error)
   if (!errorText.startsWith("Error: Conflict") && !errorText.startsWith("Conflict") && !errorText.includes("PocketBase 409")) return
-  const existing = loadSyncConflicts()
+  const existing = localJson<SyncConflict[]>(KEYS.syncConflicts, [], scope)
   const message = errorText.replace(/^Error:\s*/, "")
   if (existing.some((item) =>
     details?.entity && details.appId
@@ -141,20 +169,24 @@ function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>) {
     ...details,
   }]
   try {
-    window.localStorage.setItem(scopedStorageKey(KEYS.syncConflicts), JSON.stringify(conflicts.slice(-20)))
+    window.localStorage.setItem(storageKeyForScope(scope, KEYS.syncConflicts), JSON.stringify(conflicts.slice(-20)))
   } catch { /* local work remains available even when storage is full */ }
 }
 
 /** Test seam: override/clear the configured PocketBase URL at runtime. */
 export function setPocketBaseUrl(url: string | null) {
   testUrlOverride = url
+  for (const controller of activeRequestControllers) controller.abort("PocketBase endpoint changed")
+  activeRequestControllers.clear()
+  scopeRuntimes.clear()
+  syncGeneration += 1
 }
 
 /** Test seam: reset once-per-session hydration/sync guards. */
 export function resetPocketBaseSyncState() {
-  syncQueued = false
-  hydrationStarted = false
-  hydrationState = "idle"
+  for (const controller of activeRequestControllers) controller.abort("Authentication session changed")
+  activeRequestControllers.clear()
+  scopeRuntimes.clear()
   syncGeneration += 1
   setSyncStatus("idle")
 }
@@ -176,17 +208,17 @@ function baseUrl() {
   return configuredUrl().replace(/\/+$/, "")
 }
 
-function localJson<T>(key: string, fallback: T): T {
+function localJson<T>(key: string, fallback: T, scope?: CompanyScope): T {
   try {
-    const raw = window.localStorage.getItem(scopedStorageKey(key))
+    const raw = window.localStorage.getItem(scope ? storageKeyForScope(scope, key) : scopedStorageKey(key))
     return raw ? (JSON.parse(raw) as T) : fallback
   } catch {
     return fallback
   }
 }
 
-function writeLocalJson<T>(key: string, value: T) {
-  const storageKey = scopedStorageKey(key)
+function writeLocalJson<T>(key: string, value: T, scope?: CompanyScope) {
+  const storageKey = scope ? storageKeyForScope(scope, key) : scopedStorageKey(key)
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(value))
   } catch {
@@ -195,9 +227,9 @@ function writeLocalJson<T>(key: string, value: T) {
   void mirrorState(storageKey, value).catch(() => undefined)
 }
 
-async function restoreMissingLocalState() {
+async function restoreMissingLocalState(scope = companyScope()) {
   for (const key of Object.values(KEYS)) {
-    const storageKey = scopedStorageKey(key)
+    const storageKey = storageKeyForScope(scope, key)
     if (window.localStorage.getItem(storageKey) !== null) continue
     const value = await restoreState(storageKey).catch(() => undefined)
     if (value === undefined) continue
@@ -205,8 +237,13 @@ async function restoreMissingLocalState() {
   }
 }
 
-function mergeLocalArray(remotePayloads: unknown[], key: string): unknown[] {
-  const local = localJson<unknown[]>(key, [])
+function hasCachedCompanyState(scope: CompanyScope) {
+  return [KEYS.profile, KEYS.settings, KEYS.accounts, KEYS.transactions]
+    .some((key) => window.localStorage.getItem(storageKeyForScope(scope, key)) !== null)
+}
+
+function mergeLocalArray(remotePayloads: unknown[], key: string, scope?: CompanyScope): unknown[] {
+  const local = localJson<unknown[]>(key, [], scope)
   const identity = (value: unknown) => {
     if (!value || typeof value !== "object") return String(value)
     const candidate = value as { id?: string; effectiveAt?: string; deletedAt?: string | null }
@@ -293,7 +330,7 @@ function historyKey(entity: EntityName): string | null {
   return null
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestJson<T>(path: string, init?: RequestInit, scope = companyScope()): Promise<T> {
   const headers = new Headers(init?.headers ?? {})
   if (!(init?.body instanceof FormData)) {
     headers.set("Content-Type", "application/json")
@@ -303,7 +340,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (pb.authStore.isValid) {
     headers.set("Authorization", pb.authStore.token)
   }
+  headers.set("X-Jornal-Protocol", "2")
+  headers.set("X-Jornal-Company", scope.companyId)
+  headers.set("X-Jornal-Data-Epoch", String(scope.dataEpoch))
   const controller = new AbortController()
+  activeRequestControllers.add(controller)
   const timeout = setTimeout(() => controller.abort(), 15_000)
   const externalSignal = init?.signal
   const abortFromCaller = () => controller.abort(externalSignal?.reason)
@@ -321,12 +362,17 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   } catch (error) {
     clearTimeout(timeout)
     externalSignal?.removeEventListener("abort", abortFromCaller)
+    activeRequestControllers.delete(controller)
     throw error
   }
   clearTimeout(timeout)
   externalSignal?.removeEventListener("abort", abortFromCaller)
+  activeRequestControllers.delete(controller)
   if (!response.ok) {
     const text = await response.text().catch(() => "")
+    if (response.status === 426 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(CLIENT_UPDATE_REQUIRED_EVENT))
+    }
     throw new Error(`PocketBase ${response.status}: ${text}`)
   }
   if (response.status === 204) return undefined as T
@@ -337,8 +383,9 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 function recordFileUrl(record: PocketBaseRecord, fileToken: string): string | null {
   if (!record.attachment) return null
   // Protected files (collection has a viewRule) need a short-lived file token.
-  const token = fileToken ? `?token=${encodeURIComponent(fileToken)}` : ""
-  return `${baseUrl()}/api/files/${COLLECTION}/${record.id}/${encodeURIComponent(record.attachment)}${token}`
+  const query = new URLSearchParams({ protocol: "2", company: record.company_id ?? companyScope().companyId })
+  if (fileToken) query.set("token", fileToken)
+  return `${baseUrl()}/api/files/${COLLECTION}/${record.id}/${encodeURIComponent(record.attachment)}?${query.toString()}`
 }
 
 function transactionPayloadForRemote(transaction: Transaction) {
@@ -350,15 +397,21 @@ function transactionPayloadForRemote(transaction: Transaction) {
 
 function transactionPayloadForLocal(record: PocketBaseRecord, payload: Transaction, fileToken: string): Transaction {
   const remoteFileUrl = recordFileUrl(record, fileToken)
+  let stableRemoteFileUrl: string | null = null
+  if (remoteFileUrl) {
+    const parsed = new URL(remoteFileUrl)
+    parsed.searchParams.delete("token")
+    stableRemoteFileUrl = parsed.toString()
+  }
   return {
     ...payload,
     attachmentName: payload.attachmentName ?? record.attachment ?? null,
     attachmentDataUrl: payload.attachmentDataUrl ?? null,
-    attachmentRemoteUrl: payload.attachmentDataUrl?.startsWith("data:") ? null : remoteFileUrl ? remoteFileUrl.split("?")[0] : null,
+    attachmentRemoteUrl: payload.attachmentDataUrl?.startsWith("data:") ? null : stableRemoteFileUrl,
   }
 }
 
-async function listRecords(entity: EntityName, appId?: string, requestedBusinessId = businessId()): Promise<PocketBaseRecord[]> {
+async function listRecords(entity: EntityName, appId?: string, requestedScope = companyScope()): Promise<PocketBaseRecord[]> {
   const records: PocketBaseRecord[] = []
   let page = 1
   const perPage = 200
@@ -367,10 +420,12 @@ async function listRecords(entity: EntityName, appId?: string, requestedBusiness
       perPage: String(perPage),
       page: String(page),
       sort: "-updated",
-      filter: `business_id = "${requestedBusinessId}" && entity = "${entity}"${appId ? ` && app_id = "${appId}"` : ""}`,
+      filter: `business_id = "${requestedScope.tenantId}" && company_id = "${requestedScope.companyId}" && entity = "${entity}"${appId ? ` && app_id = "${appId}"` : ""}`,
     })
     const result = await requestJson<{ items: PocketBaseRecord[]; totalPages?: number }>(
       `/api/collections/${COLLECTION}/records?${query.toString()}`,
+      undefined,
+      requestedScope,
     )
     records.push(...result.items)
     const totalPages = result.totalPages
@@ -380,19 +435,20 @@ async function listRecords(entity: EntityName, appId?: string, requestedBusiness
   return records
 }
 
-async function upsertRecord(entity: EntityName, appId: string, payload: unknown, requestedBusinessId = businessId()): Promise<void> {
-  if (businessId() !== requestedBusinessId) throw new Error("Sync cancelled: account changed")
+async function upsertRecord(entity: EntityName, appId: string, payload: unknown, requestedScope = companyScope()): Promise<void> {
   // Look up only the tenant/entity/app key being written. Full entity scans
   // made a 100-row sync issue hundreds of unnecessary reads and enlarged the
   // race window between two devices.
-  const existing = await listRecords(entity, appId, requestedBusinessId)
+  const existing = await listRecords(entity, appId, requestedScope)
   const found = existing.find((record) => record.app_id === appId)
   const sanitizedPayload =
     entity === "transactions" && payload && typeof payload === "object"
       ? transactionPayloadForRemote(payload as Transaction)
       : payload
   const body = {
-    business_id: requestedBusinessId,
+    business_id: requestedScope.tenantId,
+    company_id: requestedScope.companyId,
+    data_epoch: requestedScope.dataEpoch,
     entity,
     app_id: appId,
     payload: sanitizedPayload,
@@ -409,13 +465,15 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
           appId,
           localPayload: sanitizedPayload,
           remotePayload: found.payload,
-        })
+        }, requestedScope)
         throw new Error(`Conflict: remote ${entity}/${appId} is newer`)
       }
     }
   }
   const formData = new FormData()
-  formData.append("business_id", requestedBusinessId)
+  formData.append("business_id", requestedScope.tenantId)
+  formData.append("company_id", requestedScope.companyId)
+  formData.append("data_epoch", String(requestedScope.dataEpoch))
   formData.append("entity", entity)
   formData.append("app_id", appId)
   formData.append("payload", JSON.stringify(sanitizedPayload))
@@ -430,13 +488,13 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
   }
   const hasAttachment = entity === "transactions" && payload && typeof payload === "object" && isDataUrl((payload as Transaction).attachmentDataUrl)
   try {
-    if (businessId() !== requestedBusinessId) throw new Error("Sync cancelled: account changed")
     if (found) {
       await requestJson(
         `/api/collections/${COLLECTION}/records/${found.id}`,
         hasAttachment
           ? { method: "PATCH", body: formData }
           : { method: "PATCH", body: JSON.stringify(body) },
+        requestedScope,
       )
     } else {
       await requestJson(
@@ -444,6 +502,7 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
         hasAttachment
           ? { method: "POST", body: formData }
           : { method: "POST", body: JSON.stringify(body) },
+        requestedScope,
       )
     }
   } catch (error) {
@@ -453,38 +512,36 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
         appId,
         localPayload: sanitizedPayload,
         remotePayload: found?.payload,
-      })
+      }, requestedScope)
     }
     throw error
   }
 }
 
-async function pruneExplicitlyDeleted(entity: EntityName, requestedBusinessId = businessId()) {
+async function pruneExplicitlyDeleted(entity: EntityName, requestedScope = companyScope()) {
   const key = historyKey(entity)
   if (!key) return
-  const history = localJson<Array<{ id?: string; deletedAt?: string | null }>>(key, [])
+  const history = localJson<Array<{ id?: string; deletedAt?: string | null }>>(key, [], requestedScope)
   const deletedIds = new Set(history.filter((record) => record.deletedAt).map((record) => record.id).filter(Boolean))
   if (deletedIds.size === 0) return
-  const remote = await listRecords(entity, undefined, requestedBusinessId)
+  const remote = await listRecords(entity, undefined, requestedScope)
   await Promise.all(
     remote
       .filter((record) => deletedIds.has(record.app_id))
-      .map((record) => requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" })),
+      .map((record) => requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" }, requestedScope)),
   )
 }
 
-async function processPendingReset(runBusinessId: string) {
-  const markerKey = scopedStorageKey(RESET_PENDING_KEY)
+async function processPendingReset(runScope: CompanyScope) {
+  const markerKey = storageKeyForScope(runScope, RESET_PENDING_KEY)
   // The marker is an ISO string written directly so it remains readable even
   // if a previous localStorage JSON payload was corrupted.
   if (!window.localStorage.getItem(markerKey)) return false
   for (const entity of ["profile", "settings", "accounts", "transactions", "reserves", "corrections", "recurringRules", "profileHistory", "accountHistory", "transactionHistory", "reserveHistory"] as EntityName[]) {
-    if (businessId() !== runBusinessId) throw new Error("Reset cancelled: account changed")
-    const records = await listRecords(entity, undefined, runBusinessId)
+    const records = await listRecords(entity, undefined, runScope)
     for (const record of records) {
-      if (businessId() !== runBusinessId) throw new Error("Reset cancelled: account changed")
       try {
-        await requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" })
+        await requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" }, runScope)
       } catch (error) {
         // A concurrent device may have deleted the row already; reset remains
         // idempotent. Other failures must keep the marker for retry.
@@ -501,62 +558,74 @@ async function clearResetMarker(markerKey: string) {
   await clearMirroredState(markerKey).catch(() => undefined)
 }
 
-async function syncToPocketBaseUnsafe(runGeneration: number, runBusinessId: string) {
+async function syncToPocketBaseUnsafe(runGeneration: number, runScope: CompanyScope) {
   if (!enabled() || typeof window === "undefined") return
-  await processPendingReset(runBusinessId)
+  await processPendingReset(runScope)
   const states: Partial<LocalStateMap> = {
-    profile: localJson(KEYS.profile, null),
-    settings: localJson(KEYS.settings, null),
-    accounts: localJson(KEYS.accounts, []),
-    transactions: localJson(KEYS.transactions, []),
-    reserves: localJson(KEYS.reserves, []),
-    corrections: localJson(KEYS.corrections, []),
-    recurringRules: localJson(KEYS.recurringRules, []),
-    profileHistory: localJson(KEYS.profileHistory, []),
-    accountHistory: localJson(KEYS.accountHistory, []),
-    transactionHistory: localJson(KEYS.transactionHistory, []),
-    reserveHistory: localJson(KEYS.reserveHistory, []),
+    profile: localJson(KEYS.profile, null, runScope),
+    settings: localJson(KEYS.settings, null, runScope),
+    accounts: localJson(KEYS.accounts, [], runScope),
+    transactions: localJson(KEYS.transactions, [], runScope),
+    reserves: localJson(KEYS.reserves, [], runScope),
+    corrections: localJson(KEYS.corrections, [], runScope),
+    recurringRules: localJson(KEYS.recurringRules, [], runScope),
+    profileHistory: localJson(KEYS.profileHistory, [], runScope),
+    accountHistory: localJson(KEYS.accountHistory, [], runScope),
+    transactionHistory: localJson(KEYS.transactionHistory, [], runScope),
+    reserveHistory: localJson(KEYS.reserveHistory, [], runScope),
   }
 
-  const queuedKeys = new Set((await listOutbox()).map((row) => row.key))
-  const hasQueuedState = queuedKeys.size > 0
+  const scopePrefix = storageKeyForScope(runScope, "")
+  const queuedRows = (await listOutbox()).filter((row) => row.key.startsWith(scopePrefix))
+  const queuedKeys = new Set(queuedRows.map((row) => row.key))
+  const hasQueuedState = queuedRows.length > 0
 
   for (const [entity, value] of Object.entries(states) as Array<[EntityName, unknown]>) {
-    if (hasQueuedState && !queuedKeys.has(scopedStorageKey(entityKey(entity)))) continue
+    if (hasQueuedState && !queuedKeys.has(storageKeyForScope(runScope, entityKey(entity)))) continue
     // Never continue a request sequence after logout or tenant switch.
-    if (runGeneration !== syncGeneration || runBusinessId !== businessId()) {
-      throw new Error("Sync cancelled: account changed")
+    if (runGeneration !== syncGeneration) {
+      throw new Error("Sync cancelled: session changed")
     }
     if (value == null) continue
     if (Array.isArray(value)) {
-      for (const item of value as Array<{ id?: string }>) {
+      const items = entity === "transactions"
+        ? [...value].sort((a, b) => Number((a as Transaction).classification === "RECEIVABLE_PAYMENT") - Number((b as Transaction).classification === "RECEIVABLE_PAYMENT"))
+        : value
+      for (const item of items as Array<{ id?: string }>) {
         const appId = entityAppId(entity, item)
-      await upsertRecord(entity, appId, item, runBusinessId)
+      await upsertRecord(entity, appId, item, runScope)
       }
       // A missing item is ambiguous across devices. Only explicit tombstones
       // may delete a remote record.
-      await pruneExplicitlyDeleted(entity, runBusinessId)
+      await pruneExplicitlyDeleted(entity, runScope)
     } else {
-      await upsertRecord(entity, entity, value, runBusinessId)
-      await pruneExplicitlyDeleted(entity, runBusinessId)
+      await upsertRecord(entity, entity, value, runScope)
+      await pruneExplicitlyDeleted(entity, runScope)
     }
   }
-  await acknowledgeOutbox(Object.values(KEYS).map((key) => scopedStorageKey(key)))
+  await acknowledgeOutboxSnapshots(queuedRows)
 }
 
-export async function syncToPocketBase() {
+export async function syncToPocketBase(runScope = companyScope()) {
   const runGeneration = syncGeneration
-  const runBusinessId = businessId()
-  setSyncStatus("syncing")
+  const runtime = runtimeFor(runScope)
+  if (runtime.running) return runtime.running
+  setSyncStatus("syncing", runScope)
+  const run = (async () => {
   try {
-    const result = await syncToPocketBaseUnsafe(runGeneration, runBusinessId)
-    setSyncStatus("synced")
+    const result = await syncToPocketBaseUnsafe(runGeneration, runScope)
+    setSyncStatus("synced", runScope)
     return result
   } catch (error) {
-    recordSyncConflict(error)
-    setSyncStatus("failed")
+    recordSyncConflict(error, undefined, runScope)
+    setSyncStatus("failed", runScope)
     throw error
+  } finally {
+    runtime.running = undefined
   }
+  })()
+  runtime.running = run
+  return run
 }
 
 function retryableSyncError(error: unknown) {
@@ -564,14 +633,14 @@ function retryableSyncError(error: unknown) {
   return status === 0 || status === 408 || status === 425 || status === 429 || status >= 500
 }
 
-async function syncWithRetry() {
+async function syncWithRetry(scope = companyScope()) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      await syncToPocketBase()
+      await syncToPocketBase(scope)
       return
     } catch (error) {
       if (!retryableSyncError(error) || attempt === 2) throw error
-      setSyncStatus("retrying")
+      setSyncStatus("retrying", scope)
       const exponentialDelay = 400 * 2 ** attempt
       const jitter = Math.floor(Math.random() * 200)
       await new Promise((resolve) => setTimeout(resolve, Math.min(5_000, exponentialDelay + jitter)))
@@ -579,8 +648,9 @@ async function syncWithRetry() {
   }
 }
 
-export async function hydrateFromPocketBase() {
+export async function hydrateFromPocketBase(runScope = companyScope()) {
   if (!enabled() || typeof window === "undefined") return false
+  const runGeneration = syncGeneration
   const entities: EntityName[] = [
     "profile",
     "settings",
@@ -603,19 +673,21 @@ export async function hydrateFromPocketBase() {
     .then((token) => token)
     .catch(() => "")
   for (const entity of entities) {
-    const remote = await listRecords(entity)
+    if (runGeneration !== syncGeneration) throw new Error("Hydration cancelled: session changed")
+    const remote = await listRecords(entity, undefined, runScope)
+    if (runGeneration !== syncGeneration) throw new Error("Hydration cancelled: session changed")
     if (remote.length === 0) continue
     foundAny = true
     const key = entityKey(entity)
     if (entity === "profile" || entity === "settings") {
       const payload = remote[0]?.payload ?? null
-      const local = localJson<unknown>(key, null)
+      const local = localJson<unknown>(key, null, runScope)
       const localUpdatedAt = local && typeof local === "object" ? (local as { updatedAt?: unknown }).updatedAt : undefined
       const remoteUpdatedAt = payload && typeof payload === "object" ? (payload as { updatedAt?: unknown }).updatedAt : undefined
       // A device may have a durable offline edit that has not reached the
       // server yet. Do not erase it during startup hydration.
       if (!(typeof localUpdatedAt === "string" && typeof remoteUpdatedAt === "string" && localUpdatedAt > remoteUpdatedAt)) {
-        writeLocalJson(key, payload)
+        writeLocalJson(key, payload, runScope)
       }
       continue
     }
@@ -633,7 +705,9 @@ export async function hydrateFromPocketBase() {
         })
         .filter((payload) => payload !== null && payload !== undefined),
         key,
+        runScope,
       ),
+      runScope,
     )
   }
   return foundAny
@@ -641,34 +715,71 @@ export async function hydrateFromPocketBase() {
 
 export function schedulePocketBaseSync() {
   if (!enabled() || typeof window === "undefined") return
-  if (syncQueued) return
-  syncQueued = true
+  const scope = companyScope()
+  const runtime = runtimeFor(scope)
+  if (runtime.syncQueued) return
+  runtime.syncQueued = true
   queueMicrotask(() => {
-    syncQueued = false
-    void syncWithRetry().catch(() => {
+    runtime.syncQueued = false
+    void syncWithRetry(scope).catch(() => {
       // Keep local data available; the visible status remains failed so the
       // user can retry on reconnect/focus or the next mutation.
     })
   })
 }
 
+/** Retry pending mutations for every cached active company of the logged-in
+ * tenant. Runs at most two scopes concurrently and never changes UI scope. */
+export async function syncPendingCompanies() {
+  if (!enabled() || typeof window === "undefined" || !pb.authStore.isValid) return
+  const [{ loadCachedCompanies }, rows] = await Promise.all([
+    import("./companies"),
+    listOutbox(),
+  ])
+  const tenantId = pb.authStore.record?.id ?? ""
+  const scopes = loadCachedCompanies()
+    .filter((company) => company.tenantId === tenantId && company.status === "ACTIVE")
+    .filter((company) => {
+      const prefix = storageKeyForScope({ tenantId, companyId: company.id, dataEpoch: company.dataEpoch }, "")
+      const resetKey = storageKeyForScope({ tenantId, companyId: company.id, dataEpoch: company.dataEpoch }, RESET_PENDING_KEY)
+      return rows.some((row) => row.key.startsWith(prefix)) || window.localStorage.getItem(resetKey) !== null
+    })
+    .map((company) => ({ tenantId, companyId: company.id, dataEpoch: company.dataEpoch }))
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < scopes.length) {
+      const scope = scopes[cursor++]
+      await syncWithRetry(scope).catch(() => undefined)
+    }
+  }
+  await Promise.all([worker(), worker()])
+}
+
 export async function initializePocketBaseSync() {
   if (typeof window === "undefined") return false
-  if (hydrationStarted) return false
-  hydrationStarted = true
+  const runScope = companyScope()
+  const runtime = runtimeFor(runScope)
+  if (runtime.hydrationStarted) return false
+  runtime.hydrationStarted = true
   try {
-    await restoreMissingLocalState()
-    if (!enabled()) {
-      hydrationStarted = false
-      hydrationState = "ready"
+    await restoreMissingLocalState(runScope)
+    if (navigator.onLine === false) {
+      runtime.hydrationStarted = false
+      runtime.hydrationState = hasCachedCompanyState(runScope) ? "ready" : "unavailable"
       return false
     }
-    await hydrateFromPocketBase()
-    hydrationState = "ready"
+    if (!enabled()) {
+      runtime.hydrationStarted = false
+      runtime.hydrationState = "ready"
+      return false
+    }
+    await hydrateFromPocketBase(runScope)
+    runtime.hydrationState = "ready"
     return true
   } catch {
-    hydrationStarted = false
-    hydrationState = "unavailable"
+    runtime.hydrationStarted = false
+    runtime.hydrationState = hasCachedCompanyState(runScope) ? "ready" : "unavailable"
+    if (runtime.hydrationState === "ready") setSyncStatus("failed", runScope)
     return false
   }
 }

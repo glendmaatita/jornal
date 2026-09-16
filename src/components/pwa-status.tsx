@@ -3,7 +3,7 @@ import { CloudOff, Download, RefreshCw, X } from "lucide-react"
 import { useRegisterSW } from "virtual:pwa-register/react"
 
 import { Button } from "@/components/ui/button"
-import { getSyncStatus, loadSyncConflicts, resolveSyncConflict, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
+import { CLIENT_UPDATE_REQUIRED_EVENT, getSyncStatus, loadSyncConflicts, resolveSyncConflict, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
 import { STORAGE_WARNING_EVENT } from "@/lib/store"
 
 export function PwaStatus() {
@@ -26,6 +26,7 @@ export function PwaStatus() {
 
   const [dismissed, setDismissed] = useState(false)
   const [storageWarning, setStorageWarning] = useState(false)
+  const [clientUpdateRequired, setClientUpdateRequired] = useState(false)
   const [syncStatus, setSyncStatus] = useState(getSyncStatus)
   const [conflicts, setConflicts] = useState(loadSyncConflicts)
   useEffect(() => subscribeSyncStatus(setSyncStatus), [])
@@ -35,9 +36,14 @@ export function PwaStatus() {
     window.addEventListener(STORAGE_WARNING_EVENT, onStorageWarning)
     return () => window.removeEventListener(STORAGE_WARNING_EVENT, onStorageWarning)
   }, [])
+  useEffect(() => {
+    const onUpdateRequired = () => { setClientUpdateRequired(true); setDismissed(false) }
+    window.addEventListener(CLIENT_UPDATE_REQUIRED_EVENT, onUpdateRequired)
+    return () => window.removeEventListener(CLIENT_UPDATE_REQUIRED_EVENT, onUpdateRequired)
+  }, [])
   const syncFailed = syncStatus === "failed"
   const hasConflict = conflicts.length > 0
-  const persistentAction = syncFailed || hasConflict || storageWarning
+  const persistentAction = syncFailed || hasConflict || storageWarning || clientUpdateRequired
   if ((dismissed && !persistentAction) || (isOnline && !offlineReady && !needRefresh && !persistentAction)) return null
 
   const dismiss = () => {
@@ -55,7 +61,9 @@ export function PwaStatus() {
         {needRefresh || syncFailed ? <RefreshCw /> : isOnline ? <Download /> : <CloudOff />}
       </span>
       <p className="min-w-0 flex-1 text-sm leading-snug">
-        {storageWarning
+        {clientUpdateRequired
+          ? "Versi Jornal ini perlu diperbarui sebelum sinkronisasi dapat dilanjutkan. Draft lokal tetap aman."
+          : storageWarning
           ? "Penyimpanan perangkat bermasalah. Unduh backup agar data tetap aman."
           : hasConflict
           ? `Perubahan bentrok pada ${conflicts[0]?.entity ?? "data"}${conflicts[0]?.appId ? ` (${conflicts[0].appId})` : ""}. Data lokal tetap tersimpan.`
@@ -71,6 +79,9 @@ export function PwaStatus() {
         <Button size="sm" variant="secondary" onClick={() => void updateServiceWorker(true)}>
           Update
         </Button>
+      )}
+      {clientUpdateRequired && !needRefresh && (
+        <Button size="sm" variant="secondary" onClick={() => window.location.reload()}>Muat ulang</Button>
       )}
       {storageWarning && (
         <a href="/settings" className="shrink-0 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs font-semibold">Buka data</a>

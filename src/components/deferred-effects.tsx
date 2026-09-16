@@ -1,8 +1,8 @@
 import { useEffect } from "react"
 
 import { useFinancialEvents } from "@/lib/queries"
-import { initializePocketBaseSync, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
-import { processRecurringRules } from "@/lib/store"
+import { initializePocketBaseSync, schedulePocketBaseSync, syncPendingCompanies } from "@/lib/pocketbase-sync"
+import { processRecurringRulesForCachedCompanies } from "@/lib/recurring-scheduler"
 import { CHANGED_EVENT } from "@/lib/types"
 
 // Loaded lazily from AppShell after the first paint so the sync/query graph
@@ -11,7 +11,10 @@ export function DeferredEffects() {
   useFinancialEvents()
 
   useEffect(() => {
-    const retry = () => schedulePocketBaseSync()
+    const retry = () => {
+      schedulePocketBaseSync()
+      void syncPendingCompanies()
+    }
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") retry()
     }
@@ -20,7 +23,8 @@ export function DeferredEffects() {
     document.addEventListener("visibilitychange", onVisibilityChange)
     void (async () => {
       await initializePocketBaseSync()
-      processRecurringRules()
+      await processRecurringRulesForCachedCompanies()
+      await syncPendingCompanies()
       window.dispatchEvent(new CustomEvent(CHANGED_EVENT))
     })()
     return () => {

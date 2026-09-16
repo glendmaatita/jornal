@@ -13,7 +13,11 @@ interface StateRow {
   updatedAt: number
 }
 
-interface OutboxRow { key: string; value: unknown; queuedAt: number }
+export interface OutboxRow { key: string; value: unknown; queuedAt: number; version?: string }
+
+function outboxRow(key: string, value: unknown): OutboxRow {
+  return { key, value, queuedAt: Date.now(), version: crypto.randomUUID() }
+}
 
 function database(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === "undefined") return Promise.resolve(null)
@@ -55,6 +59,19 @@ export async function restoreState(key: string): Promise<unknown | undefined> {
   })
 }
 
+export async function listMirroredStateByPrefix(prefix: string): Promise<StateRow[]> {
+  const db = await database()
+  if (!db) return []
+  return new Promise<StateRow[]>((resolve, reject) => {
+    const request = db.transaction(STORE, "readonly").objectStore(STORE).getAll()
+    request.onsuccess = () => {
+      resolve((request.result as StateRow[]).filter((row) => row.key.startsWith(prefix)))
+      db.close()
+    }
+    request.onerror = () => { reject(request.error ?? new Error("IndexedDB state lookup failed")); db.close() }
+  })
+}
+
 export async function clearMirroredState(key: string): Promise<void> {
   const db = await database()
   if (!db) return
@@ -86,7 +103,7 @@ export async function enqueueOutbox(key: string, value: unknown): Promise<void> 
   const db = await database()
   if (!db) return
   await new Promise<void>((resolve, reject) => {
-    const request = db.transaction(OUTBOX, "readwrite").objectStore(OUTBOX).put({ key, value, queuedAt: Date.now() } satisfies OutboxRow)
+    const request = db.transaction(OUTBOX, "readwrite").objectStore(OUTBOX).put(outboxRow(key, value))
     request.onsuccess = () => resolve()
     request.onerror = () => reject(request.error ?? new Error("IndexedDB outbox write failed"))
   }).finally(() => db.close())
@@ -99,7 +116,7 @@ export async function persistState(key: string, value: unknown): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction([STORE, OUTBOX], "readwrite")
     transaction.objectStore(STORE).put({ key, value, updatedAt: Date.now() } satisfies StateRow)
-    transaction.objectStore(OUTBOX).put({ key, value, queuedAt: Date.now() } satisfies OutboxRow)
+    transaction.objectStore(OUTBOX).put(outboxRow(key, value))
     transaction.oncomplete = () => resolve()
     transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB persistence failed"))
     transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB persistence aborted"))
@@ -116,6 +133,32 @@ export async function listOutbox(): Promise<OutboxRow[]> {
   })
 }
 
+/** Idempotently copy pending work to a new scope while retaining the legacy
+ * rows as a recovery source until the rollout retention window expires. */
+export async function copyOutboxByPrefix(sourcePrefix: string, targetPrefix: string): Promise<void> {
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(OUTBOX, "readwrite")
+    const objectStore = transaction.objectStore(OUTBOX)
+    const request = objectStore.getAll()
+    request.onsuccess = () => {
+      for (const row of request.result as OutboxRow[]) {
+        if (!row.key.startsWith(sourcePrefix)) continue
+        const targetKey = `${targetPrefix}${row.key.slice(sourcePrefix.length)}`
+        const target = objectStore.get(targetKey)
+        target.onsuccess = () => {
+          if (!target.result) objectStore.put(outboxRow(targetKey, row.value))
+        }
+      }
+    }
+    request.onerror = () => reject(request.error ?? new Error("IndexedDB outbox migration lookup failed"))
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB outbox migration failed"))
+    transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB outbox migration aborted"))
+  }).finally(() => db.close())
+}
+
 export async function acknowledgeOutbox(keys: string[]): Promise<void> {
   if (keys.length === 0) return
   const db = await database()
@@ -126,6 +169,68 @@ export async function acknowledgeOutbox(keys: string[]): Promise<void> {
     for (const key of keys) objectStore.delete(key)
     transaction.oncomplete = () => resolve()
     transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB outbox acknowledge failed"))
+  }).finally(() => db.close())
+}
+
+/** Acknowledge only the exact snapshots that were sent. A newer write to the
+ * same key must stay queued. */
+export async function acknowledgeOutboxSnapshots(rows: OutboxRow[]): Promise<void> {
+  if (rows.length === 0) return
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(OUTBOX, "readwrite")
+    const objectStore = transaction.objectStore(OUTBOX)
+    for (const row of rows) {
+      const request = objectStore.get(row.key)
+      request.onsuccess = () => {
+        const current = request.result as OutboxRow | undefined
+        const sameSnapshot = current && row.version && current.version
+          ? current.version === row.version
+          : current?.queuedAt === row.queuedAt && JSON.stringify(current.value) === JSON.stringify(row.value)
+        if (sameSnapshot) objectStore.delete(row.key)
+      }
+    }
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB outbox acknowledge failed"))
+  }).finally(() => db.close())
+}
+
+export async function clearOutboxByPrefix(prefix: string): Promise<void> {
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(OUTBOX, "readwrite")
+    const objectStore = transaction.objectStore(OUTBOX)
+    const request = objectStore.getAllKeys()
+    request.onsuccess = () => {
+      for (const key of request.result) if (typeof key === "string" && key.startsWith(prefix)) objectStore.delete(key)
+    }
+    request.onerror = () => reject(request.error ?? new Error("IndexedDB outbox key lookup failed"))
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB outbox prefix clear failed"))
+  }).finally(() => db.close())
+}
+
+/** Preserve stale/pre-reset operations for support recovery while removing
+ * them from every active company scheduler prefix. */
+export async function quarantineOutboxByPrefix(prefix: string, reason: string): Promise<void> {
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(OUTBOX, "readwrite")
+    const objectStore = transaction.objectStore(OUTBOX)
+    const request = objectStore.getAll()
+    request.onsuccess = () => {
+      for (const row of request.result as OutboxRow[]) {
+        if (!row.key.startsWith(prefix)) continue
+        objectStore.put({ ...row, key: `jornal.quarantine.${reason}.${row.queuedAt}.${row.key}` })
+        objectStore.delete(row.key)
+      }
+    }
+    request.onerror = () => reject(request.error ?? new Error("IndexedDB outbox lookup failed"))
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB outbox quarantine failed"))
   }).finally(() => db.close())
 }
 

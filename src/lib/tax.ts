@@ -6,6 +6,7 @@
 import { formatRupiah } from "./format"
 import { monthsElapsedThisYear, todayIsoDate } from "./format"
 import { resolveProfileAsOf, resolveTransactionsAsOf } from "./store"
+import { assertSingleCompany } from "./company-scope"
 import type { BusinessProfile, BusinessType, TaxScheme, Transaction } from "./types"
 
 export type TaxRuleId = "UMKM_FINAL_05_P55_2022" | "PPH_PROG_2022" | "PPH_BADAN_22"
@@ -343,6 +344,7 @@ export function computeTaxOverviewAsOf(
   asOf: string,
   usePersistedHistory = false,
 ): TaxOverview {
+  assertSingleCompany(transactions, profile)
   const resolvedProfile = usePersistedHistory ? resolveProfileAsOf(asOf, profile) : profile
   const txnsUpTo = usePersistedHistory ? resolveTransactionsAsOf(asOf, transactions) : transactions.filter((transaction) => transaction.transactionDate <= asOf)
   const year = Number(asOf.slice(0, 4))

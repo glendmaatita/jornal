@@ -5,6 +5,7 @@
 
 import { ALL_CATEGORIES } from "./categories"
 import { formatMonthYear, toIsoDate } from "./format"
+import { assertSingleCompany } from "./company-scope"
 import type { Transaction, TransactionDirection } from "./types"
 
 export interface MonthlyPoint {
@@ -21,6 +22,7 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Se
 
 /** Aggregated monthly data for the trailing N months, oldest first (§36–38). */
 export function monthlyTrends(transactions: Transaction[], months = 6, now = new Date()): MonthlyPoint[] {
+  assertSingleCompany(transactions)
   const points: MonthlyPoint[] = []
   for (let offset = months - 1; offset >= 0; offset--) {
     const date = new Date(now.getFullYear(), now.getMonth() - offset, 1)

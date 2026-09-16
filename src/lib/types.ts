@@ -2,6 +2,28 @@
 
 export const CURRENCY = "IDR" as const
 
+export type CompanyStatus = "ACTIVE" | "ARCHIVED"
+
+export interface Company {
+  id: string
+  tenantId: string
+  name: string
+  status: CompanyStatus
+  onboardingCompletedAt: string | null
+  legacyDefault: boolean
+  dataEpoch: number
+  revision: number
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CompanyScope {
+  tenantId: string
+  companyId: string
+  dataEpoch: number
+}
+
 export type TransactionDirection = "MONEY_IN" | "MONEY_OUT"
 
 export type TransactionClassification =
@@ -12,6 +34,8 @@ export type TransactionClassification =
   | "ASSET_PURCHASE"
   | "LOAN_RECEIVED"
   | "LOAN_PAYMENT"
+  | "RECEIVABLE_CREATED"
+  | "RECEIVABLE_PAYMENT"
   | "TAX_PAYMENT"
   | "INTERNAL_TRANSFER"
   | "REFUND"
@@ -56,6 +80,7 @@ export interface Category {
 export interface Transaction {
   id: string
   businessId: string
+  companyId?: string
   direction: TransactionDirection
   amount: number
   currency: string
@@ -72,6 +97,10 @@ export interface Transaction {
   attachmentDataUrl: string | null
   /** Stable file endpoint; access tokens are added only while viewing. */
   attachmentRemoteUrl?: string | null
+  /** Original money-lent transaction for a repayment, otherwise null. */
+  receivableTransactionId?: string | null
+  /** Optional agreed collection date on a money-lent transaction. */
+  receivableDueDate?: string | null
   classification: TransactionClassification
   taxClassification: TransactionClassification
   businessRelevance: BusinessRelevance
@@ -106,6 +135,7 @@ export type TaxScheme = "UMKM_FINAL" | "PROGRESSIVE" | "CORPORATE" | "NOT_CALCUL
 
 export interface BusinessProfile {
   businessId: string
+  companyId?: string
   businessName: string
   businessType: BusinessType
   pkpStatus: boolean
@@ -203,6 +233,8 @@ export const CLASSIFICATION_LABELS: Record<TransactionClassification, string> = 
   ASSET_PURCHASE: "Pembelian Aset",
   LOAN_RECEIVED: "Penerimaan Pinjaman",
   LOAN_PAYMENT: "Pembayaran Utang",
+  RECEIVABLE_CREATED: "Piutang Diberikan",
+  RECEIVABLE_PAYMENT: "Pelunasan Piutang",
   TAX_PAYMENT: "Pembayaran Pajak",
   INTERNAL_TRANSFER: "Transfer Antar Rekening",
   REFUND: "Refund",

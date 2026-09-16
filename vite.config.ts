@@ -19,7 +19,10 @@ function inlineBuildCss(): Plugin {
         for (const [name, item] of Object.entries(bundle)) {
           if (item.type === "asset" && name.endsWith(".css")) {
             const css = typeof item.source === "string" ? item.source : Buffer.from(item.source).toString("utf8")
-            delete bundle[name]
+            // Keep the emitted asset: Vite's dynamic-import preload map can
+            // still reference it even though the initial document inlines the
+            // same CSS. Removing it makes lazy routes fail in production and
+            // breaks offline PWA reloads with a 404.
             return html.replace(
               /<link rel="stylesheet"[^>]*href="[^"]*\.css"[^>]*>/,
               () => `<style>${css}</style>`,

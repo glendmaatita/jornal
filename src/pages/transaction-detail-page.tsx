@@ -9,12 +9,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { categoryName } from "@/lib/categories"
 import { formatRupiah, formatDateLong } from "@/lib/format"
 import { queryKeys, useAccountMap, useTransactions } from "@/lib/queries"
-import { deleteTransaction, duplicateTransaction } from "@/lib/store"
+import { deleteTransaction, duplicateTransaction, isCompanyWritable } from "@/lib/store"
 import { TAX_TREATMENTS } from "@/lib/tax"
 import { CLASSIFICATION_LABELS, type Transaction } from "@/lib/types"
 import { pb } from "@/lib/pb"
 
 export function TransactionDetailPage({ transactionId }: { transactionId: string }) {
+  const writable = isCompanyWritable()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: transactions = [] } = useTransactions()
@@ -31,8 +32,9 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
     if (!currentUrl || currentUrl.startsWith("data:")) return () => { cancelled = true }
     void pb.files.getToken().then((token) => {
       if (cancelled || !token) return
-      const separator = currentUrl.includes("?") ? "&" : "?"
-      setAttachmentUrl(`${currentUrl.split("?")[0]}${separator}token=${encodeURIComponent(token)}`)
+      const url = new URL(currentUrl, window.location.origin)
+      url.searchParams.set("token", token)
+      setAttachmentUrl(url.toString())
     }).catch(() => undefined)
     return () => { cancelled = true }
   }, [transaction?.attachmentDataUrl, transaction?.attachmentRemoteUrl])
@@ -101,6 +103,10 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
             {account && <DetailRow label="Akun" value={transferTo ? `${account.name} → ${transferTo.name}` : account.name} />}
             {transaction.paymentMethod && <DetailRow label="Metode" value={transaction.paymentMethod} />}
             {transaction.supplierCustomer && <DetailRow label="Supplier / Customer" value={transaction.supplierCustomer} />}
+            {transaction.classification === "RECEIVABLE_CREATED" && transaction.receivableDueDate && <DetailRow label="Jatuh tempo piutang" value={formatDateLong(transaction.receivableDueDate)} />}
+            {transaction.classification === "RECEIVABLE_PAYMENT" && transaction.receivableTransactionId && (
+              <div className="flex gap-3"><dt className="w-36 shrink-0 text-muted-foreground">Untuk piutang</dt><dd><Link to="/transactions/$transactionId" params={{ transactionId: transaction.receivableTransactionId }} className="text-primary underline">Lihat piutang asal</Link></dd></div>
+            )}
             {transaction.tags && <DetailRow label="Tag" value={transaction.tags} />}
             <DetailRow label="Klasifikasi internal" value={CLASSIFICATION_LABELS[transaction.classification]} />
             <DetailRow label="Klasifikasi pajak" value={CLASSIFICATION_LABELS[transaction.taxClassification]} />
@@ -130,7 +136,7 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
             </div>
           </dl>
 
-          <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {writable && <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Link to="/transactions/$transactionId/edit" params={{ transactionId: transaction.id }} className={buttonClasses()}>
               <Pencil aria-hidden="true" />
               Edit
@@ -150,7 +156,10 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
               <Trash2 aria-hidden="true" />
               Hapus
             </Button>
-          </div>
+          </div>}
+          {transaction.classification === "RECEIVABLE_CREATED" && (
+            <Link to="/receivables" className="mt-3 block text-center text-sm font-semibold text-[var(--link)]">Lihat status piutang</Link>
+          )}
         </CardContent>
       </Card>
     </div>

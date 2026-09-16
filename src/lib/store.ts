@@ -35,7 +35,12 @@ export const KEYS = {
   syncConflicts: "jornal.sync-conflicts.v1",
 } as const
 
-let activeScope = "local"
+let activeTenantId = "local"
+let activeCompanyId = "local"
+let activeDataEpoch = 1
+let activeCompanyWritable = true
+let activeCompanyLegacyDefault = true
+let activeCompanyName = ""
 export const STORAGE_WARNING_EVENT = "jornal-storage-warning"
 export const RESET_PENDING_KEY = "jornal.reset-pending.v1"
 
@@ -43,23 +48,73 @@ function notifyStorageWarning() {
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(STORAGE_WARNING_EVENT))
 }
 
-/** Select the local data partition for the authenticated tenant. */
+/** Legacy test/local seam. Production should set tenant and company separately. */
 export function setDataScope(scope: string | null | undefined) {
-  activeScope = scope?.trim() || "local"
+  activeTenantId = scope?.trim() || "local"
+  activeCompanyId = activeTenantId
+  activeDataEpoch = 1
+  activeCompanyWritable = true
+  activeCompanyLegacyDefault = true
+  activeCompanyName = ""
+}
+
+export function setTenantScope(tenantId: string | null | undefined) {
+  activeTenantId = tenantId?.trim() || "local"
+  if (activeTenantId === "local") activeCompanyId = "local"
+}
+
+export function setCompanyScope(companyId: string | null | undefined, dataEpoch = 1) {
+  activeCompanyId = companyId?.trim() || activeTenantId
+  activeDataEpoch = Math.max(1, dataEpoch)
+}
+
+export function setCompanyWritable(writable: boolean) {
+  activeCompanyWritable = writable
+}
+
+export function setCompanyLegacyDefault(legacyDefault: boolean) {
+  activeCompanyLegacyDefault = legacyDefault
+}
+
+export function setCompanyDisplayName(name: string) {
+  activeCompanyName = name.trim()
+}
+
+export function isCompanyWritable() {
+  return activeCompanyWritable
+}
+
+function assertCompanyWritable() {
+  if (!activeCompanyWritable) throw new Error("Company diarsipkan dan hanya dapat dilihat atau diekspor")
+}
+
+export function getCompanyScope() {
+  return { tenantId: activeTenantId, companyId: activeCompanyId, dataEpoch: activeDataEpoch }
 }
 
 /** Current tenant partition, used to scope all client-side caches as well. */
 export function getDataScope() {
-  return activeScope
+  return `${activeTenantId}:${activeCompanyId}:${activeDataEpoch}`
 }
 
 /** The business identity must follow the active authenticated partition. */
 function currentBusinessId() {
-  return activeScope
+  return activeTenantId
+}
+
+function currentCompanyId() {
+  return activeCompanyId
 }
 
 export function scopedStorageKey(key: string): string {
-  return activeScope === "local" ? key : `jornal.${activeScope}.${key}`
+  return storageKeyForScope({ tenantId: activeTenantId, companyId: activeCompanyId, dataEpoch: activeDataEpoch }, key)
+}
+
+export function storageKeyForScope(scope: { tenantId: string; companyId: string; dataEpoch?: number }, key: string): string {
+  if (scope.tenantId === "local" && scope.companyId === "local") return key
+  // Preserve the v1 namespace only for the pre-migration compatibility scope.
+  if (scope.tenantId === scope.companyId) return `jornal.${scope.tenantId}.${key}`
+  return `jornal.v2.${scope.tenantId}.${scope.companyId}.${key}`
 }
 
 // ── Low-level helpers (SSR/private-mode safe) ──
@@ -153,6 +208,7 @@ function resolveVersionRecordsAsOf<T>(records: VersionRecord<T>[], asOf: string)
 export function emptyProfile(): BusinessProfile {
   return {
     businessId: currentBusinessId(),
+    companyId: currentCompanyId(),
     businessName: "",
     businessType: "INDIVIDUAL",
     pkpStatus: false,
@@ -184,15 +240,17 @@ function ensureProfileHistorySeed(profile: BusinessProfile) {
 }
 
 export function loadProfile(): BusinessProfile {
-  return read<BusinessProfile>(KEYS.profile, emptyProfile())
+  const profile = read<BusinessProfile>(KEYS.profile, emptyProfile())
+  return { ...profile, businessId: currentBusinessId(), companyId: currentCompanyId(), businessName: activeCompanyName || profile.businessName }
 }
 
 export function saveProfile(profile: BusinessProfile, event: FinancialEvent = "TAX_PROFILE_UPDATED") {
+  assertCompanyWritable()
   const timestamp = nowIso()
-  const nextProfile = { ...profile, businessId: currentBusinessId(), updatedAt: timestamp }
+  const nextProfile = { ...profile, businessId: currentBusinessId(), companyId: currentCompanyId(), updatedAt: timestamp }
   write(KEYS.profile, nextProfile)
   appendVersionRecord<BusinessProfile>(KEYS.profileHistory, {
-    id: currentBusinessId(),
+    id: currentCompanyId(),
     effectiveAt: timestamp,
     deletedAt: null,
     value: nextProfile,
@@ -216,6 +274,7 @@ export function loadAccounts(): Account[] {
 }
 
 export function saveAccounts(accounts: Account[]) {
+  assertCompanyWritable()
   const timestamp = nowIso()
   write(KEYS.accounts, accounts)
   for (const account of accounts) {
@@ -249,6 +308,7 @@ export function loadAccountHistory(): VersionRecord<Account>[] {
 }
 
 export function upsertAccount(account: Omit<Account, "id" | "createdAt" | "updatedAt"> & { id?: string }) {
+  assertCompanyWritable()
   const accounts = loadAccounts()
   const existingIndex = account.id ? accounts.findIndex((candidate) => candidate.id === account.id) : -1
   if (existingIndex >= 0) {
@@ -268,6 +328,11 @@ export function upsertAccount(account: Omit<Account, "id" | "createdAt" | "updat
 }
 
 export function deleteAccount(id: string) {
+  assertCompanyWritable()
+  if (loadTransactions().some((transaction) => transaction.accountId === id || transaction.transferAccountId === id)
+    || loadRecurringRules().some((rule) => rule.accountId === id)) {
+    throw new Error("Rekening masih digunakan oleh transaksi atau aturan berulang")
+  }
   const now = nowIso()
   const accounts = loadAccounts()
   const target = accounts.find((account) => account.id === id)
@@ -296,8 +361,12 @@ function persistTransactions(transactions: Transaction[]) {
 function normalizeTransaction(transaction: Transaction): Transaction {
   return {
     ...transaction,
+    businessId: currentBusinessId(),
+    companyId: currentCompanyId(),
     taxClassification: transaction.taxClassification ?? transaction.classification,
     attachmentDataUrl: transaction.attachmentDataUrl ?? null,
+    receivableTransactionId: transaction.receivableTransactionId ?? null,
+    receivableDueDate: transaction.receivableDueDate ?? null,
   }
 }
 
@@ -329,13 +398,20 @@ function appendTransactionVersion(transaction: Transaction, deletedAt: string | 
 }
 
 export function createTransaction(input: NewTransaction): Transaction {
+  return createTransactionRecord(input)
+}
+
+function createTransactionRecord(input: NewTransaction, stableId: string = newId()): Transaction {
+  assertCompanyWritable()
+  validateTransactionLinks(input)
   const timestamp = nowIso()
   const transaction: Transaction = {
     ...input,
     taxClassification: input.taxClassification ?? input.classification,
     attachmentDataUrl: input.attachmentDataUrl ?? null,
-    id: newId(),
+    id: stableId,
     businessId: currentBusinessId(),
+    companyId: currentCompanyId(),
     createdAt: timestamp,
     updatedAt: timestamp,
   }
@@ -355,10 +431,12 @@ export function createTransaction(input: NewTransaction): Transaction {
 }
 
 export function updateTransaction(id: string, patch: Partial<NewTransaction>): Transaction | null {
+  assertCompanyWritable()
   const transactions = loadTransactions()
   const index = transactions.findIndex((candidate) => candidate.id === id)
   if (index < 0) return null
   const before = transactions[index]
+  validateTransactionLinks({ ...before, ...patch }, id)
   const updated = normalizeTransaction({
     ...before,
     ...patch,
@@ -369,6 +447,10 @@ export function updateTransaction(id: string, patch: Partial<NewTransaction>): T
       : before.taxClassification ?? before.classification),
     updatedAt: nowIso(),
   })
+  if (before.classification === "RECEIVABLE_CREATED" && updated.classification !== "RECEIVABLE_CREATED"
+    && transactions.some((transaction) => transaction.id !== id && transaction.receivableTransactionId === id)) {
+    throw new Error("Piutang masih memiliki pembayaran terkait")
+  }
   transactions[index] = updated
   persistTransactions(transactions)
   appendTransactionVersion(updated)
@@ -387,10 +469,26 @@ export function updateTransaction(id: string, patch: Partial<NewTransaction>): T
   return updated
 }
 
+function validateTransactionLinks(transaction: Pick<Transaction, "accountId" | "transferAccountId" | "classification" | "receivableTransactionId">, editingId?: string) {
+  const accountIds = new Set(loadAccounts().map((account) => account.id))
+  if (transaction.accountId && !accountIds.has(transaction.accountId)) throw new Error("Rekening bukan milik company aktif")
+  if (transaction.transferAccountId && !accountIds.has(transaction.transferAccountId)) throw new Error("Rekening tujuan bukan milik company aktif")
+  if (transaction.classification === "RECEIVABLE_PAYMENT") {
+    const source = loadTransactions().find((item) => item.id !== editingId && item.id === transaction.receivableTransactionId)
+    if (!source || source.classification !== "RECEIVABLE_CREATED" || source.companyId !== currentCompanyId()) {
+      throw new Error("Piutang asal bukan milik company aktif")
+    }
+  }
+}
+
 export function deleteTransaction(id: string) {
+  assertCompanyWritable()
   const now = nowIso()
   const transactions = loadTransactions()
   const target = transactions.find((transaction) => transaction.id === id)
+  if (target?.classification === "RECEIVABLE_CREATED" && transactions.some((transaction) => transaction.receivableTransactionId === id)) {
+    throw new Error("Piutang masih memiliki pembayaran terkait")
+  }
   if (target) {
     appendTransactionVersion(target, now)
   }
@@ -446,6 +544,7 @@ export function recordCorrection(
   classification: Transaction["classification"],
   direction: Transaction["direction"],
 ) {
+  assertCompanyWritable()
   const token = patternToken(description)
   if (!token) return
   const corrections = loadCorrections()
@@ -473,11 +572,13 @@ export function recordCorrection(
 }
 
 export function deleteCorrection(id: string) {
+  assertCompanyWritable()
   write(KEYS.corrections, loadCorrections().filter((pattern) => pattern.id !== id))
   schedulePocketBaseSync()
 }
 
 export function clearCorrections() {
+  assertCompanyWritable()
   write(KEYS.corrections, [])
   schedulePocketBaseSync()
 }
@@ -516,6 +617,7 @@ function appendReserveVersion(reserve: Reserve, deletedAt: string | null = null)
 }
 
 export function createReserve(input: Omit<Reserve, "id" | "status" | "createdAt" | "updatedAt">): Reserve {
+  assertCompanyWritable()
   const timestamp = nowIso()
   const reserve: Reserve = {
     ...input,
@@ -532,6 +634,7 @@ export function createReserve(input: Omit<Reserve, "id" | "status" | "createdAt"
 }
 
 export function updateReserve(id: string, patch: Partial<Pick<Reserve, "name" | "amount" | "dueDate" | "status">>) {
+  assertCompanyWritable()
   const reserves = loadReserves()
   const index = reserves.findIndex((reserve) => reserve.id === id)
   if (index < 0) return null
@@ -544,6 +647,7 @@ export function updateReserve(id: string, patch: Partial<Pick<Reserve, "name" | 
 }
 
 export function removeReserve(id: string) {
+  assertCompanyWritable()
   const now = nowIso()
   const reserves = loadReserves()
   const target = reserves.find((reserve) => reserve.id === id)
@@ -568,6 +672,7 @@ function persistRecurringRules(rules: RecurringRule[]) {
 export function createRecurringRule(
   input: Omit<RecurringRule, "id" | "lastRun" | "createdCount" | "createdAt" | "updatedAt">,
 ): RecurringRule {
+  assertCompanyWritable()
   const timestamp = nowIso()
   const rule: RecurringRule = {
     ...input,
@@ -583,6 +688,7 @@ export function createRecurringRule(
 }
 
 export function updateRecurringRule(id: string, patch: Partial<Pick<RecurringRule, "autoCreate" | "amount" | "nextRun" | "description">>) {
+  assertCompanyWritable()
   const rules = loadRecurringRules()
   const index = rules.findIndex((rule) => rule.id === id)
   if (index < 0) return null
@@ -593,6 +699,7 @@ export function updateRecurringRule(id: string, patch: Partial<Pick<RecurringRul
 }
 
 export function deleteRecurringRule(id: string) {
+  assertCompanyWritable()
   persistRecurringRules(loadRecurringRules().filter((rule) => rule.id !== id))
   schedulePocketBaseSync()
 }
@@ -638,6 +745,7 @@ function addMonthsToIso(iso: string, months: number): string {
  * safe to call on every app start.
  */
 export function processRecurringRules(todayIso = todayIsoDate()): Transaction[] {
+  if (!activeCompanyWritable) return []
   const created: Transaction[] = []
   const rules = loadRecurringRules()
   let changed = false
@@ -645,11 +753,14 @@ export function processRecurringRules(todayIso = todayIsoDate()): Transaction[] 
     if (!rule.autoCreate) continue
     let guard = 0
     while (rule.nextRun <= todayIso && guard < 3) {
-      const createdTransaction = createTransaction({
+      const occurrenceDate = rule.nextRun
+      const occurrenceId = `recurring-${rule.id}-${occurrenceDate}`
+      const alreadyCreated = loadTransactions().some((transaction) => transaction.id === occurrenceId)
+      const createdTransaction = alreadyCreated ? null : createTransactionRecord({
         direction: rule.direction,
         amount: rule.amount,
         currency: "IDR",
-        transactionDate: rule.nextRun,
+        transactionDate: occurrenceDate,
         description: rule.description,
         notes: "Dibuat otomatis dari transaksi berulang",
         categoryId: rule.categoryId,
@@ -666,9 +777,9 @@ export function processRecurringRules(todayIso = todayIsoDate()): Transaction[] 
         classificationSource: "SYSTEM",
         classificationConfidence: 1,
         reviewStatus: "AUTO_ACCEPTED",
-      })
-      created.push(createdTransaction)
-      rule.lastRun = rule.nextRun
+      }, occurrenceId)
+      if (createdTransaction) created.push(createdTransaction)
+      rule.lastRun = occurrenceDate
       rule.nextRun = addMonthsToIso(rule.nextRun, 1)
       rule.createdCount += 1
       changed = true
@@ -687,6 +798,7 @@ export function loadSettings(): AppSettings {
 }
 
 export function saveSettings(settings: AppSettings) {
+  assertCompanyWritable()
   write(KEYS.settings, settings)
   schedulePocketBaseSync()
 }
@@ -697,11 +809,18 @@ export function isOnboarded(): boolean {
   return loadProfile().onboardingCompletedAt !== null
 }
 
-export async function resetAllData() {
+export async function resetAllData(options: { remoteAlreadyReset?: boolean } = {}) {
+  assertCompanyWritable()
   const cleanup: Promise<unknown>[] = []
   const resetKey = scopedStorageKey(RESET_PENDING_KEY)
-  try { window.localStorage.setItem(resetKey, new Date().toISOString()) } catch { notifyStorageWarning() }
-  cleanup.push(mirrorState(resetKey, new Date().toISOString()).catch(() => notifyStorageWarning()))
+  if (!options.remoteAlreadyReset) {
+    const resetAt = new Date().toISOString()
+    try { window.localStorage.setItem(resetKey, resetAt) } catch { notifyStorageWarning() }
+    cleanup.push(mirrorState(resetKey, resetAt).catch(() => notifyStorageWarning()))
+  } else {
+    try { window.localStorage.removeItem(resetKey) } catch { /* ignore */ }
+    cleanup.push(clearMirroredState(resetKey).catch(() => undefined))
+  }
   for (const key of Object.values(KEYS)) {
     const storageKey = scopedStorageKey(key)
     try {
@@ -711,7 +830,7 @@ export async function resetAllData() {
     }
     cleanup.push(clearMirroredState(storageKey).catch(() => undefined))
   }
-  const draftPrefix = activeScope === "local" ? "jornal.transaction-draft." : `jornal.${activeScope}.jornal.transaction-draft.`
+  const draftPrefix = scopedStorageKey("jornal.transaction-draft.")
   try {
     for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
       const key = window.localStorage.key(index)
@@ -722,13 +841,18 @@ export async function resetAllData() {
   cleanup.push(acknowledgeOutbox(Object.values(KEYS).map((key) => scopedStorageKey(key))).catch(() => undefined))
   emitFinancialEvent("TAX_PROFILE_UPDATED")
   await Promise.all(cleanup)
-  schedulePocketBaseSync()
+  if (!options.remoteAlreadyReset) schedulePocketBaseSync()
 }
 
 export interface LocalDataExport {
   format: "jornal-local-export"
-  version: 1
+  version: 1 | 2
   scope: string
+  tenantId?: string
+  companyId?: string
+  companyName?: string
+  dataEpoch?: number
+  schemaVersion?: number
   exportedAt: string
   data: Record<string, unknown>
 }
@@ -738,7 +862,7 @@ export function exportLocalData(): LocalDataExport {
   const data: Record<string, unknown> = {}
   for (const key of Object.values(KEYS)) data[key] = read<unknown>(key, null)
   try {
-    const prefix = activeScope === "local" ? "jornal.transaction-draft." : `jornal.${activeScope}.jornal.transaction-draft.`
+    const prefix = scopedStorageKey("jornal.transaction-draft.")
     for (let index = 0; index < window.localStorage.length; index += 1) {
       const key = window.localStorage.key(index)
       if (!key?.startsWith(prefix)) continue
@@ -746,7 +870,12 @@ export function exportLocalData(): LocalDataExport {
       if (raw) data[key] = JSON.parse(raw)
     }
   } catch { /* backups still include the core state when storage is restricted */ }
-  return { format: "jornal-local-export", version: 1, scope: activeScope, exportedAt: nowIso(), data }
+  return {
+    format: "jornal-local-export", version: 2, scope: getDataScope(),
+    tenantId: activeTenantId, companyId: activeCompanyId, companyName: activeCompanyName,
+    dataEpoch: activeDataEpoch, schemaVersion: 2,
+    exportedAt: nowIso(), data,
+  }
 }
 
 /**
@@ -755,15 +884,23 @@ export function exportLocalData(): LocalDataExport {
  * are intentionally not part of the export format.
  */
 export function importLocalData(candidate: unknown): { imported: number } {
+  assertCompanyWritable()
   if (!candidate || typeof candidate !== "object") throw new Error("File backup tidak valid")
   const envelope = candidate as Partial<LocalDataExport>
-  if (envelope.format !== "jornal-local-export" || envelope.version !== 1 || !envelope.data || typeof envelope.data !== "object") {
+  if (envelope.format !== "jornal-local-export" || ![1, 2].includes(Number(envelope.version)) || !envelope.data || typeof envelope.data !== "object") {
     throw new Error("Format backup Jornal tidak dikenali")
   }
-  if (envelope.scope !== activeScope) {
+  const sameV2Scope = envelope.version === 2
+    && envelope.scope === getDataScope()
+    && envelope.tenantId === activeTenantId
+    && envelope.companyId === activeCompanyId
+  const acceptsLegacy = envelope.version === 1
+    && activeCompanyLegacyDefault
+    && (envelope.scope === activeTenantId || envelope.scope === getDataScope())
+  if (!sameV2Scope && !acceptsLegacy) {
     throw new Error("Backup ini milik ruang data lain. Masuk ke akun yang sesuai lalu coba lagi.")
   }
-  const draftPrefix = activeScope === "local" ? "jornal.transaction-draft." : `jornal.${activeScope}.jornal.transaction-draft.`
+  const draftPrefix = scopedStorageKey("jornal.transaction-draft.")
   const entries = Object.entries(envelope.data).filter(([key]) =>
     Object.values(KEYS).includes(key as typeof KEYS[keyof typeof KEYS]) || key.startsWith(draftPrefix),
   )
@@ -779,6 +916,24 @@ export function importLocalData(candidate: unknown): { imported: number } {
         ? Array.isArray(value)
         : typeof value === "object" && !Array.isArray(value))
     if (!valid) throw new Error(`Data backup untuk ${storageKey} tidak valid`)
+  }
+  const data = envelope.data
+  const accounts = Array.isArray(data[KEYS.accounts]) ? data[KEYS.accounts] as Array<{ id?: unknown }> : []
+  const transactions = Array.isArray(data[KEYS.transactions]) ? data[KEYS.transactions] as Array<Record<string, unknown>> : []
+  const recurringRules = Array.isArray(data[KEYS.recurringRules]) ? data[KEYS.recurringRules] as Array<Record<string, unknown>> : []
+  const accountIds = new Set(accounts.map((account) => String(account.id ?? "")).filter(Boolean))
+  const transactionById = new Map(transactions.map((transaction) => [String(transaction.id ?? ""), transaction]))
+  for (const item of [...transactions, ...recurringRules]) {
+    for (const field of ["accountId", "transferAccountId"] as const) {
+      if (item[field] && !accountIds.has(String(item[field]))) throw new Error(`Referensi ${field} berada di luar company backup`)
+    }
+  }
+  for (const transaction of transactions) {
+    if (transaction.businessId && transaction.businessId !== activeTenantId) throw new Error("Transaksi pada backup dimiliki tenant lain")
+    if (transaction.companyId && transaction.companyId !== activeCompanyId) throw new Error("Transaksi pada backup berada di luar company aktif")
+    if (transaction.classification !== "RECEIVABLE_PAYMENT") continue
+    const source = transactionById.get(String(transaction.receivableTransactionId ?? ""))
+    if (!source || source.classification !== "RECEIVABLE_CREATED") throw new Error("Referensi piutang pada backup tidak valid")
   }
   for (const [storageKey, value] of entries) {
     const key = Object.entries(KEYS).find(([, valueKey]) => valueKey === storageKey)?.[0] as keyof typeof KEYS | undefined

@@ -5,6 +5,7 @@
 import { computeTaxOverview, revenueYTD, businessExpenseYTD, taxPaidYTD } from "./tax"
 import type { Account, BusinessProfile, ConfidenceStatus, Reserve, Transaction } from "./types"
 import { monthsElapsedThisYear, todayIsoDate } from "./format"
+import { assertSingleCompany } from "./company-scope"
 
 export interface SafeToSpendInput {
   transactions: Transaction[]
@@ -51,6 +52,7 @@ export function computeCashPosition(
   profile: BusinessProfile,
   asOfIso?: string,
 ): number {
+  assertSingleCompany(transactions, profile)
   let position = openingBalanceTotal(accounts, profile)
   const currentTransactions = asOfIso ? transactionsOnOrBefore(transactions, asOfIso) : transactions
   for (const transaction of currentTransactions) {
@@ -64,6 +66,7 @@ export function computeCashPosition(
       case "OWNER_WITHDRAWAL":
       case "ASSET_PURCHASE":
       case "LOAN_PAYMENT":
+      case "RECEIVABLE_CREATED":
       case "OTHER_OUTFLOW":
       case "OPERATING_EXPENSE":
         position -= transaction.amount
@@ -73,6 +76,7 @@ export function computeCashPosition(
       case "LOAN_RECEIVED":
       case "REFUND":
       case "OTHER_INCOME":
+      case "RECEIVABLE_PAYMENT":
         position += transaction.amount
         break
       case "UNKNOWN":

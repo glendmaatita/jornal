@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { Link } from "@tanstack/react-router"
 import { Plus, Trash2 } from "lucide-react"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { faBrain } from "@fortawesome/free-solid-svg-icons/faBrain"
@@ -13,10 +14,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
 import { TextField } from "@/components/ui/text-field"
 import { categoryName } from "@/lib/categories"
+import { activeCompany, resetCompany, updateCompany } from "@/lib/companies"
 import { parseAmountInput, formatNumberInput } from "@/lib/format"
 
 import { queryKeys, useAccounts, useCorrections, useProfile, useSettings, useTransactions } from "@/lib/queries"
-import { clearCorrections, deleteAccount, deleteCorrection, exportLocalData, importLocalData, resetAllData, saveProfile, saveSettings, upsertAccount } from "@/lib/store"
+import { clearCorrections, deleteAccount, deleteCorrection, exportLocalData, importLocalData, resetAllData, saveProfile, saveSettings, setCompanyScope, upsertAccount } from "@/lib/store"
 import { allowedTaxSchemes } from "@/lib/tax"
 import { BUSINESS_TYPE_LABELS, CLASSIFICATION_LABELS, type AccountType, type BusinessType } from "@/lib/types"
 
@@ -45,6 +47,7 @@ export function SettingsPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const [dataMessage, setDataMessage] = useState<string | null>(null)
   const [storageInfo, setStorageInfo] = useState<{ usage?: number; quota?: number } | null>(null)
+  const company = activeCompany()
 
   useEffect(() => {
     const estimate = navigator.storage?.estimate
@@ -59,7 +62,7 @@ export function SettingsPage() {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement("a")
     anchor.href = url
-    anchor.download = `jornal-backup-${new Date().toISOString().slice(0, 10)}.json`
+    anchor.download = `jornal-backup-${(company?.name ?? "company").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`
     document.body.append(anchor)
     anchor.click()
     anchor.remove()
@@ -104,14 +107,27 @@ export function SettingsPage() {
   }, [queryClient])
 
   useEffect(() => {
-    if (!profile) return
+    if (!profile || company?.status === "ARCHIVED") return
     if (!allowedSchemes.includes(profile.taxScheme)) {
       saveProfile({ ...profile, taxScheme: allowedSchemes[0] ?? "NOT_CALCULATED" })
       invalidate()
     }
-  }, [allowedSchemes, profile, invalidate])
+  }, [allowedSchemes, profile, invalidate, company?.status])
 
   if (!profile || !settings) return null
+
+  if (company?.status === "ARCHIVED") {
+    return (
+      <div className="space-y-4 pb-8">
+        <div><h1 className="text-xl tracking-tight">Pengaturan</h1><p className="text-sm text-muted-foreground">Company arsip hanya dapat dilihat dan diekspor.</p></div>
+        <Card><CardContent className="space-y-3 p-5">
+          <Link to="/companies" className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]">Kelola atau pulihkan company</Link>
+          <Button type="button" variant="outline" className="w-full" onClick={exportData}>Unduh backup {company.name}</Button>
+          {dataMessage && <p className="text-xs text-muted-foreground" role="status">{dataMessage}</p>}
+        </CardContent></Card>
+      </div>
+    )
+  }
 
   const commitProfile = (patch: Partial<typeof profile>) => {
     saveProfile({ ...profile, ...patch })
@@ -129,11 +145,19 @@ export function SettingsPage() {
       <Card>
         <CardContent className="space-y-4 p-5">
           <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faBuilding} className="size-4 text-primary" aria-hidden="true" />Profil Bisnis & Pajak</h2>
+          <Link to="/companies" className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]">Kelola dan tambah company</Link>
           <TextField
             label="Nama bisnis"
-            value={nameDraft ?? profile.businessName}
+            value={nameDraft ?? company?.name ?? profile.businessName}
             onChange={(value) => setNameDraft(value)}
-            onBlur={() => nameDraft !== null && commitProfile({ businessName: nameDraft.trim() })}
+            onBlur={() => {
+              if (nameDraft === null || !nameDraft.trim()) return
+              const nextName = nameDraft.trim()
+              if (!company) return
+              void updateCompany(company, { name: nextName }).then(() => {
+                commitProfile({ businessName: nextName })
+              }).catch(() => setDataMessage("Nama company gagal disimpan ke server."))
+            }}
           />
           <label className="block">
             <span className="field-label">Jenis usaha</span>
@@ -432,13 +456,17 @@ export function SettingsPage() {
           <button
             type="button"
             onClick={() => {
-              if (window.confirm("Hapus SEMUA data (profil, transaksi, akun, reserve)? Tindakan ini tidak bisa dibatalkan.")) {
-                void resetAllData().then(() => { window.location.href = "/onboarding" })
+              if (company && window.confirm(`Reset semua data company ${company.name}? Company lain tidak akan terpengaruh.`)) {
+                void resetCompany(company).then(async (updated) => {
+                  setCompanyScope(updated.id, updated.dataEpoch)
+                  await resetAllData({ remoteAlreadyReset: true })
+                  window.location.href = `/companies/${encodeURIComponent(updated.id)}/setup?company=${encodeURIComponent(updated.id)}`
+                }).catch((cause) => setDataMessage(cause instanceof Error ? cause.message : "Company gagal direset"))
               }
             }}
             className="w-full rounded-xl border border-destructive/40 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"
           >
-            Hapus semua data
+            Reset data company ini
           </button>
         </CardContent>
       </Card>

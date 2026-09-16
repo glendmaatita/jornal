@@ -8,7 +8,7 @@ import { TextField } from "@/components/ui/text-field"
 import { currentAccountBalance } from "@/lib/account-balance"
 import { formatDateShort, formatRupiah, formatSignedRupiah, parseAmountInput } from "@/lib/format"
 import { queryKeys, useAccounts, useProfile, useTransactions } from "@/lib/queries"
-import { deleteAccount, upsertAccount } from "@/lib/store"
+import { deleteAccount, isCompanyWritable, upsertAccount } from "@/lib/store"
 import { type AccountType } from "@/lib/types"
 import { useQueryClient } from "@tanstack/react-query"
 
@@ -29,6 +29,7 @@ export function AccountsPage() {
   const [type, setType] = useState<AccountType>("BANK")
   const [openingBalance, setOpeningBalance] = useState("")
   const selected = accounts.find((account) => account.id === search.account) ?? accounts[0] ?? null
+  const writable = isCompanyWritable()
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.accounts })
@@ -66,7 +67,7 @@ export function AccountsPage() {
         <p className="text-sm text-muted-foreground">Kelola rekening dan lihat mutasi uang masuk-keluar.</p>
       </div>
 
-      <Card>
+      {writable && <Card>
         <CardContent className="space-y-3 p-5">
           <h2 className="text-lg tracking-tight">Tambah rekening</h2>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -83,7 +84,7 @@ export function AccountsPage() {
             <p className="text-xs text-muted-foreground">Aktifkan “Lacak lokasi uang” di <Link to="/settings" className="font-semibold text-primary underline">Pengaturan</Link> agar saldo rekening masuk ke Safe To Spend.</p>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {accounts.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Belum ada rekening. Tambahkan rekening untuk mulai melihat mutasinya.</CardContent></Card>
@@ -105,7 +106,7 @@ export function AccountsPage() {
           <CardContent className="space-y-3 p-5">
             <div className="flex items-center justify-between gap-3">
               <div><h2 className="text-lg tracking-tight">Mutasi {selected.name}</h2><p className="text-xs text-muted-foreground">Saldo awal {formatRupiah(selected.openingBalance)}</p></div>
-              <Button variant="ghost" size="sm" aria-label={`Hapus ${selected.name}`} onClick={() => { if (window.confirm(`Hapus rekening ${selected.name}?`)) { deleteAccount(selected.id); invalidate() } }}><Trash2 className="size-4" aria-hidden="true" /></Button>
+              {writable && <Button variant="ghost" size="sm" aria-label={`Hapus ${selected.name}`} onClick={() => { if (window.confirm(`Hapus rekening ${selected.name}?`)) { deleteAccount(selected.id); invalidate() } }}><Trash2 className="size-4" aria-hidden="true" /></Button>}
             </div>
             {mutations.length === 0 ? <p className="rounded-xl bg-secondary/50 p-4 text-sm text-muted-foreground">Belum ada mutasi untuk rekening ini.</p> : (
               <div className="divide-y divide-border/50">

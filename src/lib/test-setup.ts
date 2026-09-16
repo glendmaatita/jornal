@@ -38,6 +38,7 @@ export const localStorageShim = {
   setItem: (key: string, value: string) => void memoryStorage.set(key, value),
   removeItem: (key: string) => void memoryStorage.delete(key),
   clear: () => memoryStorage.clear(),
+  key: (index: number) => [...memoryStorage.keys()][index] ?? null,
   get length() {
     return memoryStorage.size
   },

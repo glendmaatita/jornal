@@ -21,6 +21,7 @@ import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent } from "@/components/ui/card"
 import { formatRupiah, formatSignedRupiah, todayIsoDate } from "@/lib/format"
 import { useAccounts, useProfile, useReserves, useTransactions } from "@/lib/queries"
+import { receivablesFromTransactions } from "@/lib/receivables"
 import { computeSafeToSpend } from "@/lib/safe-to-spend"
 import { computeTaxOverview, businessExpenseYTD, revenueYTD, taxPaidYTD } from "@/lib/tax"
 import { monthsElapsedThisYear } from "@/lib/format"
@@ -40,6 +41,7 @@ export function HomePage() {
   )
   const recent = useMemo(() => [...transactions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5), [transactions])
   const needsReview = useMemo(() => transactions.filter((transaction) => transaction.reviewStatus === "NEEDS_REVIEW"), [transactions])
+  const outstandingReceivables = useMemo(() => receivablesFromTransactions(transactions).reduce((sum, item) => sum + item.outstanding, 0), [transactions])
 
   // §64 P1 — reserve due reminders on Home
   const dueReserves = useMemo(() => {
@@ -124,6 +126,13 @@ export function HomePage() {
               </div>
             </CardContent>
           </Card>
+        </Link>
+      )}
+
+      {outstandingReceivables > 0 && (
+        <Link to="/receivables" className="flex items-center justify-between rounded-xl border border-[#df1769]/20 bg-[#fff1f7] px-4 py-3 text-sm">
+          <span><strong className="text-[#8c1249]">Piutang berjalan</strong><span className="ml-2 text-muted-foreground">Uang yang masih harus dikembalikan</span></span>
+          <strong className="shrink-0 text-[#8c1249]">{formatRupiah(outstandingReceivables)}</strong>
         </Link>
       )}
 

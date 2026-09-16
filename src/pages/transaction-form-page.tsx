@@ -17,17 +17,18 @@ import {
   suggestFromPatterns,
   DEFAULT_THRESHOLDS,
 } from "@/lib/classification"
-import { formatDateShort, formatNumberInput, parseNumberValue, todayIsoDate } from "@/lib/format"
+import { formatDateShort, formatNumberInput, formatRupiah, parseNumberValue, todayIsoDate } from "@/lib/format"
 import { parseTransactionInput } from "@/lib/nlp"
 import { queryKeys, useAccounts, useCorrections, useSettings, useTransactions } from "@/lib/queries"
 import { createTransaction, updateTransaction } from "@/lib/store"
 import type { ClassificationSource, TransactionClassification, TransactionDirection } from "@/lib/types"
 import { CLASSIFICATION_LABELS } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { activeCompany } from "@/lib/companies"
 import { scopedStorageKey } from "@/lib/store"
 import { clearMirroredState, mirrorState, restoreState } from "@/lib/local-db"
 
-type Mode = "money_in" | "money_out" | "transfer"
+type Mode = "money_in" | "money_out" | "receivable" | "transfer"
 
 const RichTextField = lazy(() => import("@/components/ui/rich-text-field").then((module) => ({ default: module.RichTextField })))
 
@@ -47,10 +48,16 @@ export function TransactionFormPage() {
   const { data: settings } = useSettings()
 
   const editing = useMemo(() => transactions.find((transaction) => transaction.id === transactionId) ?? null, [transactions, transactionId])
+  const receivableIdFromUrl = new URLSearchParams(window.location.search).get("receivable")
+  const repaymentSource = useMemo(
+    () => receivableIdFromUrl && receivableIdFromUrl !== "new" ? transactions.find((transaction) => transaction.id === receivableIdFromUrl && transaction.classification === "RECEIVABLE_CREATED") ?? null : null,
+    [receivableIdFromUrl, transactions],
+  )
   const thresholds = settings ?? DEFAULT_THRESHOLDS
 
   const [mode, setMode] = useState<Mode>(() => {
     const direction = new URLSearchParams(window.location.search).get("direction")
+    if (new URLSearchParams(window.location.search).get("receivable") === "new") return "receivable"
     return direction === "MONEY_IN" ? "money_in" : direction === "MONEY_OUT" ? "money_out" : "money_out"
   })
   const [amount, setAmount] = useState("")
@@ -66,9 +73,10 @@ export function TransactionFormPage() {
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
   const [attachmentDataUrl, setAttachmentDataUrl] = useState<string | null>(null)
   const [attachmentRemoved, setAttachmentRemoved] = useState(false)
-  const [showMore, setShowMore] = useState(false)
+  const [showMore, setShowMore] = useState(() => new URLSearchParams(window.location.search).get("receivable") === "new")
   const [captureRequested, setCaptureRequested] = useState(false)
   const [classificationOverride, setClassificationOverride] = useState<TransactionClassification | null>(null)
+  const [receivableDueDate, setReceivableDueDate] = useState<string | null>(null)
   const [smartText, setSmartText] = useState("")
   const [showSmart, setShowSmart] = useState(false)
   const [loadedId, setLoadedId] = useState<string | null>(null)
@@ -90,7 +98,7 @@ export function TransactionFormPage() {
           mode: Mode; amount: string; description: string; transactionDate: string; categoryId: string | null
           accountId: string | null; transferAccountId: string | null; paymentMethod: string; supplierCustomer: string
           tags: string; notes: string; attachmentName: string | null; attachmentDataUrl: string | null
-          classificationOverride: TransactionClassification | null
+          classificationOverride: TransactionClassification | null; receivableDueDate: string | null
         }> | null) => {
       if (!draft || !active) return
       if (draft.mode) setMode(draft.mode)
@@ -107,12 +115,13 @@ export function TransactionFormPage() {
       if ("attachmentName" in draft) setAttachmentName(draft.attachmentName ?? null)
       if ("attachmentDataUrl" in draft) setAttachmentDataUrl(draft.attachmentDataUrl ?? null)
       if ("classificationOverride" in draft) setClassificationOverride(draft.classificationOverride ?? null)
+      if ("receivableDueDate" in draft) setReceivableDueDate(draft.receivableDueDate ?? null)
     }
     void (async () => {
       try {
         const raw = window.localStorage.getItem(draftKey)
         if (raw) restoreDraft(JSON.parse(raw))
-        else restoreDraft(await restoreState(draftKey).catch(() => null) as Partial<{ mode: Mode; amount: string; description: string; transactionDate: string; categoryId: string | null; accountId: string | null; transferAccountId: string | null; paymentMethod: string; supplierCustomer: string; tags: string; notes: string; attachmentName: string | null; attachmentDataUrl: string | null; classificationOverride: TransactionClassification | null }> | null)
+        else restoreDraft(await restoreState(draftKey).catch(() => null) as Partial<{ mode: Mode; amount: string; description: string; transactionDate: string; categoryId: string | null; accountId: string | null; transferAccountId: string | null; paymentMethod: string; supplierCustomer: string; tags: string; notes: string; attachmentName: string | null; attachmentDataUrl: string | null; classificationOverride: TransactionClassification | null; receivableDueDate: string | null }> | null)
       } catch {
         window.localStorage.removeItem(draftKey)
       } finally {
@@ -121,6 +130,14 @@ export function TransactionFormPage() {
     })()
     return () => { active = false }
   }, [draftKey])
+  /* eslint-disable react-hooks/set-state-in-effect -- prefill a repayment from its selected receivable */
+  useEffect(() => {
+    if (!repaymentSource || editing) return
+    setMode("money_in")
+    setDescription((current) => current || `Pelunasan piutang: ${repaymentSource.supplierCustomer || repaymentSource.description}`)
+    setSupplierCustomer((current) => current || repaymentSource.supplierCustomer)
+  }, [repaymentSource, editing])
+  /* eslint-enable react-hooks/set-state-in-effect */
   /* eslint-disable react-hooks/set-state-in-effect -- consume validated shortcut/share intent once */
   useEffect(() => {
     if (editing) return
@@ -153,7 +170,7 @@ export function TransactionFormPage() {
     const draft = {
         mode, amount, description, transactionDate, categoryId, accountId, transferAccountId,
         paymentMethod, supplierCustomer, tags, notes, attachmentName, attachmentDataUrl,
-        classificationOverride,
+        classificationOverride, receivableDueDate,
       }
     try {
       window.localStorage.setItem(draftKey, JSON.stringify(draft))
@@ -161,12 +178,13 @@ export function TransactionFormPage() {
     } catch {
       // Save still reports its own durable result; draft persistence is best effort.
     }
-  }, [draftKey, editing, mode, amount, description, transactionDate, categoryId, accountId, transferAccountId, paymentMethod, supplierCustomer, tags, notes, attachmentName, attachmentDataUrl, classificationOverride])
+  }, [draftKey, editing, mode, amount, description, transactionDate, categoryId, accountId, transferAccountId, paymentMethod, supplierCustomer, tags, notes, attachmentName, attachmentDataUrl, classificationOverride, receivableDueDate])
 
   // Load the transaction being edited — adapted during render (no effect needed)
   if (editing && editing.id !== loadedId) {
     setLoadedId(editing.id)
     setMode(editing.classification === "INTERNAL_TRANSFER" ? "transfer" : editing.direction === "MONEY_IN" ? "money_in" : "money_out")
+    if (editing.classification === "RECEIVABLE_CREATED") setMode("receivable")
     setAmount(editing.amount > 0 ? formatNumberInput(editing.amount) : "")
     setDescription(editing.description)
     setTransactionDate(editing.transactionDate)
@@ -180,20 +198,35 @@ export function TransactionFormPage() {
     setAttachmentName(editing.attachmentName)
     setAttachmentDataUrl(editing.attachmentDataUrl)
     setAttachmentRemoved(false)
+    setReceivableDueDate(editing.receivableDueDate ?? null)
     if (editing.classificationSource === "USER") setClassificationOverride(editing.classification)
   }
 
-  const direction: TransactionDirection = mode === "money_in" ? "MONEY_IN" : "MONEY_OUT"
+  const isReceivableCreation = mode === "receivable"
+  const isReceivablePayment = Boolean(repaymentSource) || editing?.classification === "RECEIVABLE_PAYMENT"
+  const repaymentRemaining = useMemo(() => {
+    const sourceId = repaymentSource?.id ?? editing?.receivableTransactionId
+    if (!sourceId) return null
+    const source = transactions.find((transaction) => transaction.id === sourceId)
+    if (!source) return null
+    const paid = transactions
+      .filter((transaction) => transaction.id !== editing?.id && transaction.classification === "RECEIVABLE_PAYMENT" && transaction.receivableTransactionId === sourceId)
+      .reduce((sum, transaction) => sum + transaction.amount, 0)
+    return Math.max(0, source.amount - paid)
+  }, [repaymentSource, editing?.id, editing?.receivableTransactionId, transactions])
+  const direction: TransactionDirection = mode === "money_in" || isReceivablePayment ? "MONEY_IN" : "MONEY_OUT"
 
   // Live auto-classification (§21–23): learned patterns first, then rules
   const suggestion = useMemo(() => {
     if (mode === "transfer") {
       return { categoryId: null, classification: "INTERNAL_TRANSFER" as const, confidence: 1, source: "USER" as const, businessRelevance: "NON_BUSINESS" as const }
     }
+    if (isReceivableCreation) return { categoryId: null, classification: "RECEIVABLE_CREATED" as const, confidence: 1, source: "USER" as const, businessRelevance: "NON_BUSINESS" as const }
+    if (isReceivablePayment) return { categoryId: null, classification: "RECEIVABLE_PAYMENT" as const, confidence: 1, source: "USER" as const, businessRelevance: "NON_BUSINESS" as const }
     const learned = suggestFromPatterns(description, direction, corrections)
     if (learned) return learned
     return classifyTransaction(description, direction)
-  }, [description, direction, corrections, mode])
+  }, [description, direction, corrections, mode, isReceivableCreation, isReceivablePayment])
 
   const effectiveClassification: TransactionClassification =
     classificationOverride ?? suggestion.classification
@@ -213,8 +246,12 @@ export function TransactionFormPage() {
     mode === "transfer" && (!selectedAccountId || !selectedTransferAccountId || selectedAccountId === selectedTransferAccountId)
       ? "Pilih akun asal dan tujuan yang berbeda."
       : undefined
-  const descriptionError = mode !== "transfer" && !description.trim() ? "Keterangan membantu sistem mengklasifikasi transaksi." : undefined
-  const canSave = !amountError && !transferError && !descriptionError
+  const descriptionError = mode !== "transfer" && !description.trim() ? "Keterangan wajib diisi." : undefined
+  const debtorError = isReceivableCreation && !supplierCustomer.trim() ? "Masukkan nama orang yang meminjam." : undefined
+  const repaymentError = isReceivablePayment && repaymentRemaining !== null && amountValue > repaymentRemaining
+    ? `Pembayaran melebihi sisa piutang (${formatNumberInput(repaymentRemaining)}).`
+    : undefined
+  const canSave = !amountError && !transferError && !descriptionError && !debtorError && !repaymentError
 
   useEffect(() => {
     if (!showErrors) return
@@ -282,6 +319,8 @@ export function TransactionFormPage() {
         classificationSource: effectiveSource,
         classificationConfidence: effectiveConfidence,
         reviewStatus,
+        receivableTransactionId: isReceivablePayment ? (repaymentSource?.id ?? editing?.receivableTransactionId ?? null) : null,
+        receivableDueDate: isReceivableCreation ? receivableDueDate : null,
       } as const
 
       if (editing) {
@@ -327,7 +366,7 @@ export function TransactionFormPage() {
           <ArrowLeft aria-hidden="true" />
           Kembali
         </Button>
-        <span className="text-xs text-muted-foreground">{editing ? "Ubah transaksi" : "Transaksi baru"}</span>
+        <span className="text-right text-xs text-muted-foreground">{editing ? "Ubah transaksi" : "Transaksi baru"}<br />{activeCompany()?.name}</span>
       </div>
 
       {!editing && (
@@ -357,7 +396,7 @@ export function TransactionFormPage() {
       )}
 
       {/* Transaction type (§12) */}
-      <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <button
           type="button"
           onClick={() => {
@@ -393,6 +432,23 @@ export function TransactionFormPage() {
         <button
           type="button"
           onClick={() => {
+            setMode("receivable")
+            setClassificationOverride("RECEIVABLE_CREATED")
+            setCategoryId(null)
+            setShowMore(true)
+          }}
+          className={cn(
+            "rounded-[10px] border py-3 text-sm font-semibold transition-colors",
+            mode === "receivable"
+              ? "border-[#df1769] bg-[#df1769] text-white shadow-sm"
+              : "border-border bg-white text-[var(--body-text)]",
+          )}
+        >
+          Piutang
+        </button>
+        <button
+          type="button"
+          onClick={() => {
             setMode("transfer")
             setClassificationOverride(null)
             setCategoryId(null)
@@ -408,6 +464,12 @@ export function TransactionFormPage() {
         </button>
       </div>
 
+      {isReceivablePayment && repaymentSource && (
+        <div className="mb-4 rounded-[10px] border border-[#df1769]/25 bg-[#fff1f7] p-3 text-sm text-[#8c1249]">
+          Mencatat pelunasan dari <strong>{repaymentSource.supplierCustomer || repaymentSource.description}</strong>. Sisa piutang {formatRupiah(repaymentRemaining ?? repaymentSource.amount)}. Ini bukan omzet.
+        </div>
+      )}
+
       <Card>
         <form onSubmit={(event) => { event.preventDefault(); submit() }}>
         <CardContent className="space-y-4 p-4">
@@ -422,7 +484,7 @@ export function TransactionFormPage() {
               setAmount(value)
               setShowErrors(false)
             }}
-            error={showErrors ? amountError : undefined}
+            error={showErrors ? amountError ?? repaymentError : undefined}
             hint="Nominal transaksi"
             autoFocus
           />
@@ -475,8 +537,17 @@ export function TransactionFormPage() {
             onChange={setTransactionDate}
           />
 
+          {isReceivableCreation && (
+            <DateField
+              label="Jatuh tempo (opsional)"
+              value={receivableDueDate ?? ""}
+              onChange={(value) => setReceivableDueDate(value || null)}
+              hint="Tanggal yang disepakati untuk mengembalikan uang"
+            />
+          )}
+
           {/* Classification preview (§22–23) */}
-          {mode !== "transfer" && (
+          {mode !== "transfer" && !isReceivableCreation && !isReceivablePayment && (
             <div className="rounded-[10px] bg-[#f1f5fd] p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className={reviewStatusMeta[reviewStatus].className}>{reviewStatusMeta[reviewStatus].label}</Badge>
@@ -502,7 +573,7 @@ export function TransactionFormPage() {
 
           {showMore && (
             <div className="space-y-3 rounded-[10px] bg-[#f1f5fd] p-3">
-              {mode !== "transfer" && (
+              {mode !== "transfer" && !isReceivableCreation && !isReceivablePayment && (
                 <>
                   <label className="block">
                     <span className="field-label !mb-1 !text-xs">Kategori</span>
@@ -575,9 +646,10 @@ export function TransactionFormPage() {
                 label="Supplier / Customer"
                 value={supplierCustomer}
                 onChange={setSupplierCustomer}
-                placeholder="Nama supplier atau pelanggan"
+                placeholder={isReceivableCreation ? "Nama orang yang meminjam" : "Nama supplier atau pelanggan"}
                 list={supplierCustomerListId}
               />
+              {showErrors && debtorError && <p className="field-error">{debtorError}</p>}
               <datalist id={supplierCustomerListId}>
                 {supplierCustomerOptions.map((value) => (
                   <option key={value} value={value} />

@@ -25,21 +25,20 @@ docker run -p 3000:3000 -v jornal-pb-data:/pb/pb_data \
 - Admin dashboard: `http://127.0.0.1:8090/_/` (needs `-p 8090:8090` and the
   `POCKETBASE_SUPERUSER_*` env vars, which upsert the superuser on startup)
 
-## Required collection
+## Schema and data isolation
 
-Create one collection named `jornal_records` with these fields:
+Do not create collections manually. PocketBase applies the versioned files in
+`pb_migrations` on boot. The current schema contains:
 
-- `business_id` — text
-- `entity` — text
-- `app_id` — text
-- `payload` — json
-- `revision` — number (monotonic sync version)
-- `deleted_at` — date (nullable tombstone timestamp)
+- `companies`: tenant-owned company catalog and lifecycle state;
+- `jornal_records`: company-scoped ledger envelope with revision and data epoch;
+- `company_audit`: private lifecycle audit trail.
 
-Recommended constraints:
-
-- unique index on `app_id` + `entity` + `business_id`
-- open read/write rules only for your private instance, or add auth before exposing it publicly
+Every ledger request from the current client uses protocol `2` and an explicit
+company scope. Collection rules and request hooks enforce tenant ownership,
+company status, immutable identity, revision, epoch, file access, and
+cross-record references. Raw public company create/update/delete is disabled;
+use the `/api/jornal/companies/*` endpoints.
 
 ## Frontend env
 
@@ -63,6 +62,21 @@ bundle at image build time. For this single-container image, keep the default
 ```bash
 docker build --build-arg VITE_POCKETBASE_URL=/pb -t jornal .
 ```
+
+Multi-company creation has two independent rollout gates. The frontend value
+is compiled into the image; the backend value is read at runtime:
+
+```bash
+docker build \
+  --build-arg VITE_POCKETBASE_URL=/pb \
+  --build-arg VITE_MULTI_COMPANY_ENABLED=true \
+  -t jornal .
+
+docker run -e JORNAL_MULTI_COMPANY_ENABLED=true ... jornal
+```
+
+Setting both flags to `false` pauses creation of company tambahan. Initial
+onboarding and access to companies already created continue to work.
 
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and the optional
 `POCKETBASE_SUPERUSER_*` values are runtime variables. Pass them as secrets

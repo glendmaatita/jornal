@@ -99,9 +99,12 @@ export function useSafeToSpendResult() {
   const { data: accounts = [] } = useAccounts()
   const { data: reserves = [] } = useReserves()
   const { data: profile } = useProfile()
+  const transactionVersion = transactions.map((item) => `${item.id}:${item.updatedAt}`).join("|")
+  const accountVersion = accounts.map((item) => `${item.id}:${item.updatedAt}:${item.openingBalance}`).join("|")
+  const reserveVersion = reserves.map((item) => `${item.id}:${item.updatedAt}:${item.status}`).join("|")
 
   return useQuery({
-    queryKey: [...queryKeys.transactions, "safe-to-spend", profile?.updatedAt ?? "", accounts.length, reserves.length],
+    queryKey: [...queryKeys.transactions, "safe-to-spend", profile?.updatedAt ?? "", transactionVersion, accountVersion, reserveVersion],
     queryFn: () => {
       if (!profile) return null
       return computeSafeToSpend({ transactions, accounts, profile, reserves })

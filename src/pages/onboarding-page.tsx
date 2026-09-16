@@ -1,12 +1,14 @@
 import { useState } from "react"
-import { useNavigate } from "@tanstack/react-router"
 import { ArrowRight, Check, Wallet } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { DateField } from "@/components/ui/date-field"
 import { TextField } from "@/components/ui/text-field"
 import { parseAmountInput } from "@/lib/format"
-import { emptyProfile, saveProfile, upsertAccount } from "@/lib/store"
+import { consumeCompanyCreationReturn, createCompanyWithSetup, loadCachedCompanies } from "@/lib/companies"
+import { pb } from "@/lib/pb"
+import { initializePocketBaseSync, resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
+import { emptyProfile, setCompanyScope, setTenantScope } from "@/lib/store"
 import { allowedTaxSchemes } from "@/lib/tax"
 import { BUSINESS_TYPE_LABELS, type BusinessType, type TaxScheme } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -48,7 +50,6 @@ const DEFAULT_ACCOUNTS = [
 ]
 
 export function OnboardingPage() {
-  const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [businessName, setBusinessName] = useState("")
   const [businessType, setBusinessType] = useState<BusinessType>("INDIVIDUAL")
@@ -58,8 +59,21 @@ export function OnboardingPage() {
   const [useAccountTracking, setUseAccountTracking] = useState(true)
   const [openingBalance, setOpeningBalance] = useState("")
   const [accountBalances, setAccountBalances] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [creationKey] = useState(() => {
+    const key = `jornal.company-setup-key.${window.location.pathname}`
+    const existing = window.sessionStorage.getItem(key)
+    if (existing) return existing
+    const created = crypto.randomUUID()
+    window.sessionStorage.setItem(key, created)
+    return created
+  })
   const allowedSchemes = allowedTaxSchemes(businessType)
   const selectedTaxScheme = allowedSchemes.includes(taxScheme) ? taxScheme : allowedSchemes[0] ?? "NOT_CALCULATED"
+  const duplicateName = businessName.trim().length > 0 && loadCachedCompanies().some((company) =>
+    company.name.localeCompare(businessName.trim(), "id", { sensitivity: "accent" }) === 0,
+  )
 
   const changeBusinessType = (type: BusinessType) => {
     setBusinessType(type)
@@ -67,41 +81,67 @@ export function OnboardingPage() {
     setTaxScheme((current) => (nextAllowed.includes(current) ? current : nextAllowed[0] ?? "NOT_CALCULATED"))
   }
 
-  const finish = () => {
+  const finish = async () => {
+    if (saving) return
+    setSaving(true)
+    setError("")
+    const now = new Date().toISOString()
     const profile = {
       ...emptyProfile(),
-      businessName: businessName.trim() || "Bisnis Saya",
+      businessName: businessName.trim(),
       businessType,
       businessStartDate: businessStartDate || null,
-      taxScheme,
+      taxScheme: selectedTaxScheme,
       pkpStatus,
       useAccountTracking,
       openingBalance: useAccountTracking ? 0 : parseAmountInput(openingBalance),
       onboardingCompletedAt: new Date().toISOString(),
     }
-    saveProfile(profile)
-
-    if (useAccountTracking) {
-      for (const account of DEFAULT_ACCOUNTS) {
-        upsertAccount({
+    const accounts = useAccountTracking
+      ? DEFAULT_ACCOUNTS.map((account) => ({
+          id: crypto.randomUUID(),
           name: account.name,
           type: account.type,
           openingBalance: parseAmountInput(accountBalances[account.name] ?? ""),
           includedInCash: true,
-        })
-      }
-    }
-    let pendingRoute = ""
+          createdAt: now,
+          updatedAt: now,
+        }))
+      : []
     try {
-      pendingRoute = window.sessionStorage.getItem("jornal.pending-route") ?? ""
-      window.sessionStorage.removeItem("jornal.pending-route")
-    } catch { /* continue to home when session storage is unavailable */ }
-    if (pendingRoute.startsWith("/")) window.location.assign(pendingRoute)
-    else void navigate({ to: "/" })
+      const company = await createCompanyWithSetup({
+        name: profile.businessName,
+        creationKey,
+        requestId: crypto.randomUUID(),
+        initialSetup: window.location.pathname === "/onboarding",
+        companyId: window.location.pathname.match(/^\/companies\/([^/]+)\/setup$/)?.[1],
+        profile,
+        accounts,
+      })
+      setTenantScope(pb.authStore.record?.id)
+      setCompanyScope(company.id, company.dataEpoch)
+      resetPocketBaseSyncState()
+      await initializePocketBaseSync()
+      window.sessionStorage.removeItem(`jornal.company-setup-key.${window.location.pathname}`)
+      let pendingRoute = ""
+      try {
+        pendingRoute = window.sessionStorage.getItem("jornal.pending-route") ?? ""
+        window.sessionStorage.removeItem("jornal.pending-route")
+      } catch { /* continue to home when session storage is unavailable */ }
+      const destination = window.location.pathname === "/companies/new" ? "/" : pendingRoute.startsWith("/") ? pendingRoute : "/"
+      const separator = destination.includes("?") ? "&" : "?"
+      window.location.assign(`${destination}${separator}company=${encodeURIComponent(company.id)}`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Company gagal dibuat. Coba lagi.")
+      setSaving(false)
+    }
   }
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8">
+      {window.location.pathname === "/companies/new" && (
+        <button type="button" className="mb-5 text-sm font-semibold text-[var(--link)]" onClick={() => window.location.assign(consumeCompanyCreationReturn() ?? "/companies")}>Batal dan kembali</button>
+      )}
       <div className="mb-8 flex items-center justify-center gap-2">
         {[0, 1, 2].map((index) => (
           <span
@@ -119,7 +159,14 @@ export function OnboardingPage() {
             Cukup catat uang masuk dan keluar — sisanya (klasifikasi, omzet, pajak) dihitung sistem.
           </p>
           <div className="mt-6 space-y-4">
-            <TextField label="Nama bisnis" value={businessName} onChange={setBusinessName} placeholder="Kedai Kopi Senja" />
+            <TextField
+              label="Nama bisnis"
+              value={businessName}
+              onChange={setBusinessName}
+              placeholder="Kedai Kopi Senja"
+              hint={duplicateName ? "Nama ini sudah dipakai company lain. Anda tetap boleh melanjutkan." : undefined}
+              required
+            />
             <fieldset>
               <legend className="field-label">Jenis usaha</legend>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -142,7 +189,7 @@ export function OnboardingPage() {
             </fieldset>
             <DateField label="Tanggal mulai usaha" value={businessStartDate} onChange={setBusinessStartDate} />
           </div>
-          <Button className="mt-7 w-full" size="lg" onClick={() => setStep(1)}>
+          <Button className="mt-7 w-full" size="lg" onClick={() => setStep(1)} disabled={!businessName.trim()}>
             Lanjut
             <ArrowRight aria-hidden="true" />
           </Button>
@@ -246,11 +293,12 @@ export function OnboardingPage() {
             <Button variant="outline" size="lg" className="flex-1" onClick={() => setStep(1)}>
               Kembali
             </Button>
-            <Button className="flex-1" size="lg" onClick={finish}>
+            <Button className="flex-1" size="lg" onClick={() => void finish()} disabled={saving}>
               <Wallet aria-hidden="true" />
-              Mulai mencatat
+              {saving ? "Membuat company…" : "Mulai mencatat"}
             </Button>
           </div>
+          {error && <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>}
         </section>
       )}
     </div>
