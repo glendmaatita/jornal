@@ -1,7 +1,7 @@
 import type { Account, AppSettings, BusinessProfile, CompanyScope, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
 import { getCompanyScope, KEYS, RESET_PENDING_KEY, scopedStorageKey, storageKeyForScope } from "./store"
 import { pb } from "./pb"
-import { acknowledgeOutboxSnapshots, clearMirroredState, listOutbox, mirrorState, restoreState } from "./local-db"
+import { acknowledgeOutbox, acknowledgeOutboxSnapshots, clearMirroredState, listOutbox, mirrorState, persistState, restoreState } from "./local-db"
 
 type EntityName =
   | "profile"
@@ -68,6 +68,7 @@ export interface SyncConflict {
   appId?: string
   localPayload?: unknown
   remotePayload?: unknown
+  remoteRevision?: number
   occurredAt: string
 }
 interface ScopeRuntime {
@@ -127,36 +128,73 @@ function setSyncStatus(status: SyncStatus, scope = companyScope()) {
   if (sameScope(scope)) for (const listener of syncStatusListeners) listener(status)
 }
 
-export function loadSyncConflicts(): SyncConflict[] {
+export function loadSyncConflicts(scope = companyScope()): SyncConflict[] {
   try {
-    const raw = window.localStorage.getItem(scopedStorageKey(KEYS.syncConflicts))
+    const raw = window.localStorage.getItem(storageKeyForScope(scope, KEYS.syncConflicts))
     return raw ? JSON.parse(raw) as SyncConflict[] : []
   } catch { return [] }
 }
 
-export function resolveSyncConflict(id: string, choice: "local" | "remote") {
-  const conflict = loadSyncConflicts().find((item) => item.id === id)
+export async function resolveSyncConflict(id: string, choice: "local" | "remote") {
+  const scope = companyScope()
+  const conflict = loadSyncConflicts(scope).find((item) => item.id === id)
   if (!conflict || !conflict.entity) return false
-  const key = entityKey(conflict.entity as EntityName)
-  const current = localJson<unknown>(key, null)
+  const entity = conflict.entity as EntityName
+  const key = entityKey(entity)
+  const storageKey = storageKeyForScope(scope, key)
+  const current = localJson<unknown>(key, null, scope)
   const currentLocalValue = Array.isArray(current) && conflict.appId
     ? current.find((item) => item && typeof item === "object" && (item as { id?: string }).id === conflict.appId)
     : current
-  const selected = choice === "remote" ? conflict.remotePayload : currentLocalValue ?? conflict.localPayload
+  let remotePayload = conflict.remotePayload
+  let remoteRevision = conflict.remoteRevision
+  if (conflict.appId) {
+    try {
+      const live = (await listRecords(entity, conflict.appId, scope)).find((record) => record.app_id === conflict.appId)
+      if (live) {
+        remotePayload = live.payload
+        remoteRevision = Number(live.revision || 0)
+      }
+    } catch {
+      // Keep the conflict until the current server revision can be verified.
+      return false
+    }
+  }
+  const selected = choice === "remote" ? remotePayload : currentLocalValue ?? conflict.localPayload
   if (selected === undefined) return false
+  const remoteUpdatedAt = remotePayload && typeof remotePayload === "object"
+    ? Date.parse(String((remotePayload as { updatedAt?: unknown }).updatedAt ?? ""))
+    : Number.NaN
+  const resolutionTime = new Date(Math.max(Date.now(), Number.isFinite(remoteUpdatedAt) ? remoteUpdatedAt + 1 : 0)).toISOString()
   const value = choice === "local" && selected && typeof selected === "object"
-    ? { ...(selected as Record<string, unknown>), updatedAt: new Date().toISOString() }
+    ? { ...(selected as Record<string, unknown>), updatedAt: resolutionTime }
     : selected
   try {
     if (Array.isArray(current) && value && typeof value === "object" && "id" in value) {
-      const next = current.map((item) => item && typeof item === "object" && (item as { id?: string }).id === (value as { id?: string }).id ? value : item)
-      writeLocalJson(key, next)
+      const selectedId = (value as { id?: string }).id
+      const found = current.some((item) => item && typeof item === "object" && (item as { id?: string }).id === selectedId)
+      const next = found
+        ? current.map((item) => item && typeof item === "object" && (item as { id?: string }).id === selectedId ? value : item)
+        : [...current, value]
+      writeLocalJson(key, next, scope)
+      if (choice === "local") await persistState(storageKey, next)
+      else await mirrorState(storageKey, next)
     } else {
-      writeLocalJson(key, value)
+      writeLocalJson(key, value, scope)
+      if (choice === "local") await persistState(storageKey, value)
+      else await mirrorState(storageKey, value)
     }
-    const remaining = loadSyncConflicts().filter((item) => item.id !== id)
-    window.localStorage.setItem(scopedStorageKey(KEYS.syncConflicts), JSON.stringify(remaining))
-    schedulePocketBaseSync()
+    if (conflict.appId && Number.isFinite(remoteRevision)) saveBaseRevision(scope, entity, conflict.appId, Number(remoteRevision))
+    if (choice === "remote") await acknowledgeOutbox([storageKey])
+    const remaining = loadSyncConflicts(scope).filter((item) => item.id !== id)
+    window.localStorage.setItem(storageKeyForScope(scope, KEYS.syncConflicts), JSON.stringify(remaining))
+    if (choice === "local") schedulePocketBaseSync(scope)
+    else {
+      const prefix = storageKeyForScope(scope, "")
+      const stillPending = (await listOutbox()).some((row) => row.key.startsWith(prefix))
+      if (stillPending) schedulePocketBaseSync(scope)
+      else setSyncStatus("synced", scope)
+    }
     return true
   } catch { return false }
 }
@@ -166,11 +204,16 @@ function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>, sco
   if (!errorText.startsWith("Error: Conflict") && !errorText.startsWith("Conflict") && !errorText.includes("PocketBase 409")) return
   const existing = localJson<SyncConflict[]>(KEYS.syncConflicts, [], scope)
   const message = errorText.replace(/^Error:\s*/, "")
-  if (existing.some((item) =>
+  const duplicate = existing.findIndex((item) =>
     details?.entity && details.appId
       ? item.entity === details.entity && item.appId === details.appId
       : item.message === message,
-  )) return
+  )
+  if (duplicate >= 0) {
+    existing[duplicate] = { ...existing[duplicate], message, occurredAt: new Date().toISOString(), ...details }
+    try { window.localStorage.setItem(storageKeyForScope(scope, KEYS.syncConflicts), JSON.stringify(existing.slice(-20))) } catch { /* local work remains available */ }
+    return
+  }
   const conflicts = [...existing, {
     id: crypto.randomUUID(),
     message,
@@ -470,7 +513,7 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
   }
   if (found && (base === undefined || base !== Number(found.revision || 0))) {
     const error = new Error(`Conflict: ${entity}/${appId} berubah di perangkat lain`)
-    recordSyncConflict(error, { entity, appId, localPayload: sanitizedPayload, remotePayload: found.payload }, requestedScope)
+    recordSyncConflict(error, { entity, appId, localPayload: sanitizedPayload, remotePayload: found.payload, remoteRevision: Number(found.revision || 0) }, requestedScope)
     throw error
   }
   if (found && found.payload && payload && typeof found.payload === "object" && typeof payload === "object") {
@@ -483,6 +526,7 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
           appId,
           localPayload: sanitizedPayload,
           remotePayload: found.payload,
+          remoteRevision: Number(found.revision || 0),
         }, requestedScope)
         throw new Error(`Conflict: remote ${entity}/${appId} is newer`)
       }
@@ -532,6 +576,7 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
         appId,
         localPayload: sanitizedPayload,
         remotePayload: found?.payload,
+        remoteRevision: found ? Number(found.revision || 0) : undefined,
       }, requestedScope)
     }
     throw error
@@ -552,7 +597,7 @@ async function pruneExplicitlyDeleted(entity: EntityName, requestedScope = compa
         const base = baseRevision(requestedScope, entity, record.app_id)
         if (base === undefined || base !== Number(record.revision || 0)) {
           const error = new Error(`Conflict: penghapusan ${entity}/${record.app_id} memakai revisi lama`)
-          recordSyncConflict(error, { entity, appId: record.app_id, remotePayload: record.payload }, requestedScope)
+          recordSyncConflict(error, { entity, appId: record.app_id, remotePayload: record.payload, remoteRevision: Number(record.revision || 0) }, requestedScope)
           return Promise.reject(error)
         }
         return requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE", headers: { "X-Jornal-Revision": String(base) } }, requestedScope)
@@ -709,7 +754,7 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
     const key = entityKey(entity)
     const entityIsDirty = queuedKeys.has(storageKeyForScope(runScope, key))
     if (!entityIsDirty) for (const record of remote) saveBaseRevision(runScope, entity, record.app_id, Number(record.revision || 0))
-    else for (const record of remote) if (baseRevision(runScope, entity, record.app_id) === undefined) recordSyncConflict(new Error(`Perubahan lokal ${entity}/${record.app_id} perlu ditinjau setelah migrasi cache`), { entity, appId: record.app_id, localPayload: localJson(key, null, runScope), remotePayload: record.payload }, runScope)
+    else for (const record of remote) if (baseRevision(runScope, entity, record.app_id) === undefined) recordSyncConflict(new Error(`Perubahan lokal ${entity}/${record.app_id} perlu ditinjau setelah migrasi cache`), { entity, appId: record.app_id, localPayload: localJson(key, null, runScope), remotePayload: record.payload, remoteRevision: Number(record.revision || 0) }, runScope)
     if (entity === "profile" || entity === "settings") {
       const current = remote.find((record) => !record.deleted_at)
       const payload = current?.payload ?? null
@@ -751,9 +796,8 @@ export async function getCompanyFileAccess(scope = companyScope()) {
   return requestJson<{ token: string; grant: string; expiresIn: number }>(`/api/jornal/companies/${encodeURIComponent(scope.companyId)}/file-token`, { method: "POST", body: "{}" }, scope)
 }
 
-export function schedulePocketBaseSync() {
+export function schedulePocketBaseSync(scope = companyScope()) {
   if (!enabled() || typeof window === "undefined") return
-  const scope = companyScope()
   const runtime = runtimeFor(scope)
   if (runtime.syncQueued) return
   runtime.syncQueued = true

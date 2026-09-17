@@ -6,7 +6,9 @@ import {
   hydrateFromPocketBase,
   initializePocketBaseSync,
   getHydrationState,
+  loadSyncConflicts,
   resetPocketBaseSyncState,
+  resolveSyncConflict,
   schedulePocketBaseSync,
   setPocketBaseUrl,
   syncToPocketBase,
@@ -251,6 +253,62 @@ describe("syncToPocketBase", () => {
     calls = []
     await syncToPocketBase()
     expect(calls.some((call) => call.url.includes("page=2"))).toBe(false)
+  })
+})
+
+describe("sync conflict resolution", () => {
+  const localProfile = { ...emptyProfile(), businessName: "Versi perangkat", updatedAt: "2026-09-18T00:00:00.000Z" }
+  const remoteProfile = { ...emptyProfile(), businessName: "Versi server", updatedAt: "2026-09-18T00:01:00.000Z" }
+  const remoteRecord = {
+    id: "remote-profile",
+    entity: "profile",
+    app_id: "profile",
+    business_id: "local",
+    company_id: "local",
+    data_epoch: 1,
+    payload: remoteProfile,
+    revision: 7,
+    created: "2026-09-18T00:00:00.000Z",
+    updated: "2026-09-18T00:01:00.000Z",
+  }
+
+  function seedLegacyConflict() {
+    localStorageShim.setItem(scopedStorageKey(KEYS.profile), JSON.stringify(localProfile))
+    localStorageShim.setItem(scopedStorageKey(KEYS.syncConflicts), JSON.stringify([{
+      id: "conflict-profile",
+      message: "Conflict: profile/profile berubah di perangkat lain",
+      entity: "profile",
+      appId: "profile",
+      localPayload: localProfile,
+      remotePayload: remoteProfile,
+      occurredAt: "2026-09-18T00:02:00.000Z",
+    }]))
+    respond = (_url, method) => method === "GET"
+      ? { status: 200, body: { items: [remoteRecord], totalPages: 1 } }
+      : { status: 200, body: { ...remoteRecord, revision: 8 } }
+  }
+
+  test("using the server records its live revision and does not recreate the conflict", async () => {
+    setEnv("http://pb.test")
+    seedLegacyConflict()
+
+    expect(await resolveSyncConflict("conflict-profile", "remote")).toBe(true)
+    expect(loadSyncConflicts()).toHaveLength(0)
+    expect(JSON.parse(localStorageShim.getItem(scopedStorageKey(KEYS.profile)) || "{}").businessName).toBe("Versi server")
+
+    await expect(syncToPocketBase()).resolves.toBeUndefined()
+    expect(loadSyncConflicts()).toHaveLength(0)
+  })
+
+  test("using the device rebases the pending change before retrying", async () => {
+    setEnv("http://pb.test")
+    seedLegacyConflict()
+
+    expect(await resolveSyncConflict("conflict-profile", "local")).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(loadSyncConflicts()).toHaveLength(0)
+    expect(calls.some((call) => call.method === "PATCH")).toBe(true)
   })
 })
 

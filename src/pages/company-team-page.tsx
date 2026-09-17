@@ -50,7 +50,7 @@ export function CompanyTeamPage() {
       <Card><CardContent className="space-y-3 p-5">
         <h2 className="text-lg tracking-tight">Undang anggota</h2>
         <TextField label="Email akun Google" value={email} onChange={setEmail} placeholder="nama@perusahaan.com" disabled={Boolean(pending)} />
-        <Button disabled={!email.trim() || Boolean(pending)} onClick={() => void run("invite", () => inviteTeamMember(company.id, email).then(() => setEmail("")), "Undangan dibuat dan email masuk antrean.")}><MailPlus className="size-4" aria-hidden="true" />{pending === "invite" ? "Mengirim…" : "Kirim undangan"}</Button>
+        <Button disabled={!email.trim() || Boolean(pending)} onClick={() => void run("invite", () => inviteTeamMember(company.id, email).then(() => setEmail("")), "Undangan dibuat. Email akan segera dikirim.")}><MailPlus className="size-4" aria-hidden="true" />{pending === "invite" ? "Mengirim…" : "Kirim undangan"}</Button>
       </CardContent></Card>
 
       <Card><CardContent className="space-y-3 p-5">
@@ -68,7 +68,7 @@ export function CompanyTeamPage() {
         {pendingInvitations.length === 0 && <p className="text-sm text-muted-foreground">Tidak ada undangan aktif.</p>}
         {pendingInvitations.map((invitation: TeamInvitation) => <div key={invitation.id} className="rounded-xl border border-border p-3">
           <p className="break-all text-sm font-semibold">{invitation.email}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Berlaku sampai {new Date(invitation.expiresAt).toLocaleString("id-ID")} · Email: {invitation.delivery?.status ?? "belum diantrikan"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Berlaku sampai {new Date(invitation.expiresAt).toLocaleString("id-ID")}</p>
           <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" disabled={Boolean(pending)} onClick={() => void run(`resend:${invitation.id}`, () => resendInvitation(company.id, invitation), "Undangan dikirim ulang.")}><RefreshCw className="size-4" />Kirim ulang</Button><Button variant="outline" disabled={Boolean(pending)} onClick={() => { if (window.confirm(`Batalkan undangan untuk ${invitation.email}?`)) void run(`revoke:${invitation.id}`, () => revokeInvitation(company.id, invitation), "Undangan dibatalkan.") }}><Trash2 className="size-4" />Batalkan</Button></div>
         </div>)}
         {history.length > 0 && <details><summary className="cursor-pointer text-sm font-semibold">Riwayat undangan ({history.length})</summary><div className="mt-2 space-y-2">{history.map((item) => <p key={item.id} className="text-xs text-muted-foreground">{item.email} · {item.status}</p>)}</div></details>}

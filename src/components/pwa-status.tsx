@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CloudOff, Download, RefreshCw, X } from "lucide-react"
 import { useRegisterSW } from "virtual:pwa-register/react"
 
@@ -33,8 +33,16 @@ export function PwaStatus() {
   const [updateFailed, setUpdateFailed] = useState(false)
   const [syncStatus, setSyncStatus] = useState(getSyncStatus)
   const [conflicts, setConflicts] = useState(loadSyncConflicts)
-  useEffect(() => subscribeSyncStatus(setSyncStatus), [])
-  useEffect(() => subscribeSyncStatus(() => setConflicts(loadSyncConflicts())), [])
+  const conflictKey = useRef(conflicts.map((item) => item.id).join(":"))
+  const [resolvingConflict, setResolvingConflict] = useState(false)
+  useEffect(() => subscribeSyncStatus((status) => {
+    const next = loadSyncConflicts()
+    const nextKey = next.map((item) => item.id).join(":")
+    setSyncStatus(status)
+    setConflicts(next)
+    if (nextKey !== conflictKey.current) setDismissed(false)
+    conflictKey.current = nextKey
+  }), [])
   useEffect(() => {
     const onStorageWarning = () => { setStorageWarning(true); setDismissed(false) }
     window.addEventListener(STORAGE_WARNING_EVENT, onStorageWarning)
@@ -80,12 +88,23 @@ export function PwaStatus() {
     )
   }
 
-  if ((dismissed && !persistentAction) || (isOnline && !offlineReady && !needRefresh && !persistentAction)) return null
+  if (dismissed || (isOnline && !offlineReady && !needRefresh && !persistentAction)) return null
 
   const dismiss = () => {
     setDismissed(true)
     setOfflineReady(false)
     setNeedRefresh(false)
+  }
+
+  const chooseConflict = async (choice: "local" | "remote") => {
+    const conflict = conflicts[0]
+    if (!conflict || resolvingConflict) return
+    setResolvingConflict(true)
+    try {
+      if (await resolveSyncConflict(conflict.id, choice)) setConflicts(loadSyncConflicts())
+    } finally {
+      setResolvingConflict(false)
+    }
   }
 
   return (
@@ -124,19 +143,15 @@ export function PwaStatus() {
       {storageWarning && (
         <a href="/settings" className="shrink-0 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs font-semibold">Buka data</a>
       )}
-      {syncFailed && isOnline && !storageWarning && (
+      {syncFailed && !hasConflict && isOnline && !storageWarning && (
         <Button size="sm" variant="secondary" onClick={() => { setDismissed(false); schedulePocketBaseSync() }}>
           Coba lagi
         </Button>
       )}
       {hasConflict && (
         <div className="flex shrink-0 items-center gap-1.5">
-          <button type="button" className="text-xs font-semibold underline underline-offset-2" onClick={() => {
-            if (resolveSyncConflict(conflicts[0].id, "local")) setConflicts(loadSyncConflicts())
-          }}>Pakai perangkat</button>
-          <button type="button" className="text-xs font-semibold underline underline-offset-2" onClick={() => {
-            if (resolveSyncConflict(conflicts[0].id, "remote")) setConflicts(loadSyncConflicts())
-          }}>Pakai server</button>
+          <button type="button" disabled={resolvingConflict} className="text-xs font-semibold underline underline-offset-2 disabled:opacity-50" onClick={() => void chooseConflict("local")}>Pakai perangkat</button>
+          <button type="button" disabled={resolvingConflict} className="text-xs font-semibold underline underline-offset-2 disabled:opacity-50" onClick={() => void chooseConflict("remote")}>Pakai server</button>
         </div>
       )}
       <Button size="icon" variant="ghost" className="size-10 hover:bg-white/10" onClick={dismiss} aria-label="Tutup pemberitahuan">

@@ -40,7 +40,7 @@ test("invites a Google identity and opens the same company without onboarding", 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByLabel("Email akun Google").fill(member.user.email)
   await page.getByRole("button", { name: "Kirim undangan" }).click()
-  await expect(page.getByText("Undangan dibuat dan email masuk antrean.")).toBeVisible()
+  await expect(page.getByText("Undangan dibuat. Email akan segera dikirim.")).toBeVisible()
   await expect(page.getByText(member.user.email, { exact: true })).toBeVisible()
 
   const bootstrap = await request.post(`${backend}/api/jornal/session/bootstrap`, { headers: { Authorization: member.token }, data: {} })
