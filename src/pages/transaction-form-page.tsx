@@ -60,9 +60,9 @@ export function TransactionFormPage() {
     if (new URLSearchParams(window.location.search).get("receivable") === "new") return "receivable"
     return direction === "MONEY_IN" ? "money_in" : direction === "MONEY_OUT" ? "money_out" : "money_out"
   })
-  const [amount, setAmount] = useState("")
-  const [description, setDescription] = useState("")
-  const [transactionDate, setTransactionDate] = useState(todayIsoDate())
+  const [amount, setAmount] = useState(() => new URLSearchParams(window.location.search).get("amount") || "")
+  const [description, setDescription] = useState(() => new URLSearchParams(window.location.search).get("description") || "")
+  const [transactionDate, setTransactionDate] = useState(() => new URLSearchParams(window.location.search).get("date") || todayIsoDate())
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [accountId, setAccountId] = useState<string | null>(() => readEntryPreference("account"))
   const [transferAccountId, setTransferAccountId] = useState<string | null>(null)

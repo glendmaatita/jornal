@@ -8,6 +8,7 @@ import { DateField } from "@/components/ui/date-field"
 import { TextField } from "@/components/ui/text-field"
 import { activeCompany } from "@/lib/companies"
 import { formatRupiah, parseAmountInput, todayIsoDate } from "@/lib/format"
+import { transactionRevenueAmount } from "@/lib/transaction-revenue"
 import {
   addTaxRegistration,
   amendTaxFiling,
@@ -323,7 +324,7 @@ function PeriodReconciliation({ subjectId, companyId, transactions, busy, run }:
   run: (work: () => Promise<unknown>, success: string) => Promise<void>
 }) {
   const [period, setPeriod] = useState(currentPeriod())
-  const ledgerRevenue = transactions.filter((item) => item.classification === "REVENUE" && item.direction === "MONEY_IN" && item.transactionDate.startsWith(period)).reduce((sum, item) => sum + item.amount, 0)
+  const ledgerRevenue = transactions.filter((item) => item.classification === "REVENUE" && item.direction === "MONEY_IN" && item.transactionDate.startsWith(period)).reduce((sum, item) => sum + transactionRevenueAmount(item), 0)
   const [external, setExternal] = useState("")
   const [openingYtd, setOpeningYtd] = useState("")
   const reconcile = () => run(async () => {

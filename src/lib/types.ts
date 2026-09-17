@@ -13,6 +13,9 @@ export interface Company {
   legacyDefault: boolean
   dataEpoch: number
   revision: number
+  /** Immutable company asset used by new documents. Historical invoices keep
+   * their own snapshot pointer rather than following this value. */
+  logoAssetId: string | null
   archivedAt: string | null
   createdAt: string
   updatedAt: string
@@ -107,6 +110,16 @@ export interface Transaction {
   taxSettlementId?: string | null
   taxKind?: string | null
   taxPeriod?: string | null
+  /** Invoice linkage is server-owned and may not be changed by generic ledger flows. */
+  invoiceId?: string | null
+  invoicePaymentId?: string | null
+  invoiceNumber?: string | null
+  customerId?: string | null
+  /** Net document revenue. Cash amount remains the gross ledger amount. */
+  invoiceRevenueAmount?: number | null
+  invoiceTaxAmount?: number | null
+  /** Private inbox document linked by a server-side confirmation command. */
+  documentId?: string | null
   classification: TransactionClassification
   taxClassification: TransactionClassification
   businessRelevance: BusinessRelevance

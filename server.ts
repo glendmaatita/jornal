@@ -52,6 +52,7 @@ function oauthPopupCompleteResponse() {
 const sharedIntake = new Map<string, { expiresAt: number; title: string; text: string; url: string; file?: { name: string; type: string; data: string } }>()
 const shareLimit = 8 * 1024 * 1024
 const maxPendingShares = 32
+const renderRate = new Map<string, { count: number; resetAt: number }>()
 
 function pruneSharedIntake(now = Date.now()) {
   for (const [key, value] of sharedIntake) if (value.expiresAt < now) sharedIntake.delete(key)
@@ -144,6 +145,17 @@ const server = Bun.serve({
       sharedIntake.delete(token)
       if (!item || item.expiresAt < Date.now()) return Response.json({ error: "Tautan berbagi sudah kedaluwarsa." }, { status: 410, headers: securityHeaders })
       return Response.json(item, { headers: { ...securityHeaders, "Cache-Control": "no-store" } })
+    }
+
+    const invoiceFileMatch = url.pathname.match(/^\/api\/invoice-files\/([^/]+)$/)
+    if (invoiceFileMatch && request.method === "GET") {
+      if (process.env.JORNAL_INVOICE_EXPORT_ENABLED === "false") return Response.json({ error: "Ekspor invoice sedang dinonaktifkan." }, { status: 503, headers: securityHeaders })
+      const rendererUrl = process.env.INVOICE_RENDERER_URL; const rendererSecret = process.env.INVOICE_RENDERER_SECRET; if (!rendererUrl || !rendererSecret) return Response.json({ error: "Renderer invoice belum dikonfigurasi." }, { status: 503, headers: securityHeaders })
+      const authorization = request.headers.get("authorization") || ""; if (!authorization) return Response.json({ error: "Sesi diperlukan." }, { status: 401, headers: securityHeaders })
+      const companyId = url.searchParams.get("company") || ""; const dataEpoch = url.searchParams.get("epoch") || ""; const format = url.searchParams.get("format") === "png" ? "png" : "pdf"; const rateKey = `${authorization.slice(-16)}:${companyId}`; const now = Date.now(); const bucket = renderRate.get(rateKey); if (bucket && bucket.resetAt > now && bucket.count >= 10) return Response.json({ error: "Terlalu banyak permintaan ekspor." }, { status: 429, headers: securityHeaders }); renderRate.set(rateKey, bucket && bucket.resetAt > now ? { ...bucket, count: bucket.count + 1 } : { count: 1, resetAt: now + 60_000 })
+      const pocketBaseOrigin = process.env.POCKETBASE_INTERNAL_URL ?? "http://127.0.0.1:8090"; const id = encodeURIComponent(invoiceFileMatch[1]); const documentResponse = await fetch(`${pocketBaseOrigin}/api/jornal/invoicing/invoices/${id}/document?companyId=${encodeURIComponent(companyId)}&dataEpoch=${encodeURIComponent(dataEpoch)}`, { headers: { Authorization: authorization }, signal: AbortSignal.timeout(15_000) }); if (!documentResponse.ok) return new Response(documentResponse.body, { status: documentResponse.status, headers: { ...securityHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } }); const document = await documentResponse.json() as { invoice: { senderSnapshot?: { logoAssetId?: string } } }
+      let logoDataUrl: string | null = null; const logoId = document.invoice.senderSnapshot?.logoAssetId; if (logoId) { const logoResponse = await fetch(`${pocketBaseOrigin}/api/jornal/companies/${encodeURIComponent(companyId)}/assets/${encodeURIComponent(logoId)}`, { headers: { Authorization: authorization }, signal: AbortSignal.timeout(10_000) }); if (!logoResponse.ok) return Response.json({ error: "Logo snapshot invoice tidak dapat dimuat." }, { status: 502, headers: securityHeaders }); const logo = await logoResponse.json() as { mime: string; contentBase64: string }; logoDataUrl = `data:${logo.mime};base64,${logo.contentBase64}` }
+      try { const rendered = await fetch(new URL("/render", rendererUrl), { method: "POST", headers: { Authorization: `Bearer ${rendererSecret}`, "Content-Type": "application/json" }, body: JSON.stringify({ invoice: document.invoice, logoDataUrl, format }), signal: AbortSignal.timeout(30_000) }); const headers = new Headers(rendered.headers); Object.entries(securityHeaders).forEach(([key, value]) => headers.set(key, value)); headers.set("Cache-Control", "private, no-store"); return new Response(rendered.body, { status: rendered.status, headers }) } catch { return Response.json({ error: "Renderer invoice tidak merespons." }, { status: 504, headers: securityHeaders }) }
     }
 
     // Reverse proxy /pb/* to the PocketBase instance managed by supervisord,

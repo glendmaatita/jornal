@@ -1,0 +1,11 @@
+import { useQuery } from "@tanstack/react-query"
+import { Link } from "@tanstack/react-router"
+import { Card, CardContent } from "@/components/ui/card"
+import { formatRupiah } from "@/lib/format"
+import { getCustomer } from "@/lib/invoice-client"
+
+export function CustomerDetailPage({ customerId }: { customerId: string }) {
+  const { data, isLoading, error } = useQuery({ queryKey: ["invoice", "customer", customerId], queryFn: () => getCustomer(customerId) })
+  if (isLoading) return <p>Memuat…</p>; if (error || !data) return <p className="text-red-700">{String(error || "Pelanggan tidak ditemukan")}</p>; const { customer, summary, invoices } = data
+  return <div className="space-y-4 pb-8"><header className="flex justify-between gap-3"><div><h1 className="text-2xl">{customer.name}</h1><p className="text-sm text-muted-foreground">{[customer.email, customer.phone].filter(Boolean).join(" · ")}</p></div><Link to="/customers/$customerId/edit" params={{ customerId }} className="text-sm font-semibold text-[var(--link)]">Edit</Link></header><div className="grid grid-cols-2 gap-3"><Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Belum dibayar</p><p className="font-semibold">{formatRupiah(summary.unpaidTotal)}</p></CardContent></Card><Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Sudah lunas</p><p className="font-semibold">{formatRupiah(summary.paidTotal)}</p></CardContent></Card></div><Link to="/invoices/new" search={{ customer: customerId }} className="block rounded-xl bg-[var(--main-dark)] p-3 text-center font-semibold text-white">Buat Invoice</Link><Card><CardContent className="p-4"><p>{[customer.addressLine1, customer.addressLine2, customer.district, customer.city, customer.province, customer.postalCode].filter(Boolean).join(", ") || "Alamat belum diisi"}</p></CardContent></Card><h2 className="font-semibold">Riwayat invoice ({summary.invoiceCount})</h2>{invoices.map((invoice) => <Link key={invoice.id} to="/invoices/$invoiceId" params={{ invoiceId: invoice.id }} className="flex justify-between rounded-xl border bg-white p-3"><span>{invoice.invoiceNumber || "Draft"} · {invoice.status}</span><strong>{formatRupiah(invoice.grandTotal)}</strong></Link>)}</div>
+}

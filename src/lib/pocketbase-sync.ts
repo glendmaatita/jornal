@@ -102,6 +102,7 @@ function runtimeFor(scope = companyScope()) {
 export function getSyncStatus() {
   return runtimeFor().syncStatus
 }
+export function getLastSyncAt(scope = companyScope()) { try { return window.localStorage.getItem(storageKeyForScope(scope, "sync-last-success.v1")) } catch { return null } }
 
 /** Distinguishes a known empty account from a backend we could not reach. */
 export function getHydrationState() {
@@ -614,6 +615,7 @@ export async function syncToPocketBase(runScope = companyScope()) {
   const run = (async () => {
   try {
     const result = await syncToPocketBaseUnsafe(runGeneration, runScope)
+    try { window.localStorage.setItem(storageKeyForScope(runScope, "sync-last-success.v1"), new Date().toISOString()) } catch { /* diagnostic only */ }
     setSyncStatus("synced", runScope)
     return result
   } catch (error) {

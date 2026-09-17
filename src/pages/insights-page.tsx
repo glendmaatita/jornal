@@ -22,6 +22,7 @@ import { stsHistory } from "@/lib/history"
 import { queryKeys, useAccounts, useProfile, useRecurringRules, useReserves, useTransactions } from "@/lib/queries"
 import { createRecurringRule, deleteRecurringRule, updateRecurringRule } from "@/lib/store"
 import { detectRecurring, generateInsights, monthlyTrends, type RecurringCandidate } from "@/lib/trends"
+import { transactionRevenueAmount } from "@/lib/transaction-revenue"
 
 export function InsightsPage() {
   const { data: transactions = [] } = useTransactions()
@@ -39,7 +40,7 @@ export function InsightsPage() {
 
   const revenue = periodTransactions
     .filter((transaction) => transaction.classification === "REVENUE")
-    .reduce((sum, transaction) => sum + transaction.amount, 0)
+    .reduce((sum, transaction) => sum + transactionRevenueAmount(transaction), 0)
   const businessExpense = periodTransactions
     .filter((transaction) => transaction.classification === "OPERATING_EXPENSE")
     .reduce((sum, transaction) => sum + transaction.amount, 0)

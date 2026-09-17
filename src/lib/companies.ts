@@ -30,6 +30,7 @@ function parseCompany(record: Record<string, unknown>): Company {
     legacyDefault: Boolean(record.legacy_default ?? record.legacyDefault),
     dataEpoch: Number(record.data_epoch ?? record.dataEpoch ?? 1),
     revision: Number(record.revision ?? 1),
+    logoAssetId: String(record.logo_asset_id ?? record.logoAssetId ?? "") || null,
     archivedAt: String(record.archived_at ?? record.archivedAt ?? "") || null,
     createdAt: String(record.created ?? record.createdAt ?? ""),
     updatedAt: String(record.updated ?? record.updatedAt ?? ""),
@@ -174,6 +175,17 @@ export async function resetCompany(company: Company) {
   await quarantineOutboxByPrefix(prefix, `reset-epoch-${company.dataEpoch}`)
   return updated
 }
+
+async function fileBase64(file: Blob) { const bytes = new Uint8Array(await file.arrayBuffer()); let binary = ""; for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000)); return btoa(binary) }
+async function normalizeLogoFile(file: File) { if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("Logo harus PNG, JPEG, atau WebP"); const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }); try { if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width > 4096 || bitmap.height > 4096 || bitmap.width * bitmap.height > 16_000_000) throw new Error("Dimensi logo maksimal 4096 px dan 16 megapixel"); const canvas = document.createElement("canvas"); canvas.width = bitmap.width; canvas.height = bitmap.height; const context = canvas.getContext("2d"); if (!context) throw new Error("Logo tidak dapat diproses"); context.drawImage(bitmap, 0, 0); const type = file.type === "image/jpeg" ? "image/jpeg" : file.type === "image/webp" ? "image/webp" : "image/png"; const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, type === "image/jpeg" ? 0.92 : undefined)); if (!blob || blob.size > 2 * 1024 * 1024) throw new Error("Logo hasil normalisasi melebihi 2 MB"); return new File([blob], file.name.replace(/\.[^.]+$/, "") + (type === "image/jpeg" ? ".jpg" : type === "image/webp" ? ".webp" : ".png"), { type }) } finally { bitmap.close() } }
+export async function uploadCompanyLogo(company: Company, file: File) {
+  if (file.size > 2 * 1024 * 1024) throw new Error("Logo maksimal 2 MB")
+  const normalized = await normalizeLogoFile(file); const form = new FormData(); form.set("revision", String(company.revision)); form.set("requestId", crypto.randomUUID()); form.set("filename", normalized.name); form.set("contentBase64", await fileBase64(normalized)); form.set("file", normalized, normalized.name)
+  const response = await fetch(`${pb.baseURL.replace(/\/$/, "")}/api/jornal/companies/${encodeURIComponent(company.id)}/logo`, { method: "PUT", headers: { Authorization: pb.authStore.token }, body: form }); const result = await response.json() as { company: Record<string, unknown>; asset: { id: string }; message?: string }; if (!response.ok) throw new Error(result.message || "Logo gagal disimpan")
+  const updated = parseCompany(result.company); saveCatalog(loadCachedCompanies().map((item) => item.id === updated.id ? updated : item)); return updated
+}
+export async function removeCompanyLogo(company: Company) { const result = await pb.send<{ company: Record<string, unknown> }>(`/api/jornal/companies/${encodeURIComponent(company.id)}/logo`, { method: "DELETE", body: { revision: company.revision, requestId: crypto.randomUUID() } }); const updated = parseCompany(result.company); saveCatalog(loadCachedCompanies().map((item) => item.id === updated.id ? updated : item)); return updated }
+export async function loadCompanyLogo(company: Company, assetId = company.logoAssetId) { if (!assetId) return null; const result = await pb.send<{ mime: string; contentBase64: string; checksum: string }>(`/api/jornal/companies/${encodeURIComponent(company.id)}/assets/${encodeURIComponent(assetId)}`, {}); return { ...result, dataUrl: `data:${result.mime};base64,${result.contentBase64}` } }
 
 export function companyStoragePrefix(tenant: string, company: string) {
   return `jornal.v2.${tenant}.${company}.`

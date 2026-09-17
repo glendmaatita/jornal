@@ -124,7 +124,7 @@ describe("multi-company local isolation", () => {
     const company: Company = {
       id: "company-a", tenantId: "tenant-1", name: "Legacy", status: "ACTIVE",
       onboardingCompletedAt: "2026-09-16T00:00:00.000Z", legacyDefault: true,
-      dataEpoch: 1, revision: 1, archivedAt: null, createdAt: "", updatedAt: "",
+      dataEpoch: 1, revision: 1, logoAssetId: null, archivedAt: null, createdAt: "", updatedAt: "",
     }
     const oldTransactionsKey = `jornal.tenant-1.${KEYS.transactions}`
     const oldDraftKey = "jornal.tenant-1.jornal.transaction-draft.add"

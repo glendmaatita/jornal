@@ -1,4 +1,5 @@
 import { ChevronDown } from "lucide-react"
+import { CompanyLogo } from "@/components/company-logo"
 
 import { activeCompany, loadCachedCompanies, multiCompanyCreationEnabled, persistCompanyDrafts, rememberCompanyCreationReturn, selectCompany } from "@/lib/companies"
 
@@ -7,8 +8,9 @@ export function CompanySwitcher() {
   if (!current) return null
   const companies = loadCachedCompanies().filter((company) => company.status === "ACTIVE" || company.id === current.id)
   return (
-    <label className="relative flex min-w-0 items-center">
+    <label className="relative flex min-w-0 items-center gap-1.5">
       <span className="sr-only">Company aktif</span>
+      <CompanyLogo company={current} className="size-7 shrink-0" />
       <select
         value={current.id}
         onChange={(event) => {

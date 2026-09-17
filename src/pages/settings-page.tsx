@@ -1,195 +1,357 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { useQueryClient } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
-import { Plus, Trash2 } from "lucide-react"
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
-import { faBrain } from "@fortawesome/free-solid-svg-icons/faBrain"
-import { faBuilding } from "@fortawesome/free-solid-svg-icons/faBuilding"
-import { faDatabase } from "@fortawesome/free-solid-svg-icons/faDatabase"
-import { faSliders } from "@fortawesome/free-solid-svg-icons/faSliders"
-import { faWallet } from "@fortawesome/free-solid-svg-icons/faWallet"
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { Plus, Trash2 } from "lucide-react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faBrain } from "@fortawesome/free-solid-svg-icons/faBrain";
+import { faBuilding } from "@fortawesome/free-solid-svg-icons/faBuilding";
+import { faDatabase } from "@fortawesome/free-solid-svg-icons/faDatabase";
+import { faSliders } from "@fortawesome/free-solid-svg-icons/faSliders";
+import { faWallet } from "@fortawesome/free-solid-svg-icons/faWallet";
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { DateField } from "@/components/ui/date-field"
-import { TextField } from "@/components/ui/text-field"
-import { categoryName } from "@/lib/categories"
-import { activeCompany, resetCompany, updateCompany } from "@/lib/companies"
-import { parseAmountInput, formatNumberInput } from "@/lib/format"
+import { Button } from "@/components/ui/button";
+import { CompanyLogoEditor } from "@/components/company-logo";
+import { Card, CardContent } from "@/components/ui/card";
+import { DateField } from "@/components/ui/date-field";
+import { TextField } from "@/components/ui/text-field";
+import { categoryName } from "@/lib/categories";
+import { activeCompany, resetCompany, updateCompany } from "@/lib/companies";
+import { parseAmountInput, formatNumberInput } from "@/lib/format";
 
-import { queryKeys, useAccounts, useCorrections, useProfile, useSettings, useTransactions } from "@/lib/queries"
-import { clearCorrections, deleteAccount, deleteCorrection, exportLocalData, importLocalData, resetAllData, saveProfile, saveSettings, setCompanyScope, upsertAccount } from "@/lib/store"
-import { allowedTaxSchemes } from "@/lib/tax"
-import { BUSINESS_TYPE_LABELS, CLASSIFICATION_LABELS, type AccountType, type BusinessType } from "@/lib/types"
+import {
+  queryKeys,
+  useAccounts,
+  useCorrections,
+  useProfile,
+  useSettings,
+  useTransactions,
+} from "@/lib/queries";
+import {
+  clearCorrections,
+  deleteAccount,
+  deleteCorrection,
+  exportLocalData,
+  importLocalData,
+  resetAllData,
+  saveProfile,
+  saveSettings,
+  setCompanyScope,
+  upsertAccount,
+} from "@/lib/store";
+import { allowedTaxSchemes } from "@/lib/tax";
+import {
+  BUSINESS_TYPE_LABELS,
+  CLASSIFICATION_LABELS,
+  type AccountType,
+  type BusinessType,
+} from "@/lib/types";
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+} from "@/lib/push-client";
 
-const BUSINESS_TYPES: BusinessType[] = ["INDIVIDUAL", "PT_PERORANGAN", "PT", "CV", "OTHER"]
+const BUSINESS_TYPES: BusinessType[] = [
+  "INDIVIDUAL",
+  "PT_PERORANGAN",
+  "PT",
+  "CV",
+  "OTHER",
+];
 
 const SCHEMES = [
   { value: "UMKM_FINAL", label: "UMKM — PPh Final 0,5%" },
   { value: "PROGRESSIVE", label: "Orang Pribadi Progresif" },
   { value: "CORPORATE", label: "Badan — PPh 22%" },
   { value: "NOT_CALCULATED", label: "Tidak dihitung" },
-] as const
+] as const;
 
 const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "CASH", label: "Cash" },
   { value: "BANK", label: "Bank" },
   { value: "EWALLET", label: "E-Wallet" },
   { value: "OTHER", label: "Other" },
-]
+];
 
 export function SettingsPage() {
-  const queryClient = useQueryClient()
-  const { data: profile } = useProfile()
-  const { data: accounts = [] } = useAccounts()
-  const { data: settings } = useSettings()
-  const { data: transactions = [] } = useTransactions()
-  const importInputRef = useRef<HTMLInputElement | null>(null)
-  const [dataMessage, setDataMessage] = useState<string | null>(null)
-  const [storageInfo, setStorageInfo] = useState<{ usage?: number; quota?: number } | null>(null)
-  const company = activeCompany()
+  const queryClient = useQueryClient();
+  const { data: profile } = useProfile();
+  const { data: accounts = [] } = useAccounts();
+  const { data: settings } = useSettings();
+  const { data: transactions = [] } = useTransactions();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [dataMessage, setDataMessage] = useState<string | null>(null);
+  const [pushPreferences, setPushPreferences] = useState({
+    invoice: true,
+    tax: true,
+    documents: true,
+    hideAmounts: true,
+    quietStartHour: 21,
+    quietEndHour: 7,
+  });
+  const [storageInfo, setStorageInfo] = useState<{
+    usage?: number;
+    quota?: number;
+  } | null>(null);
+  const company = activeCompany();
 
   useEffect(() => {
-    const estimate = navigator.storage?.estimate
-    if (!estimate) return
-    void estimate.call(navigator.storage).then(({ usage, quota }) => {
-      setStorageInfo({ usage, quota })
-    }).catch(() => undefined)
-  }, [])
+    const estimate = navigator.storage?.estimate;
+    if (!estimate) return;
+    void estimate
+      .call(navigator.storage)
+      .then(({ usage, quota }) => {
+        setStorageInfo({ usage, quota });
+      })
+      .catch(() => undefined);
+  }, []);
 
   const exportData = () => {
-    const blob = new Blob([JSON.stringify(exportLocalData(), null, 2)], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = `jornal-backup-${(company?.name ?? "company").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`
-    document.body.append(anchor)
-    anchor.click()
-    anchor.remove()
+    const blob = new Blob([JSON.stringify(exportLocalData(), null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `jornal-backup-${(company?.name ?? "company").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
     // Give mobile browsers time to start the download before releasing it.
-    window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
-    setDataMessage("Backup berhasil dibuat.")
-  }
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    setDataMessage("Backup berhasil dibuat.");
+  };
 
   const importData = async (file: File | undefined) => {
-    if (!file) return
+    if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      setDataMessage("Backup terlalu besar. Pilih file sampai 10 MB.")
-      return
+      setDataMessage("Backup terlalu besar. Pilih file sampai 10 MB.");
+      return;
     }
     try {
-      const parsed = JSON.parse(await file.text()) as unknown
-      if (!window.confirm("Pulihkan backup ini? Data pada perangkat akan digabungkan dengan isi backup.")) return
-      const result = importLocalData(parsed)
-      setDataMessage(`${result.imported} bagian data dipulihkan.`)
-      invalidate()
+      const parsed = JSON.parse(await file.text()) as unknown;
+      if (
+        !window.confirm(
+          "Pulihkan backup ini? Data pada perangkat akan digabungkan dengan isi backup.",
+        )
+      )
+        return;
+      const result = importLocalData(parsed);
+      setDataMessage(`${result.imported} bagian data dipulihkan.`);
+      invalidate();
     } catch (error) {
-      setDataMessage(error instanceof Error ? error.message : "Backup tidak dapat dipulihkan.")
+      setDataMessage(
+        error instanceof Error
+          ? error.message
+          : "Backup tidak dapat dipulihkan.",
+      );
     }
-  }
-  const { data: corrections = [] } = useCorrections()
+  };
+  const { data: corrections = [] } = useCorrections();
 
-  const [autoAccept, setAutoAccept] = useState<string | null>(null)
-  const [needsReview, setNeedsReview] = useState<string | null>(null)
-  const [newAccount, setNewAccount] = useState({ name: "", type: "BANK" as AccountType, balance: "" })
-  const [nameDraft, setNameDraft] = useState<string | null>(null)
-  const [startDateDraft, setStartDateDraft] = useState<string | null>(null)
-  const [fiscalYearDraft, setFiscalYearDraft] = useState<string | null>(null)
-  const [openingBalanceDraft, setOpeningBalanceDraft] = useState<string | null>(null)
-  const [accountBalanceDrafts, setAccountBalanceDrafts] = useState<Record<string, string>>({})
-  const allowedSchemes = allowedTaxSchemes(profile?.businessType ?? "INDIVIDUAL")
-  const selectedTaxScheme = profile && allowedSchemes.includes(profile.taxScheme) ? profile.taxScheme : allowedSchemes[0] ?? "NOT_CALCULATED"
+  const [autoAccept, setAutoAccept] = useState<string | null>(null);
+  const [needsReview, setNeedsReview] = useState<string | null>(null);
+  const [newAccount, setNewAccount] = useState({
+    name: "",
+    type: "BANK" as AccountType,
+    balance: "",
+  });
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [startDateDraft, setStartDateDraft] = useState<string | null>(null);
+  const [fiscalYearDraft, setFiscalYearDraft] = useState<string | null>(null);
+  const [openingBalanceDraft, setOpeningBalanceDraft] = useState<string | null>(
+    null,
+  );
+  const [accountBalanceDrafts, setAccountBalanceDrafts] = useState<
+    Record<string, string>
+  >({});
+  const allowedSchemes = allowedTaxSchemes(
+    profile?.businessType ?? "INDIVIDUAL",
+  );
+  const selectedTaxScheme =
+    profile && allowedSchemes.includes(profile.taxScheme)
+      ? profile.taxScheme
+      : (allowedSchemes[0] ?? "NOT_CALCULATED");
 
   const invalidate = useCallback(() => {
-    for (const key of [queryKeys.profile, queryKeys.accounts, queryKeys.settings]) {
-      void queryClient.invalidateQueries({ queryKey: key })
+    for (const key of [
+      queryKeys.profile,
+      queryKeys.accounts,
+      queryKeys.settings,
+    ]) {
+      void queryClient.invalidateQueries({ queryKey: key });
     }
-  }, [queryClient])
+  }, [queryClient]);
 
   useEffect(() => {
-    if (!profile || company?.status === "ARCHIVED") return
+    if (!profile || company?.status === "ARCHIVED") return;
     if (!allowedSchemes.includes(profile.taxScheme)) {
-      saveProfile({ ...profile, taxScheme: allowedSchemes[0] ?? "NOT_CALCULATED" })
-      invalidate()
+      saveProfile({
+        ...profile,
+        taxScheme: allowedSchemes[0] ?? "NOT_CALCULATED",
+      });
+      invalidate();
     }
-  }, [allowedSchemes, profile, invalidate, company?.status])
+  }, [allowedSchemes, profile, invalidate, company?.status]);
 
-  if (!profile || !settings) return null
+  if (!profile || !settings) return null;
 
   if (company?.status === "ARCHIVED") {
     return (
       <div className="space-y-4 pb-8">
-        <div><h1 className="text-xl tracking-tight">Pengaturan</h1><p className="text-sm text-muted-foreground">Company arsip hanya dapat dilihat dan diekspor.</p></div>
-        <Card><CardContent className="space-y-3 p-5">
-          <Link to="/companies" className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]">Kelola atau pulihkan company</Link>
-          <Button type="button" variant="outline" className="w-full" onClick={exportData}>Unduh backup {company.name}</Button>
-          {dataMessage && <p className="text-xs text-muted-foreground" role="status">{dataMessage}</p>}
-        </CardContent></Card>
+        <div>
+          <h1 className="text-xl tracking-tight">Pengaturan</h1>
+          <p className="text-sm text-muted-foreground">
+            Company arsip hanya dapat dilihat dan diekspor.
+          </p>
+        </div>
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            <Link
+              to="/companies"
+              className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+            >
+              Kelola atau pulihkan company
+            </Link>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={exportData}
+            >
+              Unduh backup {company.name}
+            </Button>
+            {dataMessage && (
+              <p className="text-xs text-muted-foreground" role="status">
+                {dataMessage}
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
-    )
+    );
   }
 
   const commitProfile = (patch: Partial<typeof profile>) => {
-    saveProfile({ ...profile, ...patch })
-    invalidate()
-  }
+    saveProfile({ ...profile, ...patch });
+    invalidate();
+  };
 
   return (
     <div className="space-y-4 pb-8">
       <div>
-        <h1 className="flex items-center gap-2 text-xl tracking-tight"><FontAwesomeIcon icon={faSliders} className="size-4 text-primary" aria-hidden="true" />Pengaturan</h1>
-        <p className="text-sm text-muted-foreground">Profil bisnis, pajak, dan data aplikasi.</p>
+        <h1 className="flex items-center gap-2 text-xl tracking-tight">
+          <FontAwesomeIcon
+            icon={faSliders}
+            className="size-4 text-primary"
+            aria-hidden="true"
+          />
+          Pengaturan
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Profil bisnis, pajak, dan data aplikasi.
+        </p>
       </div>
 
       {/* Business / tax profile (§41) */}
       <Card>
         <CardContent className="space-y-4 p-5">
-          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faBuilding} className="size-4 text-primary" aria-hidden="true" />Profil Bisnis & Pajak</h2>
-          <Link to="/companies" className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]">Kelola dan tambah company</Link>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight">
+            <FontAwesomeIcon
+              icon={faBuilding}
+              className="size-4 text-primary"
+              aria-hidden="true"
+            />
+            Profil Bisnis & Pajak
+          </h2>
+          <Link
+            to="/companies"
+            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+          >
+            Kelola dan tambah company
+          </Link>
+          <Link
+            to="/settings/invoice"
+            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+          >
+            Pengaturan Invoice
+          </Link>
+          <Link
+            to="/sync"
+            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+          >
+            Status sync & pemulihan konflik
+          </Link>
+          <Link
+            to="/templates"
+            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+          >
+            Template transaksi
+          </Link>
+          {company && <CompanyLogoEditor company={company} />}
           <TextField
             label="Nama bisnis"
             value={nameDraft ?? company?.name ?? profile.businessName}
             onChange={(value) => setNameDraft(value)}
             onBlur={() => {
-              if (nameDraft === null || !nameDraft.trim()) return
-              const nextName = nameDraft.trim()
-              if (!company) return
-              void updateCompany(company, { name: nextName }).then(() => {
-                commitProfile({ businessName: nextName })
-              }).catch(() => setDataMessage("Nama company gagal disimpan ke server."))
+              if (nameDraft === null || !nameDraft.trim()) return;
+              const nextName = nameDraft.trim();
+              if (!company) return;
+              void updateCompany(company, { name: nextName })
+                .then(() => {
+                  commitProfile({ businessName: nextName });
+                })
+                .catch(() =>
+                  setDataMessage("Nama company gagal disimpan ke server."),
+                );
             }}
           />
           <label className="block">
             <span className="field-label">Jenis usaha</span>
             <select
               value={profile.businessType}
-              onChange={(event) => commitProfile({ businessType: event.target.value as BusinessType })}
+              onChange={(event) =>
+                commitProfile({
+                  businessType: event.target.value as BusinessType,
+                })
+              }
               className="field-shell !min-h-[50px] w-full !py-0 text-sm"
             >
               {BUSINESS_TYPES.map((type) => (
-                <option key={type} value={type}>{BUSINESS_TYPE_LABELS[type]}</option>
+                <option key={type} value={type}>
+                  {BUSINESS_TYPE_LABELS[type]}
+                </option>
               ))}
             </select>
           </label>
           <label className="block">
-            <span className="field-label">Skema pajak (tax rules berversi)</span>
+            <span className="field-label">
+              Skema pajak (tax rules berversi)
+            </span>
             <select
               value={selectedTaxScheme}
-              onChange={(event) => commitProfile({ taxScheme: event.target.value as typeof profile.taxScheme })}
+              onChange={(event) =>
+                commitProfile({
+                  taxScheme: event.target.value as typeof profile.taxScheme,
+                })
+              }
               className="field-shell !min-h-[50px] w-full !py-0 text-sm"
             >
-              {SCHEMES.filter((scheme) => allowedSchemes.includes(scheme.value)).map((scheme) => (
-                <option key={scheme.value} value={scheme.value}>{scheme.label}</option>
+              {SCHEMES.filter((scheme) =>
+                allowedSchemes.includes(scheme.value),
+              ).map((scheme) => (
+                <option key={scheme.value} value={scheme.value}>
+                  {scheme.label}
+                </option>
               ))}
             </select>
           </label>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <DateField
+            <DateField
               label="Mulai usaha"
               value={startDateDraft ?? profile.businessStartDate ?? ""}
               onChange={(value) => {
-                setStartDateDraft(value)
-                commitProfile({ businessStartDate: value || null })
+                setStartDateDraft(value);
+                commitProfile({ businessStartDate: value || null });
               }}
             />
             <TextField
@@ -197,37 +359,158 @@ export function SettingsPage() {
               type="numeric"
               value={fiscalYearDraft ?? String(profile.fiscalYear)}
               onChange={(value) => setFiscalYearDraft(value)}
-              onBlur={() => commitProfile({ fiscalYear: parseAmountInput(fiscalYearDraft ?? "") || profile.fiscalYear })}
+              onBlur={() =>
+                commitProfile({
+                  fiscalYear:
+                    parseAmountInput(fiscalYearDraft ?? "") ||
+                    profile.fiscalYear,
+                })
+              }
             />
           </div>
           <label className="flex items-center justify-between gap-3 rounded-xl bg-secondary/50 p-3">
             <span>
               <span className="block text-sm font-medium">Status PKP</span>
-              <span className="text-xs text-muted-foreground">Pengusaha kena pajak</span>
+              <span className="text-xs text-muted-foreground">
+                Pengusaha kena pajak
+              </span>
             </span>
             <input
               type="checkbox"
               checked={profile.pkpStatus}
-              onChange={(event) => commitProfile({ pkpStatus: event.target.checked })}
+              onChange={(event) =>
+                commitProfile({ pkpStatus: event.target.checked })
+              }
               className="size-4 accent-[var(--primary)]"
             />
           </label>
         </CardContent>
       </Card>
 
+      <Card>
+        <CardContent className="space-y-3 p-5">
+          <h2 className="text-lg tracking-tight">Notifikasi & PWA</h2>
+          <p className="text-xs text-muted-foreground">
+            Pilih jenis notifikasi untuk perangkat ini. Setiap notifikasi selalu
+            membuka layar review.
+          </p>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {(
+              [
+                ["invoice", "Invoice jatuh tempo"],
+                ["tax", "Pajak"],
+                ["documents", "Dokumen"],
+              ] as const
+            ).map(([key, label]) => (
+              <label
+                key={key}
+                className="flex items-center gap-2 rounded-xl bg-secondary/50 p-3"
+              >
+                <input
+                  type="checkbox"
+                  checked={pushPreferences[key]}
+                  onChange={(event) =>
+                    setPushPreferences((current) => ({
+                      ...current,
+                      [key]: event.target.checked,
+                    }))
+                  }
+                />
+                {label}
+              </label>
+            ))}
+            <label className="flex items-center gap-2 rounded-xl bg-secondary/50 p-3">
+              <input
+                type="checkbox"
+                checked={pushPreferences.hideAmounts}
+                onChange={(event) =>
+                  setPushPreferences((current) => ({
+                    ...current,
+                    hideAmounts: event.target.checked,
+                  }))
+                }
+              />
+              Sembunyikan nominal
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <TextField
+              label="Mode tenang mulai"
+              type="numeric"
+              value={String(pushPreferences.quietStartHour)}
+              onChange={(value) =>
+                setPushPreferences((current) => ({
+                  ...current,
+                  quietStartHour: Math.min(23, Math.max(0, Number(value) || 0)),
+                }))
+              }
+            />
+            <TextField
+              label="Mode tenang selesai"
+              type="numeric"
+              value={String(pushPreferences.quietEndHour)}
+              onChange={(value) =>
+                setPushPreferences((current) => ({
+                  ...current,
+                  quietEndHour: Math.min(23, Math.max(0, Number(value) || 0)),
+                }))
+              }
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() =>
+                void enablePushNotifications(pushPreferences)
+                  .then(() =>
+                    setDataMessage(
+                      "Preferensi notifikasi tersimpan pada perangkat ini.",
+                    ),
+                  )
+                  .catch((error) => setDataMessage(String(error)))
+              }
+            >
+              Aktifkan / simpan
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() =>
+                void disablePushNotifications().then(() =>
+                  setDataMessage("Notifikasi perangkat dinonaktifkan."),
+                )
+              }
+            >
+              Nonaktifkan
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Accounts & opening balances (§31, §46.4) */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faWallet} className="size-4 text-primary" aria-hidden="true" />Akun & Saldo Awal</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight">
+            <FontAwesomeIcon
+              icon={faWallet}
+              className="size-4 text-primary"
+              aria-hidden="true"
+            />
+            Akun & Saldo Awal
+          </h2>
           <label className="flex items-center justify-between gap-3 rounded-xl bg-secondary/50 p-3">
             <span>
-              <span className="block text-sm font-medium">Lacak lokasi uang</span>
-              <span className="text-xs text-muted-foreground">Meningkatkan akurasi Safe To Spend</span>
+              <span className="block text-sm font-medium">
+                Lacak lokasi uang
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Meningkatkan akurasi Safe To Spend
+              </span>
             </span>
             <input
               type="checkbox"
               checked={profile.useAccountTracking}
-              onChange={(event) => commitProfile({ useAccountTracking: event.target.checked })}
+              onChange={(event) =>
+                commitProfile({ useAccountTracking: event.target.checked })
+              }
               className="size-4 accent-[var(--primary)]"
             />
           </label>
@@ -236,30 +519,54 @@ export function SettingsPage() {
             <>
               <div className="divide-y divide-border/40">
                 {accounts.map((account) => (
-                  <div key={account.id} className="flex items-center gap-2 py-2">
+                  <div
+                    key={account.id}
+                    className="flex items-center gap-2 py-2"
+                  >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{account.name}</p>
-                      <p className="text-xs text-muted-foreground">{ACCOUNT_TYPES.find((type) => type.value === account.type)?.label}</p>
+                      <p className="truncate text-sm font-medium">
+                        {account.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {
+                          ACCOUNT_TYPES.find(
+                            (type) => type.value === account.type,
+                          )?.label
+                        }
+                      </p>
                     </div>
                     <TextField
                       type="amount"
                       prefix="Rp"
                       className="w-36"
                       inputClassName="text-right text-sm"
-                      value={accountBalanceDrafts[account.id] ?? (account.openingBalance > 0 ? formatNumberInput(account.openingBalance) : "")}
-                      onChange={(value) => setAccountBalanceDrafts((current) => ({ ...current, [account.id]: value }))}
+                      value={
+                        accountBalanceDrafts[account.id] ??
+                        (account.openingBalance > 0
+                          ? formatNumberInput(account.openingBalance)
+                          : "")
+                      }
+                      onChange={(value) =>
+                        setAccountBalanceDrafts((current) => ({
+                          ...current,
+                          [account.id]: value,
+                        }))
+                      }
                       onBlur={() => {
-                        const draft = accountBalanceDrafts[account.id]
-                        if (draft === undefined) return
-                        upsertAccount({ ...account, openingBalance: parseAmountInput(draft) })
-                        invalidate()
+                        const draft = accountBalanceDrafts[account.id];
+                        if (draft === undefined) return;
+                        upsertAccount({
+                          ...account,
+                          openingBalance: parseAmountInput(draft),
+                        });
+                        invalidate();
                       }}
                     />
                     <button
                       type="button"
                       onClick={() => {
-                        deleteAccount(account.id)
-                        invalidate()
+                        deleteAccount(account.id);
+                        invalidate();
                       }}
                       className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       aria-label={`Hapus ${account.name}`}
@@ -270,31 +577,55 @@ export function SettingsPage() {
                 ))}
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <TextField label="Nama akun" value={newAccount.name} onChange={(name) => setNewAccount((current) => ({ ...current, name }))} placeholder="Nama akun" />
-                <TextField label="Saldo awal" type="amount" prefix="Rp" value={newAccount.balance} onChange={(balance) => setNewAccount((current) => ({ ...current, balance }))} />
+                <TextField
+                  label="Nama akun"
+                  value={newAccount.name}
+                  onChange={(name) =>
+                    setNewAccount((current) => ({ ...current, name }))
+                  }
+                  placeholder="Nama akun"
+                />
+                <TextField
+                  label="Saldo awal"
+                  type="amount"
+                  prefix="Rp"
+                  value={newAccount.balance}
+                  onChange={(balance) =>
+                    setNewAccount((current) => ({ ...current, balance }))
+                  }
+                />
               </div>
               <div className="flex items-center gap-2">
                 <select
                   value={newAccount.type}
-                  onChange={(event) => setNewAccount((current) => ({ ...current, type: event.target.value as AccountType }))}
+                  onChange={(event) =>
+                    setNewAccount((current) => ({
+                      ...current,
+                      type: event.target.value as AccountType,
+                    }))
+                  }
                   className="field-shell !min-h-[46px] w-full !py-0 text-sm"
                   aria-label="Jenis akun"
                 >
                   {ACCOUNT_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
                   ))}
                 </select>
-                <Button onClick={() => {
-                  if (!newAccount.name.trim()) return
-                  upsertAccount({
-                    name: newAccount.name.trim(),
-                    type: newAccount.type,
-                    openingBalance: parseAmountInput(newAccount.balance),
-                    includedInCash: true,
-                  })
-                  setNewAccount({ name: "", type: "BANK", balance: "" })
-                  invalidate()
-                }}>
+                <Button
+                  onClick={() => {
+                    if (!newAccount.name.trim()) return;
+                    upsertAccount({
+                      name: newAccount.name.trim(),
+                      type: newAccount.type,
+                      openingBalance: parseAmountInput(newAccount.balance),
+                      includedInCash: true,
+                    });
+                    setNewAccount({ name: "", type: "BANK", balance: "" });
+                    invalidate();
+                  }}
+                >
                   <Plus aria-hidden="true" />
                   Tambah
                 </Button>
@@ -302,15 +633,25 @@ export function SettingsPage() {
             </>
           ) : (
             <div>
-                <TextField
-                  label="Saldo awal bisnis"
-                  type="amount"
-                  prefix="Rp"
-                  value={openingBalanceDraft ?? (profile.openingBalance > 0 ? formatNumberInput(profile.openingBalance) : "")}
-                  onChange={(value) => setOpeningBalanceDraft(value)}
-                  onBlur={() => openingBalanceDraft !== null && commitProfile({ openingBalance: parseAmountInput(openingBalanceDraft) })}
-                  hint="Saldo awal tidak dihitung sebagai omzet."
-                />
+              <TextField
+                label="Saldo awal bisnis"
+                type="amount"
+                prefix="Rp"
+                value={
+                  openingBalanceDraft ??
+                  (profile.openingBalance > 0
+                    ? formatNumberInput(profile.openingBalance)
+                    : "")
+                }
+                onChange={(value) => setOpeningBalanceDraft(value)}
+                onBlur={() =>
+                  openingBalanceDraft !== null &&
+                  commitProfile({
+                    openingBalance: parseAmountInput(openingBalanceDraft),
+                  })
+                }
+                hint="Saldo awal tidak dihitung sebagai omzet."
+              />
             </div>
           )}
         </CardContent>
@@ -319,11 +660,19 @@ export function SettingsPage() {
       {/* Classification thresholds (§22) */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faSliders} className="size-4 text-primary" aria-hidden="true" />Ambang Klasifikasi</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight">
+            <FontAwesomeIcon
+              icon={faSliders}
+              className="size-4 text-primary"
+              aria-hidden="true"
+            />
+            Ambang Klasifikasi
+          </h2>
           <p className="text-xs text-muted-foreground">
-            ≥ {Math.round(settings.autoAccept * 100)}% otomatis diterima · {" "}
-            {Math.round(settings.needsReview * 100)}–{Math.round(settings.autoAccept * 100) - 1}% diterima + saran ·{" "}
-            &lt; {Math.round(settings.needsReview * 100)}% butuh konfirmasi
+            ≥ {Math.round(settings.autoAccept * 100)}% otomatis diterima ·{" "}
+            {Math.round(settings.needsReview * 100)}–
+            {Math.round(settings.autoAccept * 100) - 1}% diterima + saran · &lt;{" "}
+            {Math.round(settings.needsReview * 100)}% butuh konfirmasi
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
@@ -331,12 +680,12 @@ export function SettingsPage() {
               value={autoAccept ?? String(settings.autoAccept)}
               onChange={(value) => setAutoAccept(value)}
               onBlur={() => {
-                const value = Number(autoAccept)
+                const value = Number(autoAccept);
                 if (Number.isFinite(value) && value > 0 && value <= 1) {
-                  saveSettings({ ...settings, autoAccept: value })
-                  invalidate()
+                  saveSettings({ ...settings, autoAccept: value });
+                  invalidate();
                 } else {
-                  setAutoAccept(null)
+                  setAutoAccept(null);
                 }
               }}
             />
@@ -345,12 +694,12 @@ export function SettingsPage() {
               value={needsReview ?? String(settings.needsReview)}
               onChange={(value) => setNeedsReview(value)}
               onBlur={() => {
-                const value = Number(needsReview)
+                const value = Number(needsReview);
                 if (Number.isFinite(value) && value > 0 && value <= 1) {
-                  saveSettings({ ...settings, needsReview: value })
-                  invalidate()
+                  saveSettings({ ...settings, needsReview: value });
+                  invalidate();
                 } else {
-                  setNeedsReview(null)
+                  setNeedsReview(null);
                 }
               }}
             />
@@ -361,18 +710,35 @@ export function SettingsPage() {
       {/* Learning loop (§25 — activated in Phase 2) + classification metrics */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faBrain} className="size-4 text-primary" aria-hidden="true" />Pola yang Dipelajari</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight">
+            <FontAwesomeIcon
+              icon={faBrain}
+              className="size-4 text-primary"
+              aria-hidden="true"
+            />
+            Pola yang Dipelajari
+          </h2>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Ketika Anda mengoreksi klasifikasi, sistem menyimpan pola. Transaksi serupa berikutnya otomatis diklasifikasi
-            dengan keyakinan lebih tinggi.
+            Ketika Anda mengoreksi klasifikasi, sistem menyimpan pola. Transaksi
+            serupa berikutnya otomatis diklasifikasi dengan keyakinan lebih
+            tinggi.
           </p>
 
           <div className="grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
             <div className="rounded-xl bg-secondary/60 p-2.5">
-              <p className="text-[10px] text-muted-foreground">Otomatis diterima</p>
+              <p className="text-[10px] text-muted-foreground">
+                Otomatis diterima
+              </p>
               <p className="text-sm font-semibold tabular-nums">
                 {transactions.length > 0
-                  ? Math.round((transactions.filter((transaction) => transaction.reviewStatus === "AUTO_ACCEPTED").length / transactions.length) * 100)
+                  ? Math.round(
+                      (transactions.filter(
+                        (transaction) =>
+                          transaction.reviewStatus === "AUTO_ACCEPTED",
+                      ).length /
+                        transactions.length) *
+                        100,
+                    )
                   : 0}
                 %
               </p>
@@ -380,12 +746,21 @@ export function SettingsPage() {
             <div className="rounded-xl bg-secondary/60 p-2.5">
               <p className="text-[10px] text-muted-foreground">Butuh review</p>
               <p className="text-sm font-semibold tabular-nums">
-                {transactions.filter((transaction) => transaction.reviewStatus === "NEEDS_REVIEW").length}
+                {
+                  transactions.filter(
+                    (transaction) =>
+                      transaction.reviewStatus === "NEEDS_REVIEW",
+                  ).length
+                }
               </p>
             </div>
             <div className="rounded-xl bg-secondary/60 p-2.5">
-              <p className="text-[10px] text-muted-foreground">Pola dipelajari</p>
-              <p className="text-sm font-semibold tabular-nums">{corrections.length}</p>
+              <p className="text-[10px] text-muted-foreground">
+                Pola dipelajari
+              </p>
+              <p className="text-sm font-semibold tabular-nums">
+                {corrections.length}
+              </p>
             </div>
           </div>
 
@@ -393,18 +768,25 @@ export function SettingsPage() {
             <>
               <div className="divide-y divide-border/40">
                 {corrections.map((pattern) => (
-                  <div key={pattern.id} className="flex items-center gap-2 py-2">
+                  <div
+                    key={pattern.id}
+                    className="flex items-center gap-2 py-2"
+                  >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">"{pattern.token}"</p>
+                      <p className="truncate text-sm font-medium">
+                        "{pattern.token}"
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        {categoryName(pattern.categoryId)} · {CLASSIFICATION_LABELS[pattern.classification]} · {pattern.occurrences}×
+                        {categoryName(pattern.categoryId)} ·{" "}
+                        {CLASSIFICATION_LABELS[pattern.classification]} ·{" "}
+                        {pattern.occurrences}×
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
-                        deleteCorrection(pattern.id)
-                        invalidate()
+                        deleteCorrection(pattern.id);
+                        invalidate();
                       }}
                       className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       aria-label={`Hapus pola ${pattern.token}`}
@@ -418,8 +800,8 @@ export function SettingsPage() {
                 type="button"
                 onClick={() => {
                   if (window.confirm("Hapus semua pola yang dipelajari?")) {
-                    clearCorrections()
-                    invalidate()
+                    clearCorrections();
+                    invalidate();
                   }
                 }}
                 className="text-xs font-medium text-muted-foreground underline hover:text-foreground"
@@ -429,7 +811,8 @@ export function SettingsPage() {
             </>
           ) : (
             <p className="rounded-xl bg-secondary/60 p-3 text-xs text-muted-foreground">
-              Belum ada pola. Koreksi klasifikasi saat menyimpan transaksi dan pola akan muncul di sini.
+              Belum ada pola. Koreksi klasifikasi saat menyimpan transaksi dan
+              pola akan muncul di sini.
             </p>
           )}
         </CardContent>
@@ -438,9 +821,17 @@ export function SettingsPage() {
       {/* Data */}
       <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faDatabase} className="size-4 text-primary" aria-hidden="true" />Data</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight">
+            <FontAwesomeIcon
+              icon={faDatabase}
+              className="size-4 text-primary"
+              aria-hidden="true"
+            />
+            Data
+          </h2>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Semua data tersimpan di perangkat ini (offline-ready). Total transaksi tercatat: {transactions.length}.
+            Semua data tersimpan di perangkat ini (offline-ready). Total
+            transaksi tercatat: {transactions.length}.
           </p>
           <p className="text-xs text-muted-foreground" role="status">
             {storageInfo?.usage !== undefined && storageInfo.quota
@@ -448,20 +839,54 @@ export function SettingsPage() {
               : "Status kapasitas penyimpanan belum tersedia di browser ini."}
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Button type="button" variant="outline" onClick={exportData}>Unduh backup</Button>
-            <Button type="button" variant="outline" onClick={() => importInputRef.current?.click()}>Pulihkan backup</Button>
+            <Button type="button" variant="outline" onClick={exportData}>
+              Unduh backup
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => importInputRef.current?.click()}
+            >
+              Pulihkan backup
+            </Button>
           </div>
-          <input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => { void importData(event.target.files?.[0]); event.target.value = "" }} />
-          {dataMessage && <p className="text-xs text-muted-foreground" role="status">{dataMessage}</p>}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={(event) => {
+              void importData(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+          />
+          {dataMessage && (
+            <p className="text-xs text-muted-foreground" role="status">
+              {dataMessage}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => {
-              if (company && window.confirm(`Reset semua data company ${company.name}? Company lain tidak akan terpengaruh.`)) {
-                void resetCompany(company).then(async (updated) => {
-                  setCompanyScope(updated.id, updated.dataEpoch)
-                  await resetAllData({ remoteAlreadyReset: true })
-                  window.location.href = `/companies/${encodeURIComponent(updated.id)}/setup?company=${encodeURIComponent(updated.id)}`
-                }).catch((cause) => setDataMessage(cause instanceof Error ? cause.message : "Company gagal direset"))
+              if (
+                company &&
+                window.confirm(
+                  `Reset semua data company ${company.name}? Company lain tidak akan terpengaruh.`,
+                )
+              ) {
+                void resetCompany(company)
+                  .then(async (updated) => {
+                    setCompanyScope(updated.id, updated.dataEpoch);
+                    await resetAllData({ remoteAlreadyReset: true });
+                    window.location.href = `/companies/${encodeURIComponent(updated.id)}/setup?company=${encodeURIComponent(updated.id)}`;
+                  })
+                  .catch((cause) =>
+                    setDataMessage(
+                      cause instanceof Error
+                        ? cause.message
+                        : "Company gagal direset",
+                    ),
+                  );
               }
             }}
             className="w-full rounded-xl border border-destructive/40 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"
@@ -471,17 +896,18 @@ export function SettingsPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 function formatStorageSize(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`
-  const units = ["KB", "MB", "GB"]
-  let value = bytes / 1024
-  let unit = units[0]
+  if (!Number.isFinite(bytes) || bytes < 1024)
+    return `${Math.max(0, Math.round(bytes))} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unit = units[0];
   for (let index = 1; index < units.length && value >= 1024; index += 1) {
-    value /= 1024
-    unit = units[index]
+    value /= 1024;
+    unit = units[index];
   }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
 }

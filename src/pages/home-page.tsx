@@ -22,7 +22,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { formatRupiah, formatSignedRupiah, todayIsoDate } from "@/lib/format"
 import { useProfile, useReserves, useSafeToSpendResult, useTransactions } from "@/lib/queries"
 import { receivablesFromTransactions } from "@/lib/receivables"
+import { transactionRevenueAmount } from "@/lib/transaction-revenue"
 import { useTaxAgenda } from "@/lib/tax-compliance-queries"
+import { ActionCenter } from "@/components/action-center"
 export function HomePage() {
   const [preset, setPreset] = useState<PeriodPreset>("month")
   const [custom, setCustom] = useState(() => ({ start: todayIsoDate(), end: todayIsoDate() }))
@@ -60,7 +62,7 @@ export function HomePage() {
   const moneyOut = periodTransactions.filter((t) => t.direction === "MONEY_OUT").reduce((sum, t) => sum + t.amount, 0)
   const netCashFlow = moneyIn - moneyOut
 
-  const revenue = periodTransactions.filter((t) => t.classification === "REVENUE").reduce((sum, t) => sum + t.amount, 0)
+  const revenue = periodTransactions.filter((t) => t.classification === "REVENUE").reduce((sum, t) => sum + transactionRevenueAmount(t), 0)
   const businessExpense = periodTransactions.filter((t) => t.classification === "OPERATING_EXPENSE").reduce((sum, t) => sum + t.amount, 0)
 
   const nextTax = useMemo(() => [
@@ -72,6 +74,8 @@ export function HomePage() {
 
   return (
     <div className="space-y-4 pb-8">
+      <ActionCenter />
+      <nav className="grid grid-cols-3 gap-2" aria-label="Fitur bisnis"><Link to="/invoices" className="rounded-xl bg-white p-3 text-center text-sm font-semibold text-[var(--link)] shadow-sm">Invoice</Link><Link to="/customers" className="rounded-xl bg-white p-3 text-center text-sm font-semibold text-[var(--link)] shadow-sm">Pelanggan</Link><Link to="/inbox" className="rounded-xl bg-white p-3 text-center text-sm font-semibold text-[var(--link)] shadow-sm">Inbox</Link></nav>
       <PeriodSelector preset={preset} custom={custom} onChange={setPreset} onCustomChange={setCustom} />
 
       {/* Safe To Spend — the core differentiator (§46, §48), calm navy card */}

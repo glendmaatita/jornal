@@ -5,6 +5,7 @@ import { useRegisterSW } from "virtual:pwa-register/react"
 import { Button } from "@/components/ui/button"
 import { CLIENT_UPDATE_REQUIRED_EVENT, getSyncStatus, loadSyncConflicts, resolveSyncConflict, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
 import { STORAGE_WARNING_EVENT } from "@/lib/store"
+import { activeCompany, persistCompanyDrafts } from "@/lib/companies"
 
 export function PwaStatus() {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
@@ -76,7 +77,7 @@ export function PwaStatus() {
             : "Anda sedang offline — data tetap tersimpan di perangkat ini."}
       </p>
       {needRefresh && (
-        <Button size="sm" variant="secondary" onClick={() => void updateServiceWorker(true)}>
+        <Button size="sm" variant="secondary" onClick={() => void (async () => { const company = activeCompany(); if (company) await persistCompanyDrafts(company); await updateServiceWorker(true) })()}>
           Update
         </Button>
       )}

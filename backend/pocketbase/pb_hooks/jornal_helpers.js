@@ -31,6 +31,18 @@ function validatePayloadReferences(event, companyId) {
     throw new ApiError(400, "Payload tenant is outside the record scope")
   }
   if (entity !== "transactions" && entity !== "recurringRules") return
+  if (entity === "transactions") {
+    if (["invoiceId", "invoicePaymentId", "invoiceNumber", "customerId", "invoiceRevenueAmount", "invoiceTaxAmount"].some((key) => value(payload, key) !== null && value(payload, key) !== undefined && value(payload, key) !== "")) {
+      throw new ApiError(409, "Invoice metadata can only be changed through invoice commands")
+    }
+    if (value(payload, "documentId")) throw new ApiError(409, "Document linkage can only be changed through document commands")
+    const invoiceLinks = $app.findRecordsByFilter(
+      "invoice_payments",
+      "tenant_id = {:tenant} && company_id = {:company} && ledger_transaction_id = {:transaction} && status = 'ACTIVE'",
+      "", 1, 0, { tenant: event.auth.id, company: companyId, transaction: event.record.getString("app_id") },
+    )
+    if (invoiceLinks.length > 0) throw new ApiError(409, "Invoice payment is locked; correct it from the invoice")
+  }
   const accountIds = [value(payload, "accountId"), value(payload, "transferAccountId")].filter(Boolean)
   for (const accountId of accountIds) {
     try {
@@ -79,6 +91,15 @@ function validateNoInboundReferences(event, companyId) {
       { tenant: event.auth.id, company: companyId, transaction: targetId },
     )
     if (linked.length > 0) throw new ApiError(409, "Tax payment is still allocated; correct it from the tax agenda")
+    const invoiceLinked = $app.findRecordsByFilter(
+      "invoice_payments",
+      "tenant_id = {:tenant} && company_id = {:company} && ledger_transaction_id = {:transaction} && status = 'ACTIVE'",
+      "", 1, 0,
+      { tenant: event.auth.id, company: companyId, transaction: targetId },
+    )
+    if (invoiceLinked.length > 0) throw new ApiError(409, "Invoice payment is locked; correct it from the invoice")
+    const documentLinked = $app.findRecordsByFilter("document_inbox", "tenant_id = {:tenant} && company_id = {:company} && linked_transaction_id = {:transaction} && status = 'LINKED'", "", 1, 0, { tenant: event.auth.id, company: companyId, transaction: targetId })
+    if (documentLinked.length > 0) throw new ApiError(409, "Transaction is linked to a document; unlink it from the inbox")
   }
 }
 

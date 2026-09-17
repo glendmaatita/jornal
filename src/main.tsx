@@ -5,6 +5,9 @@ import { RouterProvider } from "@tanstack/react-router"
 
 import { router } from "@/router"
 import "@/index.css"
+import "@fontsource/poppins/400.css"
+import "@fontsource/poppins/700.css"
+import "@fontsource/poppins/900.css"
 
 const queryClient = new QueryClient({
   defaultOptions: {

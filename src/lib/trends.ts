@@ -6,6 +6,7 @@
 import { ALL_CATEGORIES } from "./categories"
 import { formatMonthYear, toIsoDate } from "./format"
 import { assertSingleCompany } from "./company-scope"
+import { transactionRevenueAmount } from "./transaction-revenue"
 import type { Transaction, TransactionDirection } from "./types"
 
 export interface MonthlyPoint {
@@ -44,7 +45,7 @@ export function monthlyTrends(transactions: Transaction[], months = 6, now = new
     if (!point || transaction.classification === "INTERNAL_TRANSFER" || transaction.classification === "OPENING_BALANCE") continue
     if (transaction.direction === "MONEY_IN") point.moneyIn += transaction.amount
     else point.moneyOut += transaction.amount
-    if (transaction.classification === "REVENUE") point.revenue += transaction.amount
+    if (transaction.classification === "REVENUE") point.revenue += transactionRevenueAmount(transaction)
     if (transaction.classification === "OPERATING_EXPENSE") point.businessExpense += transaction.amount
   }
   for (const point of points) point.net = point.moneyIn - point.moneyOut

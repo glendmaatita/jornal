@@ -7,6 +7,7 @@ import { formatRupiah } from "./format"
 import { monthsElapsedThisYear, todayIsoDate } from "./format"
 import { resolveProfileAsOf, resolveTransactionsAsOf } from "./store"
 import { assertSingleCompany } from "./company-scope"
+import { transactionRevenueAmount } from "./transaction-revenue"
 import type { BusinessProfile, BusinessType, TaxScheme, Transaction } from "./types"
 
 export type TaxRuleId = "UMKM_FINAL_05_P55_2022" | "UMKM_FINAL_05_PP20_2026" | "PPH_PROG_2022" | "PPH_BADAN_22"
@@ -323,7 +324,7 @@ export function revenueYTD(transactions: Transaction[], fiscalYear: number): num
         t.classification === "REVENUE" &&
         t.transactionDate.startsWith(String(fiscalYear)),
     )
-    .reduce((sum, t) => sum + t.amount, 0)
+    .reduce((sum, t) => sum + transactionRevenueAmount(t), 0)
 }
 
 export function businessExpenseYTD(transactions: Transaction[], fiscalYear: number): number {

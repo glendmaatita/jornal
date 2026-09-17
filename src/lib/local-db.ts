@@ -4,12 +4,22 @@
  */
 const DATABASE = "jornal-local-v1"
 const STORE = "state"
-const VERSION = 2
+const VERSION = 3
 const OUTBOX = "outbox"
+const BLOBS = "blobs"
 
 interface StateRow {
   key: string
   value: unknown
+  updatedAt: number
+}
+
+export interface BlobRow {
+  key: string
+  blob: Blob
+  mimeType: string
+  filename: string
+  byteSize: number
   updatedAt: number
 }
 
@@ -27,10 +37,53 @@ function database(): Promise<IDBDatabase | null> {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "key" })
       if (!db.objectStoreNames.contains(OUTBOX)) db.createObjectStore(OUTBOX, { keyPath: "key" })
+      if (!db.objectStoreNames.contains(BLOBS)) db.createObjectStore(BLOBS, { keyPath: "key" })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error("IndexedDB unavailable"))
   })
+}
+
+/** Persist private document bytes separately from JSON state. Callers must use
+ * a tenant/company-scoped key; this module intentionally cannot infer scope. */
+export async function storeBlob(row: Omit<BlobRow, "updatedAt">): Promise<void> {
+  const db = await database()
+  if (!db) throw new Error("Penyimpanan offline tidak tersedia")
+  await new Promise<void>((resolve, reject) => {
+    const request = db.transaction(BLOBS, "readwrite").objectStore(BLOBS).put({ ...row, updatedAt: Date.now() } satisfies BlobRow)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error ?? new Error("Penyimpanan dokumen gagal"))
+  }).finally(() => db.close())
+}
+
+export async function restoreBlob(key: string): Promise<BlobRow | undefined> {
+  const db = await database()
+  if (!db) return undefined
+  return new Promise<BlobRow | undefined>((resolve, reject) => {
+    const request = db.transaction(BLOBS, "readonly").objectStore(BLOBS).get(key)
+    request.onsuccess = () => { resolve(request.result as BlobRow | undefined); db.close() }
+    request.onerror = () => { db.close(); reject(request.error ?? new Error("Dokumen offline tidak dapat dibaca")) }
+  })
+}
+
+export async function listBlobsByPrefix(prefix: string): Promise<BlobRow[]> {
+  const db = await database()
+  if (!db) return []
+  return new Promise<BlobRow[]>((resolve, reject) => {
+    const request = db.transaction(BLOBS, "readonly").objectStore(BLOBS).getAll()
+    request.onsuccess = () => { resolve((request.result as BlobRow[]).filter((row) => row.key.startsWith(prefix))); db.close() }
+    request.onerror = () => { db.close(); reject(request.error ?? new Error("Dokumen offline tidak dapat dimuat")) }
+  })
+}
+
+export async function removeBlob(key: string): Promise<void> {
+  const db = await database()
+  if (!db) return
+  await new Promise<void>((resolve, reject) => {
+    const request = db.transaction(BLOBS, "readwrite").objectStore(BLOBS).delete(key)
+    request.onsuccess = () => resolve()
+    request.onerror = () => reject(request.error ?? new Error("Dokumen offline tidak dapat dihapus"))
+  }).finally(() => db.close())
 }
 
 export async function mirrorState(key: string, value: unknown): Promise<void> {

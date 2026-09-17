@@ -1,0 +1,25 @@
+services:
+  invoice-renderer:
+    build:
+      context: .
+      dockerfile: services/invoice-renderer/Dockerfile
+    environment:
+      INVOICE_RENDERER_SECRET: ${INVOICE_RENDERER_SECRET:?set INVOICE_RENDERER_SECRET}
+    expose: ["3100"]
+    read_only: true
+    tmpfs: ["/tmp:size=256m"]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+  push-worker:
+    build:
+      context: .
+      dockerfile: services/push-worker/Dockerfile
+    environment:
+      POCKETBASE_URL: ${POCKETBASE_URL:-http://pocketbase:8090}
+      JORNAL_PUSH_WORKER_SECRET: ${JORNAL_PUSH_WORKER_SECRET:?set JORNAL_PUSH_WORKER_SECRET}
+      JORNAL_PUSH_VAPID_PUBLIC_KEY: ${JORNAL_PUSH_VAPID_PUBLIC_KEY:?set JORNAL_PUSH_VAPID_PUBLIC_KEY}
+      JORNAL_PUSH_VAPID_PRIVATE_KEY: ${JORNAL_PUSH_VAPID_PRIVATE_KEY:?set JORNAL_PUSH_VAPID_PRIVATE_KEY}
+      JORNAL_PUSH_VAPID_SUBJECT: ${JORNAL_PUSH_VAPID_SUBJECT:-mailto:admin@dropify.id}
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped

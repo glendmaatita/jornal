@@ -1,4 +1,6 @@
 @import "tailwindcss";
+
+.privacy-mode .tabular-nums,.privacy-mode [data-private-amount]{filter:blur(7px);user-select:none}
 @import "tw-animate-css";
 
 @theme inline {

@@ -1,15 +1,17 @@
-import { Suspense, lazy, useEffect, useRef } from "react"
+import { Suspense, lazy, useEffect, useRef, useState } from "react"
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { BarChart3, Home as HomeIcon, LogOut, Plus, ReceiptText, Settings, Wallet } from "lucide-react"
+import { BarChart3, Eye, EyeOff, FileText, Home as HomeIcon, Inbox, LogOut, Plus, ReceiptText, Search, Settings, Users, Wallet } from "lucide-react"
 
 import { BrandMark } from "@/components/brand-mark"
+import { Button } from "@/components/ui/button"
 import { CompanySwitcher } from "@/components/company-switcher"
 import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
 import { currentUser, logout, pb } from "@/lib/pb"
 import { activeCompany } from "@/lib/companies"
 import { resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
+import { disablePushNotifications } from "@/lib/push-client"
 import { setDataScope, setTenantScope } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -30,10 +32,12 @@ export function AppShell() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const { canInstall, install } = useInstallPrompt()
+  const { canInstall, install, isIos, isInstalled } = useInstallPrompt()
   const user = currentUser()
   const company = activeCompany()
   const authUserIdRef = useRef(pb.authStore.record?.id ?? null)
+  const [privacy, setPrivacy] = useState(() => window.localStorage.getItem("jornal.privacy-mode") === "1")
+  const [showIosInstall, setShowIosInstall] = useState(false)
 
   useEffect(() => {
     const onAuthChange = () => {
@@ -76,6 +80,8 @@ export function AppShell() {
     void navigator.storage.persist().catch(() => false)
   }, [])
 
+  useEffect(() => { document.documentElement.classList.toggle("privacy-mode", privacy); window.localStorage.setItem("jornal.privacy-mode", privacy ? "1" : "0") }, [privacy])
+
   useEffect(() => {
     if (!company?.id || pathname.startsWith("/companies") || pathname === "/onboarding") return
     const url = new URL(window.location.href)
@@ -84,7 +90,8 @@ export function AppShell() {
     window.history.replaceState(window.history.state, "", url)
   }, [company?.id, pathname])
 
-  function handleLogout() {
+  async function handleLogout() {
+    await disablePushNotifications().catch(() => undefined)
     queryClient.cancelQueries()
     queryClient.clear()
     setDataScope("local")
@@ -114,10 +121,11 @@ export function AppShell() {
                 Pasang aplikasi
               </button>
             )}
+            {isIos && !isInstalled && !canInstall && <button type="button" onClick={() => setShowIosInstall(true)} className="rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)]">Pasang aplikasi</button>}
             {user && (
               <button
                 type="button"
-                onClick={handleLogout}
+                onClick={() => void handleLogout()}
                 title={`Keluar (${user.email})`}
                 aria-label="Keluar"
                 className="grid size-9 place-items-center rounded-full transition-colors hover:bg-white"
@@ -125,6 +133,11 @@ export function AppShell() {
                 <LogOut className="size-[18px]" aria-hidden="true" />
               </button>
             )}
+            <Link to="/customers" className={cn("hidden size-9 place-items-center rounded-full transition-colors hover:bg-white sm:grid", pathname.startsWith("/customers") && "text-[var(--link)]")} aria-label="Pelanggan"><Users className="size-[18px]" /></Link>
+            <Link to="/invoices" className={cn("hidden size-9 place-items-center rounded-full transition-colors hover:bg-white sm:grid", pathname.startsWith("/invoices") && "text-[var(--link)]")} aria-label="Invoice"><FileText className="size-[18px]" /></Link>
+            <Link to="/inbox" className={cn("hidden size-9 place-items-center rounded-full transition-colors hover:bg-white sm:grid", pathname.startsWith("/inbox") && "text-[var(--link)]")} aria-label="Inbox dokumen"><Inbox className="size-[18px]" /></Link>
+            <Link to="/search" className={cn("grid size-9 place-items-center rounded-full transition-colors hover:bg-white", pathname === "/search" && "text-[var(--link)]")} aria-label="Cari"><Search className="size-[18px]" /></Link>
+            <button type="button" onClick={() => setPrivacy((value) => !value)} className="hidden size-9 place-items-center rounded-full hover:bg-white sm:grid" aria-label={privacy ? "Tampilkan nominal" : "Sembunyikan nominal"}>{privacy ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}</button>
             <Link
               to="/accounts"
               className={cn(
@@ -162,6 +175,7 @@ export function AppShell() {
 
       <BottomNav pathname={pathname} readOnly={company?.status === "ARCHIVED"} />
       <PwaStatus />
+      {showIosInstall && <div className="fixed inset-0 z-50 grid place-items-end bg-black/40 p-4 sm:place-items-center" role="dialog" aria-modal="true" aria-label="Panduan memasang aplikasi"><div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"><h2 className="text-lg font-bold">Pasang Jornal di iPhone/iPad</h2><ol className="mt-3 list-decimal space-y-2 pl-5 text-sm"><li>Ketuk tombol <strong>Bagikan</strong> di Safari.</li><li>Pilih <strong>Tambahkan ke Layar Utama</strong>.</li><li>Buka Jornal dari ikon baru sebelum mengaktifkan notifikasi.</li></ol><Button className="mt-4 w-full" onClick={() => setShowIosInstall(false)}>Mengerti</Button></div></div>}
       <Suspense fallback={null}>
         <DeferredEffects />
       </Suspense>

@@ -43,6 +43,9 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       injectRegister: false,
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       includeAssets: ["favicon.svg", "favicon-32x32.png", "apple-touch-icon.png"],
       manifest: {
         id: "/",
@@ -112,14 +115,7 @@ export default defineConfig({
           params: { title: "title", text: "text", url: "url", files: [{ name: "files", accept: ["image/*", "application/pdf"] }] },
         },
       },
-      workbox: {
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: false,
-        navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/pb(?:\/|$)/, /^\/healthz(?:\/|$)/],
-        globPatterns: ["**/*.{js,css,html,webmanifest}"],
-      },
+      injectManifest: { globPatterns: ["**/*.{js,css,html,webmanifest,png,svg,woff,woff2}"] },
       devOptions: {
         enabled: true,
         suppressWarnings: true,

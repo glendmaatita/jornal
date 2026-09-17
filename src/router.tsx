@@ -22,6 +22,18 @@ const TransactionFormPage = lazy(() =>
 const TransactionsPage = lazy(() => import("@/pages/transactions-page").then((m) => ({ default: m.TransactionsPage })))
 const ReceivablesPage = lazy(() => import("@/pages/receivables-page").then((m) => ({ default: m.ReceivablesPage })))
 const CompaniesPage = lazy(() => import("@/pages/companies-page").then((m) => ({ default: m.CompaniesPage })))
+const CustomersPage = lazy(() => import("@/pages/customers-page").then((m) => ({ default: m.CustomersPage })))
+const CustomerFormPage = lazy(() => import("@/pages/customer-form-page").then((m) => ({ default: m.CustomerFormPage })))
+const CustomerDetailPage = lazy(() => import("@/pages/customer-detail-page").then((m) => ({ default: m.CustomerDetailPage })))
+const InvoicesPage = lazy(() => import("@/pages/invoices-page").then((m) => ({ default: m.InvoicesPage })))
+const InvoiceFormPage = lazy(() => import("@/pages/invoice-form-page").then((m) => ({ default: m.InvoiceFormPage })))
+const InvoiceDetailPage = lazy(() => import("@/pages/invoice-detail-page").then((m) => ({ default: m.InvoiceDetailPage })))
+const InvoiceSettingsPage = lazy(() => import("@/pages/invoice-settings-page").then((m) => ({ default: m.InvoiceSettingsPage })))
+const DocumentInboxPage = lazy(() => import("@/pages/document-inbox-page").then((m) => ({ default: m.DocumentInboxPage })))
+const DocumentReviewPage = lazy(() => import("@/pages/document-review-page").then((m) => ({ default: m.DocumentReviewPage })))
+const SyncCenterPage = lazy(() => import("@/pages/sync-center-page").then((m) => ({ default: m.SyncCenterPage })))
+const SearchPage = lazy(() => import("@/pages/search-page").then((m) => ({ default: m.SearchPage })))
+const TransactionTemplatesPage = lazy(() => import("@/pages/transaction-templates-page").then((m) => ({ default: m.TransactionTemplatesPage })))
 
 function NotFoundPage() {
   return (
@@ -238,6 +250,22 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
+const customersRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/customers", component: CustomersPage })
+const customerNewRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/customers/new", validateSearch: (search: Record<string, unknown>): { returnTo?: string } => ({ returnTo: search.returnTo === "/invoices/new" ? search.returnTo : undefined }), component: () => <CustomerFormPage returnTo={customerNewRoute.useSearch().returnTo} /> })
+const customerDetailRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/customers/$customerId", component: () => <CustomerDetailPage customerId={customerDetailRoute.useParams().customerId} /> })
+const customerEditRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/customers/$customerId/edit", component: () => <CustomerFormPage customerId={customerEditRoute.useParams().customerId} /> })
+const invoicesRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/invoices", component: InvoicesPage })
+const invoiceNewRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/invoices/new", validateSearch: (search: Record<string, unknown>): { customer?: string } => ({ customer: typeof search.customer === "string" ? search.customer : undefined }), component: () => <InvoiceFormPage initialCustomerId={invoiceNewRoute.useSearch().customer} /> })
+const invoiceDetailRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/invoices/$invoiceId", component: () => <InvoiceDetailPage invoiceId={invoiceDetailRoute.useParams().invoiceId} /> })
+const invoiceEditRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/invoices/$invoiceId/edit", component: () => <InvoiceFormPage invoiceId={invoiceEditRoute.useParams().invoiceId} /> })
+const invoicePreviewRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/invoices/$invoiceId/preview", component: () => <InvoiceDetailPage invoiceId={invoicePreviewRoute.useParams().invoiceId} previewOnly /> })
+const invoiceSettingsRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/settings/invoice", component: InvoiceSettingsPage })
+const documentInboxRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/inbox", component: DocumentInboxPage })
+const documentReviewRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/inbox/$documentId", component: () => <DocumentReviewPage documentId={documentReviewRoute.useParams().documentId} /> })
+const syncCenterRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/sync", component: SyncCenterPage })
+const searchRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/search", component: SearchPage })
+const transactionTemplatesRoute = createRoute({ getParentRoute: () => appLayoutRoute, path: "/templates", component: TransactionTemplatesPage })
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   unavailableRoute,
@@ -258,6 +286,21 @@ const routeTree = rootRoute.addChildren([
     safeToSpendRoute,
     forecastRoute,
     settingsRoute,
+    customersRoute,
+    customerNewRoute,
+    customerDetailRoute,
+    customerEditRoute,
+    invoicesRoute,
+    invoiceNewRoute,
+    invoiceDetailRoute,
+    invoiceEditRoute,
+    invoicePreviewRoute,
+    invoiceSettingsRoute,
+    documentInboxRoute,
+    documentReviewRoute,
+    syncCenterRoute,
+    searchRoute,
+    transactionTemplatesRoute,
   ]),
 ])
 

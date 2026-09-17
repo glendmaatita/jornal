@@ -416,6 +416,14 @@ export function reconcileServerTransaction(transaction: Transaction): boolean {
   return true
 }
 
+/** Remove a transaction that a backend correction already tombstoned. This
+ * mirrors the authoritative state without creating an outbox delete. */
+export function reconcileServerTransactionDeletion(transaction: Transaction): boolean {
+  if (transaction.businessId !== currentBusinessId() || transaction.companyId !== currentCompanyId()) return false
+  const existing = loadTransactions(); const previous = existing.find((item) => item.id === transaction.id); if (!previous) return true
+  persistTransactions(existing.filter((item) => item.id !== transaction.id)); appendTransactionVersion(previous, transaction.updatedAt || nowIso()); emitFinancialEvent("TRANSACTION_DELETED"); return true
+}
+
 function createTransactionRecord(input: NewTransaction, stableId: string = newId()): Transaction {
   assertCompanyWritable()
   validateTransactionLinks(input)
