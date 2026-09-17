@@ -1,11 +1,12 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react"
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { BarChart3, Eye, EyeOff, FileText, Home as HomeIcon, Inbox, LogOut, Plus, ReceiptText, Search, Settings, Users, Wallet } from "lucide-react"
+import { BarChart3, Home as HomeIcon, Plus, ReceiptText, Search, Wallet } from "lucide-react"
 
 import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 import { CompanySwitcher } from "@/components/company-switcher"
+import { MoreMenu } from "@/components/more-menu"
 import { PageLoading } from "@/components/loading-screen"
 import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
@@ -117,48 +118,20 @@ export function AppShell() {
               <button
                 type="button"
                 onClick={() => void install()}
-                className="rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)]"
+                className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)]"
               >
                 Pasang aplikasi
               </button>
             )}
-            {isIos && !isInstalled && !canInstall && <button type="button" onClick={() => setShowIosInstall(true)} className="rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)]">Pasang aplikasi</button>}
-            {user && (
-              <button
-                type="button"
-                onClick={() => void handleLogout()}
-                title={`Keluar (${user.email})`}
-                aria-label="Keluar"
-                className="grid size-9 place-items-center rounded-full transition-colors hover:bg-white"
-              >
-                <LogOut className="size-[18px]" aria-hidden="true" />
-              </button>
-            )}
-            <Link to="/customers" className={cn("hidden size-9 place-items-center rounded-full transition-colors hover:bg-white sm:grid", pathname.startsWith("/customers") && "text-[var(--link)]")} aria-label="Pelanggan"><Users className="size-[18px]" /></Link>
-            <Link to="/invoices" className={cn("hidden size-9 place-items-center rounded-full transition-colors hover:bg-white sm:grid", pathname.startsWith("/invoices") && "text-[var(--link)]")} aria-label="Invoice"><FileText className="size-[18px]" /></Link>
-            <Link to="/inbox" className={cn("hidden size-9 place-items-center rounded-full transition-colors hover:bg-white sm:grid", pathname.startsWith("/inbox") && "text-[var(--link)]")} aria-label="Inbox dokumen"><Inbox className="size-[18px]" /></Link>
-            <Link to="/search" className={cn("grid size-9 place-items-center rounded-full transition-colors hover:bg-white", pathname === "/search" && "text-[var(--link)]")} aria-label="Cari"><Search className="size-[18px]" /></Link>
-            <button type="button" onClick={() => setPrivacy((value) => !value)} className="hidden size-9 place-items-center rounded-full hover:bg-white sm:grid" aria-label={privacy ? "Tampilkan nominal" : "Sembunyikan nominal"}>{privacy ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}</button>
-            <Link
-              to="/accounts"
-              className={cn(
-                "grid size-9 place-items-center rounded-full transition-colors hover:bg-white",
-                pathname === "/accounts" && "text-[var(--link)]",
-              )}
-              aria-label="Rekening"
-            >
-              <Wallet className="size-[18px]" aria-hidden="true" />
-            </Link>
-            <Link
-              to="/settings"
-              className={cn(
-                "grid size-9 place-items-center rounded-full transition-colors hover:bg-white",
-                pathname === "/settings" && "text-[var(--link)]",
-              )}
-              aria-label="Pengaturan"
-            >
-              <Settings className="size-[18px]" aria-hidden="true" />
-            </Link>
+            {isIos && !isInstalled && !canInstall && <button type="button" onClick={() => setShowIosInstall(true)} className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)]">Pasang aplikasi</button>}
+            <Link to="/search" className={cn("grid size-9 place-items-center rounded-full transition-colors hover:bg-white", pathname === "/search" && "text-[var(--link)]")} aria-label="Cari"><Search className="size-[18px]" aria-hidden="true" /></Link>
+            <MoreMenu
+              pathname={pathname}
+              privacy={privacy}
+              onTogglePrivacy={() => setPrivacy((value) => !value)}
+              userEmail={user?.email ?? null}
+              onLogout={() => void handleLogout()}
+            />
           </div>
         </div>
       </header>
