@@ -11,6 +11,12 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     { command: "bun scripts/start-tax-e2e-backend.ts", url: "http://127.0.0.1:8090/api/health", reuseExistingServer: false, timeout: 30_000 },
-    { command: "bunx vite --host 127.0.0.1 --port 4173", url: "http://127.0.0.1:4173/login", reuseExistingServer: false, timeout: 30_000 },
+    {
+      command: "bunx vite --host 127.0.0.1 --port 4173",
+      url: "http://127.0.0.1:4173/login",
+      reuseExistingServer: false,
+      timeout: 30_000,
+      env: { VITE_POCKETBASE_URL: "http://127.0.0.1:8090" },
+    },
   ],
 })
