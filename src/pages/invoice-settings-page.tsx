@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageLoading } from "@/components/loading-screen";
 import { TextField } from "@/components/ui/text-field";
 import {
   createInvoiceUnit,
@@ -34,7 +35,8 @@ export function InvoiceSettingsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate the editable server draft once on mount
     void load().catch((cause) => setMessage(String(cause)));
   }, []);
-  if (!settings) return <p>{message || "Memuat pengaturan…"}</p>;
+  if (!settings)
+    return <PageLoading label={message || "Memuat pengaturan invoice…"} />;
   const save = async () => {
     setBusy(true);
     setMessage("");

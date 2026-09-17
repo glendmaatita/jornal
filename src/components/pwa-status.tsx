@@ -3,6 +3,7 @@ import { CloudOff, Download, RefreshCw, X } from "lucide-react"
 import { useRegisterSW } from "virtual:pwa-register/react"
 
 import { Button } from "@/components/ui/button"
+import { AppLoadingScreen } from "@/components/loading-screen"
 import { CLIENT_UPDATE_REQUIRED_EVENT, getSyncStatus, loadSyncConflicts, resolveSyncConflict, subscribeSyncStatus, schedulePocketBaseSync } from "@/lib/pocketbase-sync"
 import { STORAGE_WARNING_EVENT } from "@/lib/store"
 import { activeCompany, persistCompanyDrafts } from "@/lib/companies"
@@ -28,6 +29,8 @@ export function PwaStatus() {
   const [dismissed, setDismissed] = useState(false)
   const [storageWarning, setStorageWarning] = useState(false)
   const [clientUpdateRequired, setClientUpdateRequired] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [updateFailed, setUpdateFailed] = useState(false)
   const [syncStatus, setSyncStatus] = useState(getSyncStatus)
   const [conflicts, setConflicts] = useState(loadSyncConflicts)
   useEffect(() => subscribeSyncStatus(setSyncStatus), [])
@@ -44,7 +47,39 @@ export function PwaStatus() {
   }, [])
   const syncFailed = syncStatus === "failed"
   const hasConflict = conflicts.length > 0
-  const persistentAction = syncFailed || hasConflict || storageWarning || clientUpdateRequired
+  const persistentAction = syncFailed || hasConflict || storageWarning || clientUpdateRequired || needRefresh || updateFailed
+
+  const installUpdate = async () => {
+    setIsUpdating(true)
+    setUpdateFailed(false)
+    try {
+      const company = activeCompany()
+      if (company) await persistCompanyDrafts(company)
+      await updateServiceWorker(true)
+    } catch {
+      setIsUpdating(false)
+      setUpdateFailed(true)
+      setDismissed(false)
+    }
+  }
+
+  const reloadClient = async () => {
+    setIsUpdating(true)
+    const company = activeCompany()
+    if (company) await persistCompanyDrafts(company).catch(() => undefined)
+    window.location.reload()
+  }
+
+  if (isUpdating) {
+    return (
+      <AppLoadingScreen
+        title="Memperbarui Jornal"
+        message="Versi baru sedang dipasang. Data Anda tetap aman dan aplikasi akan terbuka kembali otomatis."
+        overlay
+      />
+    )
+  }
+
   if ((dismissed && !persistentAction) || (isOnline && !offlineReady && !needRefresh && !persistentAction)) return null
 
   const dismiss = () => {
@@ -70,6 +105,8 @@ export function PwaStatus() {
           ? `Perubahan bentrok pada ${conflicts[0]?.entity ?? "data"}${conflicts[0]?.appId ? ` (${conflicts[0].appId})` : ""}. Data lokal tetap tersimpan.`
           : syncFailed
           ? "Sinkronisasi tertunda. Data tetap tersimpan di perangkat."
+          : updateFailed
+          ? "Pembaruan belum berhasil. Periksa koneksi, lalu coba lagi."
           : needRefresh
           ? "Versi baru Jornal siap dipakai."
           : isOnline
@@ -77,12 +114,12 @@ export function PwaStatus() {
             : "Anda sedang offline — data tetap tersimpan di perangkat ini."}
       </p>
       {needRefresh && (
-        <Button size="sm" variant="secondary" onClick={() => void (async () => { const company = activeCompany(); if (company) await persistCompanyDrafts(company); await updateServiceWorker(true) })()}>
-          Update
+        <Button size="sm" variant="secondary" onClick={() => void installUpdate()}>
+          {updateFailed ? "Coba lagi" : "Update"}
         </Button>
       )}
       {clientUpdateRequired && !needRefresh && (
-        <Button size="sm" variant="secondary" onClick={() => window.location.reload()}>Muat ulang</Button>
+        <Button size="sm" variant="secondary" onClick={() => void reloadClient()}>Muat ulang</Button>
       )}
       {storageWarning && (
         <a href="/settings" className="shrink-0 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs font-semibold">Buka data</a>

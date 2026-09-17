@@ -11,6 +11,7 @@ import { faWallet } from "@fortawesome/free-solid-svg-icons/faWallet";
 
 import { Button } from "@/components/ui/button";
 import { CompanyLogoEditor } from "@/components/company-logo";
+import { PageLoading } from "@/components/loading-screen";
 import { Card, CardContent } from "@/components/ui/card";
 import { DateField } from "@/components/ui/date-field";
 import { TextField } from "@/components/ui/text-field";
@@ -44,6 +45,7 @@ import {
   CLASSIFICATION_LABELS,
   type AccountType,
   type BusinessType,
+  type TaxScheme,
 } from "@/lib/types";
 import {
   disablePushNotifications,
@@ -150,6 +152,15 @@ export function SettingsPage() {
 
   const [autoAccept, setAutoAccept] = useState<string | null>(null);
   const [needsReview, setNeedsReview] = useState<string | null>(null);
+  const [businessTypeDraft, setBusinessTypeDraft] =
+    useState<BusinessType | null>(null);
+  const [taxSchemeDraft, setTaxSchemeDraft] = useState<TaxScheme | null>(null);
+  const [pkpStatusDraft, setPkpStatusDraft] = useState<boolean | null>(null);
+  const [useAccountTrackingDraft, setUseAccountTrackingDraft] = useState<
+    boolean | null
+  >(null);
+  const [saving, setSaving] = useState(false);
+  const [saveComplete, setSaveComplete] = useState(false);
   const [newAccount, setNewAccount] = useState({
     name: "",
     type: "BANK" as AccountType,
@@ -164,13 +175,15 @@ export function SettingsPage() {
   const [accountBalanceDrafts, setAccountBalanceDrafts] = useState<
     Record<string, string>
   >({});
-  const allowedSchemes = allowedTaxSchemes(
-    profile?.businessType ?? "INDIVIDUAL",
-  );
+  const selectedBusinessType =
+    businessTypeDraft ?? profile?.businessType ?? "INDIVIDUAL";
+  const allowedSchemes = allowedTaxSchemes(selectedBusinessType);
   const selectedTaxScheme =
-    profile && allowedSchemes.includes(profile.taxScheme)
-      ? profile.taxScheme
-      : (allowedSchemes[0] ?? "NOT_CALCULATED");
+    taxSchemeDraft && allowedSchemes.includes(taxSchemeDraft)
+      ? taxSchemeDraft
+      : profile && allowedSchemes.includes(profile.taxScheme)
+        ? profile.taxScheme
+        : (allowedSchemes[0] ?? "NOT_CALCULATED");
 
   const invalidate = useCallback(() => {
     for (const key of [
@@ -182,18 +195,8 @@ export function SettingsPage() {
     }
   }, [queryClient]);
 
-  useEffect(() => {
-    if (!profile || company?.status === "ARCHIVED") return;
-    if (!allowedSchemes.includes(profile.taxScheme)) {
-      saveProfile({
-        ...profile,
-        taxScheme: allowedSchemes[0] ?? "NOT_CALCULATED",
-      });
-      invalidate();
-    }
-  }, [allowedSchemes, profile, invalidate, company?.status]);
-
-  if (!profile || !settings) return null;
+  if (!profile || !settings)
+    return <PageLoading label="Memuat pengaturan…" />;
 
   if (company?.status === "ARCHIVED") {
     return (
@@ -231,13 +234,99 @@ export function SettingsPage() {
     );
   }
 
-  const commitProfile = (patch: Partial<typeof profile>) => {
-    saveProfile({ ...profile, ...patch });
-    invalidate();
+  const saveAllChanges = async () => {
+    const nextName = (nameDraft ?? company?.name ?? profile.businessName).trim();
+    const nextAutoAccept = Number(autoAccept ?? settings.autoAccept);
+    const nextNeedsReview = Number(needsReview ?? settings.needsReview);
+    if (!nextName) {
+      setDataMessage("Nama bisnis wajib diisi.");
+      return;
+    }
+    if (
+      !Number.isFinite(nextAutoAccept) ||
+      !Number.isFinite(nextNeedsReview) ||
+      nextAutoAccept <= 0 ||
+      nextAutoAccept > 1 ||
+      nextNeedsReview <= 0 ||
+      nextNeedsReview > nextAutoAccept
+    ) {
+      setDataMessage(
+        "Ambang klasifikasi harus antara 0–1 dan ambang review tidak boleh melebihi auto-accept.",
+      );
+      return;
+    }
+
+    setSaving(true);
+    setSaveComplete(false);
+    setDataMessage(null);
+    try {
+      if (company && nextName !== company.name) {
+        await updateCompany(company, { name: nextName });
+      }
+      const useAccountTracking =
+        useAccountTrackingDraft ?? profile.useAccountTracking;
+      saveProfile({
+        ...profile,
+        businessName: nextName,
+        businessType: selectedBusinessType,
+        taxScheme: selectedTaxScheme,
+        businessStartDate:
+          startDateDraft === null
+            ? profile.businessStartDate
+            : startDateDraft || null,
+        fiscalYear:
+          parseAmountInput(fiscalYearDraft ?? String(profile.fiscalYear)) ||
+          profile.fiscalYear,
+        pkpStatus: pkpStatusDraft ?? profile.pkpStatus,
+        useAccountTracking,
+        openingBalance: useAccountTracking
+          ? profile.openingBalance
+          : parseAmountInput(
+              openingBalanceDraft ?? String(profile.openingBalance),
+            ),
+      });
+      saveSettings({
+        ...settings,
+        autoAccept: nextAutoAccept,
+        needsReview: nextNeedsReview,
+      });
+      for (const account of accounts) {
+        const draft = accountBalanceDrafts[account.id];
+        if (draft === undefined) continue;
+        upsertAccount({
+          ...account,
+          openingBalance: parseAmountInput(draft),
+        });
+      }
+      setNameDraft(null);
+      setBusinessTypeDraft(null);
+      setTaxSchemeDraft(null);
+      setStartDateDraft(null);
+      setFiscalYearDraft(null);
+      setPkpStatusDraft(null);
+      setUseAccountTrackingDraft(null);
+      setOpeningBalanceDraft(null);
+      setAccountBalanceDrafts({});
+      setAutoAccept(null);
+      setNeedsReview(null);
+      setDataMessage("Semua perubahan berhasil disimpan.");
+      setSaveComplete(true);
+      window.setTimeout(() => setSaveComplete(false), 2_000);
+      invalidate();
+    } catch (error) {
+      setDataMessage(
+        error instanceof Error ? error.message : "Perubahan gagal disimpan.",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
+  const useAccountTracking =
+    useAccountTrackingDraft ?? profile.useAccountTracking;
+
   return (
-    <div className="space-y-4 pb-8">
+    <div className="space-y-4 pb-28">
       <div>
         <h1 className="flex items-center gap-2 text-xl tracking-tight">
           <FontAwesomeIcon
@@ -292,28 +381,19 @@ export function SettingsPage() {
             label="Nama bisnis"
             value={nameDraft ?? company?.name ?? profile.businessName}
             onChange={(value) => setNameDraft(value)}
-            onBlur={() => {
-              if (nameDraft === null || !nameDraft.trim()) return;
-              const nextName = nameDraft.trim();
-              if (!company) return;
-              void updateCompany(company, { name: nextName })
-                .then(() => {
-                  commitProfile({ businessName: nextName });
-                })
-                .catch(() =>
-                  setDataMessage("Nama company gagal disimpan ke server."),
-                );
-            }}
           />
           <label className="block">
             <span className="field-label">Jenis usaha</span>
             <select
-              value={profile.businessType}
-              onChange={(event) =>
-                commitProfile({
-                  businessType: event.target.value as BusinessType,
-                })
-              }
+              value={selectedBusinessType}
+              onChange={(event) => {
+                const nextBusinessType = event.target.value as BusinessType;
+                setBusinessTypeDraft(nextBusinessType);
+                const nextAllowedSchemes = allowedTaxSchemes(nextBusinessType);
+                if (!nextAllowedSchemes.includes(selectedTaxScheme)) {
+                  setTaxSchemeDraft(nextAllowedSchemes[0] ?? "NOT_CALCULATED");
+                }
+              }}
               className="field-shell !min-h-[50px] w-full !py-0 text-sm"
             >
               {BUSINESS_TYPES.map((type) => (
@@ -330,9 +410,7 @@ export function SettingsPage() {
             <select
               value={selectedTaxScheme}
               onChange={(event) =>
-                commitProfile({
-                  taxScheme: event.target.value as typeof profile.taxScheme,
-                })
+                setTaxSchemeDraft(event.target.value as TaxScheme)
               }
               className="field-shell !min-h-[50px] w-full !py-0 text-sm"
             >
@@ -349,23 +427,13 @@ export function SettingsPage() {
             <DateField
               label="Mulai usaha"
               value={startDateDraft ?? profile.businessStartDate ?? ""}
-              onChange={(value) => {
-                setStartDateDraft(value);
-                commitProfile({ businessStartDate: value || null });
-              }}
+              onChange={setStartDateDraft}
             />
             <TextField
               label="Tahun fiskal"
               type="numeric"
               value={fiscalYearDraft ?? String(profile.fiscalYear)}
               onChange={(value) => setFiscalYearDraft(value)}
-              onBlur={() =>
-                commitProfile({
-                  fiscalYear:
-                    parseAmountInput(fiscalYearDraft ?? "") ||
-                    profile.fiscalYear,
-                })
-              }
             />
           </div>
           <label className="flex items-center justify-between gap-3 rounded-xl bg-secondary/50 p-3">
@@ -377,10 +445,8 @@ export function SettingsPage() {
             </span>
             <input
               type="checkbox"
-              checked={profile.pkpStatus}
-              onChange={(event) =>
-                commitProfile({ pkpStatus: event.target.checked })
-              }
+              checked={pkpStatusDraft ?? profile.pkpStatus}
+              onChange={(event) => setPkpStatusDraft(event.target.checked)}
               className="size-4 accent-[var(--primary)]"
             />
           </label>
@@ -469,7 +535,7 @@ export function SettingsPage() {
                   .catch((error) => setDataMessage(String(error)))
               }
             >
-              Aktifkan / simpan
+              Aktifkan notifikasi
             </Button>
             <Button
               variant="outline"
@@ -507,15 +573,15 @@ export function SettingsPage() {
             </span>
             <input
               type="checkbox"
-              checked={profile.useAccountTracking}
+              checked={useAccountTracking}
               onChange={(event) =>
-                commitProfile({ useAccountTracking: event.target.checked })
+                setUseAccountTrackingDraft(event.target.checked)
               }
               className="size-4 accent-[var(--primary)]"
             />
           </label>
 
-          {profile.useAccountTracking ? (
+          {useAccountTracking ? (
             <>
               <div className="divide-y divide-border/40">
                 {accounts.map((account) => (
@@ -552,15 +618,6 @@ export function SettingsPage() {
                           [account.id]: value,
                         }))
                       }
-                      onBlur={() => {
-                        const draft = accountBalanceDrafts[account.id];
-                        if (draft === undefined) return;
-                        upsertAccount({
-                          ...account,
-                          openingBalance: parseAmountInput(draft),
-                        });
-                        invalidate();
-                      }}
                     />
                     <button
                       type="button"
@@ -644,12 +701,6 @@ export function SettingsPage() {
                     : "")
                 }
                 onChange={(value) => setOpeningBalanceDraft(value)}
-                onBlur={() =>
-                  openingBalanceDraft !== null &&
-                  commitProfile({
-                    openingBalance: parseAmountInput(openingBalanceDraft),
-                  })
-                }
                 hint="Saldo awal tidak dihitung sebagai omzet."
               />
             </div>
@@ -679,29 +730,11 @@ export function SettingsPage() {
               label="Auto-accept (mis. 0.90)"
               value={autoAccept ?? String(settings.autoAccept)}
               onChange={(value) => setAutoAccept(value)}
-              onBlur={() => {
-                const value = Number(autoAccept);
-                if (Number.isFinite(value) && value > 0 && value <= 1) {
-                  saveSettings({ ...settings, autoAccept: value });
-                  invalidate();
-                } else {
-                  setAutoAccept(null);
-                }
-              }}
             />
             <TextField
               label="Butuh review (mis. 0.70)"
               value={needsReview ?? String(settings.needsReview)}
               onChange={(value) => setNeedsReview(value)}
-              onBlur={() => {
-                const value = Number(needsReview);
-                if (Number.isFinite(value) && value > 0 && value <= 1) {
-                  saveSettings({ ...settings, needsReview: value });
-                  invalidate();
-                } else {
-                  setNeedsReview(null);
-                }
-              }}
             />
           </div>
         </CardContent>
@@ -895,6 +928,25 @@ export function SettingsPage() {
           </button>
         </CardContent>
       </Card>
+      <div className="fixed inset-x-4 bottom-[calc(76px+env(safe-area-inset-bottom))] z-30 mx-auto max-w-[568px] rounded-2xl border border-white/70 bg-white/95 p-3 shadow-[0_8px_30px_rgb(27_29_77/0.18)] backdrop-blur">
+        {dataMessage && (
+          <p className="mb-2 text-center text-xs text-muted-foreground" role="status">
+            {dataMessage}
+          </p>
+        )}
+        <Button
+          type="button"
+          className="w-full"
+          disabled={saving}
+          onClick={() => void saveAllChanges()}
+        >
+          {saving
+            ? "Menyimpan…"
+            : saveComplete
+              ? "Perubahan tersimpan"
+              : "Simpan perubahan"}
+        </Button>
+      </div>
     </div>
   );
 }

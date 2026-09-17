@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router"
 import { ArrowLeft, CalendarClock, FlaskConical, ShieldCheck } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
+import { PageLoading } from "@/components/loading-screen"
 import { TextField } from "@/components/ui/text-field"
 import { formatRupiah, formatDateShort, formatNumberInput, parseAmountInput } from "@/lib/format"
 import { computeForecast, detectUpcomingObligations, EMPTY_SCENARIO, type ScenarioInput } from "@/lib/forecast"
@@ -45,7 +46,7 @@ export function ForecastPage() {
     [input, horizonDays],
   )
 
-  if (!input || !baseline) return null
+  if (!input || !baseline) return <PageLoading label="Menyiapkan proyeksi…" />
 
   const scenarioDelta = withScenario ? withScenario.projectedSafeToSpend - baseline.projectedSafeToSpend : 0
 

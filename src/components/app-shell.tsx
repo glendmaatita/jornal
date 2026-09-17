@@ -6,6 +6,7 @@ import { BarChart3, Eye, EyeOff, FileText, Home as HomeIcon, Inbox, LogOut, Plus
 import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 import { CompanySwitcher } from "@/components/company-switcher"
+import { PageLoading } from "@/components/loading-screen"
 import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
 import { currentUser, logout, pb } from "@/lib/pb"
@@ -168,7 +169,7 @@ export function AppShell() {
             <strong>{company.name}</strong> diarsipkan. Data hanya dapat dilihat atau diekspor sampai company dipulihkan.
           </div>
         )}
-        <Suspense fallback={<div className="t12 py-10 text-center">Memuat…</div>}>
+        <Suspense fallback={<PageLoading />}>
           <Outlet />
         </Suspense>
       </main>

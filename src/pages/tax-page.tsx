@@ -8,6 +8,7 @@ import { faScaleBalanced } from "@fortawesome/free-solid-svg-icons/faScaleBalanc
 import { faTriangleExclamation } from "@fortawesome/free-solid-svg-icons/faTriangleExclamation"
 
 import { Card, CardContent } from "@/components/ui/card"
+import { PageLoading } from "@/components/loading-screen"
 import { TaxCompliancePanel } from "@/components/tax/tax-compliance-panel"
 import { TextField } from "@/components/ui/text-field"
 import { formatRupiah, parseAmountInput, todayIsoDate } from "@/lib/format"
@@ -40,7 +41,7 @@ export function TaxPage() {
     [profile, transactions],
   )
 
-  if (!profile || !overview) return null
+  if (!profile || !overview) return <PageLoading label="Memuat data pajak…" />
 
   const alreadyReserved = profile.taxReserveConfirmed
   const additionalNeeded = Math.max(0, overview.recommendedTaxReserve - alreadyReserved)

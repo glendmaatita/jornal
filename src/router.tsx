@@ -2,6 +2,7 @@
 import { lazy } from "react"
 import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 
+import { AppLoadingScreen, PageLoading } from "@/components/loading-screen"
 
 const HomePage = lazy(() => import("@/pages/home-page").then((m) => ({ default: m.HomePage })))
 const AccountsPage = lazy(() => import("@/pages/accounts-page").then((m) => ({ default: m.AccountsPage })))
@@ -61,7 +62,10 @@ function BackendUnavailablePage() {
   )
 }
 
-const rootRoute = createRootRoute({ notFoundComponent: NotFoundPage })
+const rootRoute = createRootRoute({
+  notFoundComponent: NotFoundPage,
+  pendingComponent: AppLoadingScreen,
+})
 
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -80,6 +84,7 @@ const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "_app",
   component: AppShell,
+  pendingComponent: AppLoadingScreen,
   beforeLoad: async ({ location }) => {
     // Keep the public login entry lightweight. The auth, local-store, and
     // sync graph is only needed after a protected route is actually matched.
@@ -307,6 +312,9 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   defaultPreload: "intent",
+  defaultPendingComponent: PageLoading,
+  defaultPendingMs: 0,
+  defaultPendingMinMs: 300,
   scrollRestoration: true,
 })
 

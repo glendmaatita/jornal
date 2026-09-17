@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router"
 import { AlertTriangle, ArrowLeft, CalendarClock, ClipboardCheck, PiggyBank, Plus, Repeat, Sparkles, Trash2, TrendingDown, TrendingUp } from "lucide-react"
 
 import { ConfidenceBadge } from "@/components/transaction-item"
+import { PageLoading } from "@/components/loading-screen"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -108,7 +109,7 @@ export function SafeToSpendPage() {
   const isLow = result?.confidence === "LOW_CONFIDENCE"
   const isMedium = result?.confidence === "MEDIUM_CONFIDENCE"
 
-  if (!result || !profile) return null
+  if (!result || !profile) return <PageLoading label="Menghitung Safe To Spend…" />
 
   const activeReserves = reserves.filter((reserve) => reserve.status === "ACTIVE")
   const dueSoon = activeReserves

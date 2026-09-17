@@ -155,7 +155,7 @@ button:disabled {
   min-height: 50px;
   padding: 8px 16px;
   border-radius: 10px;
-  border: 1.5px solid transparent;
+  border: 1.5px solid var(--border);
   background-color: var(--white-color);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }

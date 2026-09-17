@@ -25,6 +25,7 @@ import { receivablesFromTransactions } from "@/lib/receivables"
 import { transactionRevenueAmount } from "@/lib/transaction-revenue"
 import { useTaxAgenda } from "@/lib/tax-compliance-queries"
 import { ActionCenter } from "@/components/action-center"
+import { PageLoading } from "@/components/loading-screen"
 export function HomePage() {
   const [preset, setPreset] = useState<PeriodPreset>("month")
   const [custom, setCustom] = useState(() => ({ start: todayIsoDate(), end: todayIsoDate() }))
@@ -70,7 +71,7 @@ export function HomePage() {
     ...(taxAgenda?.filings ?? []).filter((item) => !["FILED", "FULFILLED_BY_PAYMENT", "NOT_REQUIRED"].includes(item.status) && item.effectiveDueDate).map((item) => ({ id: item.id, label: item.filingGroup.replaceAll("_", " "), period: item.period, due: item.effectiveDueDate!, action: "Lapor", amount: null as number | null })),
   ].sort((a, b) => a.due.localeCompare(b.due))[0] ?? null, [taxAgenda])
 
-  if (!profile) return null
+  if (!profile) return <PageLoading label="Memuat ringkasan keuangan…" />
 
   return (
     <div className="space-y-4 pb-8">

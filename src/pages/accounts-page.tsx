@@ -91,7 +91,14 @@ export function AccountsPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {accounts.map((account) => (
-            <Link key={account.id} to="/accounts" search={{ account: account.id }} className={selected?.id === account.id ? "rounded-[1.5rem] ring-2 ring-primary" : "rounded-[1.5rem]"}>
+            <Link
+              key={account.id}
+              to="/accounts"
+              search={{ account: account.id }}
+              className={selected?.id === account.id
+                ? "relative block rounded-[10px] after:pointer-events-none after:absolute after:inset-0 after:rounded-[10px] after:border-2 after:border-primary"
+                : "block rounded-[10px]"}
+            >
               <Card className="h-full transition-colors hover:border-primary/50"><CardContent className="flex items-start justify-between gap-3 p-5">
                 <span className="min-w-0"><span className="block truncate font-semibold">{account.name}</span><span className="text-xs text-muted-foreground">{ACCOUNT_TYPES.find((item) => item.value === account.type)?.label}</span></span>
                 <span className="shrink-0 text-right"><span className="block text-sm font-semibold tabular-nums">{formatRupiah(currentAccountBalance(account, transactions))}</span><span className="text-xs text-muted-foreground">saldo saat ini</span></span>

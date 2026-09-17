@@ -12,9 +12,20 @@
     <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <title>Jornal</title>
+    <style>
+      #jornal-boot-loader{box-sizing:border-box;display:grid;min-height:100dvh;place-items:center;padding:24px;background:#edf0f2;color:#1b1d4d;text-align:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}#jornal-boot-loader img{width:64px;height:64px;border-radius:18px;box-shadow:0 12px 30px rgba(27,29,77,.14);animation:jornal-boot-pulse 1.2s ease-in-out infinite}#jornal-boot-loader strong{display:block;margin-top:20px;font-size:20px;line-height:1.2}#jornal-boot-loader span{display:block;margin-top:8px;color:#4c4c60;font-size:14px}@keyframes jornal-boot-pulse{0%,100%{transform:scale(1)}50%{transform:scale(.94);opacity:.78}}@media(prefers-reduced-motion:reduce){#jornal-boot-loader img{animation:none}}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main id="jornal-boot-loader" role="status" aria-live="polite" aria-busy="true">
+        <div>
+          <img src="/favicon.svg" alt="" width="64" height="64" />
+          <strong>Jornal</strong>
+          <span>Menyiapkan data Anda…</span>
+        </div>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

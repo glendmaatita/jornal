@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RouterProvider } from "@tanstack/react-router"
 
+import { AppLoadingScreen } from "@/components/loading-screen"
 import { router } from "@/router"
 import "@/index.css"
 import "@fontsource/poppins/400.css"
@@ -56,7 +57,7 @@ createRoot(rootElement).render(
   <StrictMode>
     <AppErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Suspense fallback={<div className="grid min-h-dvh place-items-center bg-[var(--background)] text-sm text-[var(--body-text)]">Memuat…</div>}>
+        <Suspense fallback={<AppLoadingScreen />}>
           <RouterProvider router={router} />
         </Suspense>
       </QueryClientProvider>
