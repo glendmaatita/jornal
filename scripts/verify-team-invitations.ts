@@ -6,6 +6,6 @@ if (!binary || !existsSync(binary)) throw new Error("Set POCKETBASE_BIN to the P
 const version = Bun.spawnSync([binary, "--version"], { stdout: "pipe", stderr: "pipe" })
 if (!`${version.stdout}${version.stderr}`.includes("0.40.2")) throw new Error("Team invitations require PocketBase 0.40.2.")
 const result = Bun.spawnSync(["bun", "test", resolve(import.meta.dir, "../backend/pocketbase/tests/team_invitation_api.integration.test.ts")], {
-  stdout: "inherit", stderr: "inherit", env: { ...process.env, POCKETBASE_BIN: binary },
+  stdout: "inherit", stderr: "inherit", env: { ...process.env, POCKETBASE_BIN: binary, RUN_POCKETBASE_INTEGRATION: "1" },
 })
 if (result.exitCode !== 0) process.exit(result.exitCode)

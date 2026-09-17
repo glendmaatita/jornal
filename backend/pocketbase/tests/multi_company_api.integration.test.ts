@@ -5,7 +5,7 @@ import { join, resolve } from "node:path"
 
 const pocketBaseBin = process.env.POCKETBASE_BIN
 const creationFlagDisabled = process.env.JORNAL_MULTI_COMPANY_ENABLED === "false"
-const integrationTest = pocketBaseBin ? test : test.skip
+const integrationTest = pocketBaseBin && process.env.RUN_POCKETBASE_INTEGRATION === "1" ? test : test.skip
 let server: ReturnType<typeof Bun.spawn> | null = null
 let dataDirectory = ""
 

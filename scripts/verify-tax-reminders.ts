@@ -23,7 +23,7 @@ const tests = [
 ]
 const result = Bun.spawnSync(["bun", "test", ...tests], {
   cwd: process.cwd(),
-  env: { ...process.env, POCKETBASE_BIN: binary },
+  env: { ...process.env, POCKETBASE_BIN: binary, RUN_POCKETBASE_INTEGRATION: "1" },
   stdout: "inherit",
   stderr: "inherit",
 })

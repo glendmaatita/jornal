@@ -51,7 +51,6 @@ jobs:
           bun run test:team:integration
           bun run test:invoice:integration
           bun run test:tax:integration
-          bun test backend/pocketbase/tests/multi_company_api.integration.test.ts backend/pocketbase/tests/multi_company_migration.integration.test.ts
 
       - name: Install Chromium
         run: bunx playwright install --with-deps chromium

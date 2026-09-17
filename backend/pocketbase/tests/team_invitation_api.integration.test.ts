@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
 const pocketBaseBin = process.env.POCKETBASE_BIN
-const integrationTest = pocketBaseBin ? test : test.skip
+const integrationTest = pocketBaseBin && process.env.RUN_POCKETBASE_INTEGRATION === "1" ? test : test.skip
 let pocketbase: ReturnType<typeof Bun.spawn> | null = null
 let smtp: ReturnType<typeof Bun.listen> | null = null
 let dataDirectory = ""
