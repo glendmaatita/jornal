@@ -21,10 +21,13 @@ const tests = [
   "backend/pocketbase/tests/multi_company_migration.integration.test.ts",
   "backend/pocketbase/tests/tax_compliance_api.integration.test.ts",
 ]
-const result = Bun.spawnSync(["bun", "test", ...tests], {
-  cwd: process.cwd(),
-  env: { ...process.env, POCKETBASE_BIN: binary, RUN_POCKETBASE_INTEGRATION: "1" },
-  stdout: "inherit",
-  stderr: "inherit",
-})
-process.exit(result.exitCode)
+for (const file of tests) {
+  console.log(`\nRunning ${file}`)
+  const result = Bun.spawnSync([process.execPath, "test", file], {
+    cwd: process.cwd(),
+    env: { ...process.env, POCKETBASE_BIN: binary, RUN_POCKETBASE_INTEGRATION: "1" },
+    stdout: "inherit",
+    stderr: "inherit",
+  })
+  if (result.exitCode !== 0) process.exit(result.exitCode)
+}
