@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react"
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { BarChart3, Home as HomeIcon, Plus, ReceiptText, Search, Wallet } from "lucide-react"
+import { BarChart3, Home as HomeIcon, Plus, ReceiptText, RefreshCw, Search, Wallet } from "lucide-react"
 
 import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,7 @@ import { PwaStatus } from "@/components/pwa-status"
 import { useInstallPrompt } from "@/hooks/use-install-prompt"
 import { currentUser, logout, pb } from "@/lib/pb"
 import { activeCompany } from "@/lib/companies"
+import { hardReloadApp } from "@/lib/hard-reload"
 import { resetPocketBaseSyncState } from "@/lib/pocketbase-sync"
 import { disablePushNotifications } from "@/lib/push-client"
 import { setDataScope, setTenantScope } from "@/lib/store"
@@ -40,6 +41,7 @@ export function AppShell() {
   const authUserIdRef = useRef(pb.authStore.record?.id ?? null)
   const [privacy, setPrivacy] = useState(() => window.localStorage.getItem("jornal.privacy-mode") === "1")
   const [showIosInstall, setShowIosInstall] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     const onAuthChange = () => {
@@ -118,12 +120,22 @@ export function AppShell() {
               <button
                 type="button"
                 onClick={() => void install()}
-                className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)]"
+                className="hidden whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)] sm:block"
               >
                 Pasang aplikasi
               </button>
             )}
-            {isIos && !isInstalled && !canInstall && <button type="button" onClick={() => setShowIosInstall(true)} className="whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)]">Pasang aplikasi</button>}
+            {isIos && !isInstalled && !canInstall && <button type="button" onClick={() => setShowIosInstall(true)} className="hidden whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)] sm:block">Pasang aplikasi</button>}
+            <button
+              type="button"
+              onClick={() => { setRefreshing(true); void hardReloadApp() }}
+              disabled={refreshing}
+              aria-label="Muat ulang aplikasi"
+              title="Muat ulang aplikasi"
+              className="grid size-9 place-items-center rounded-full transition-colors hover:bg-white disabled:opacity-60"
+            >
+              <RefreshCw className={cn("size-[18px]", refreshing && "animate-spin")} aria-hidden="true" />
+            </button>
             <Link to="/search" className={cn("grid size-9 place-items-center rounded-full transition-colors hover:bg-white", pathname === "/search" && "text-[var(--link)]")} aria-label="Cari"><Search className="size-[18px]" aria-hidden="true" /></Link>
             <MoreMenu
               pathname={pathname}
@@ -131,6 +143,7 @@ export function AppShell() {
               onTogglePrivacy={() => setPrivacy((value) => !value)}
               userEmail={user?.email ?? null}
               onLogout={() => void handleLogout()}
+              onInstall={canInstall ? () => void install() : isIos && !isInstalled ? () => setShowIosInstall(true) : null}
             />
           </div>
         </div>

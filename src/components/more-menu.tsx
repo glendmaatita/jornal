@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@tanstack/react-router"
-import { Eye, EyeOff, FileText, Inbox, LogOut, Menu, Settings, Users, Wallet, X } from "lucide-react"
+import { Download, Eye, EyeOff, FileText, Inbox, LogOut, Menu, Settings, Users, Wallet, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -19,12 +19,16 @@ export function MoreMenu({
   onTogglePrivacy,
   userEmail,
   onLogout,
+  onInstall,
 }: {
   pathname: string
   privacy: boolean
   onTogglePrivacy: () => void
   userEmail: string | null
   onLogout: () => void
+  /** Install call to action. Shown inside the menu on phones only; wider
+   * screens keep the text button in the header. */
+  onInstall?: (() => void) | null
 }) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
@@ -69,6 +73,12 @@ export function MoreMenu({
                 <X className="size-[18px]" aria-hidden="true" />
               </button>
             </div>
+            {onInstall && (
+              <button type="button" onClick={() => { setOpen(false); onInstall() }} className={cn(itemClass, "mb-1 bg-[var(--link)]/10 text-[var(--link)] hover:bg-[var(--link)]/15 sm:hidden")}>
+                <Download className="size-[20px] shrink-0" aria-hidden="true" />
+                Pasang aplikasi
+              </button>
+            )}
             <nav className="grid gap-0.5">
               {links.map((link) => {
                 const active = pathname.startsWith(link.to)
