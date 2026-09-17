@@ -1,6 +1,6 @@
 import { copyOutboxByPrefix, listMirroredStateByPrefix, listOutbox, mirrorState, persistState, quarantineOutboxByPrefix, restoreState } from "./local-db"
 import { pb } from "./pb"
-import { KEYS, RESET_PENDING_KEY, setCompanyDisplayName } from "./store"
+import { getCompanyScope, KEYS, RESET_PENDING_KEY, setCompanyDisplayName } from "./store"
 import type { Account, AppSettings, BusinessProfile, Company } from "./types"
 
 const catalogVersion = 1
@@ -30,6 +30,7 @@ function parseCompany(record: Record<string, unknown>): Company {
     legacyDefault: Boolean(record.legacy_default ?? record.legacyDefault),
     dataEpoch: Number(record.data_epoch ?? record.dataEpoch ?? 1),
     revision: Number(record.revision ?? 1),
+    membershipRevision: Number(record.membership_revision ?? record.membershipRevision ?? 1),
     logoAssetId: String(record.logo_asset_id ?? record.logoAssetId ?? "") || null,
     archivedAt: String(record.archived_at ?? record.archivedAt ?? "") || null,
     createdAt: String(record.created ?? record.createdAt ?? ""),
@@ -58,10 +59,7 @@ export function loadCachedCompanies(): Company[] {
 export async function loadCompanies(): Promise<Company[]> {
   if (!pb.authStore.isValid) return []
   try {
-    const records = await pb.collection("companies").getFullList({ sort: "created" })
-    const companies = records.map((record) => parseCompany(record))
-    saveCatalog(companies)
-    return companies
+    return await loadCompaniesFromServer()
   } catch (error) {
     let cached = loadCachedCompanies()
     if (cached.length === 0) {
@@ -74,6 +72,26 @@ export async function loadCompanies(): Promise<Company[]> {
     if (cached.length > 0) return cached
     throw error
   }
+}
+
+export async function loadCompaniesFromServer(): Promise<Company[]> {
+  if (!pb.authStore.isValid) return []
+  const companies: Company[] = []; let cursor = ""
+  do {
+    const query = new URLSearchParams({ limit: "100" }); if (cursor) query.set("cursor", cursor)
+    const result = await pb.send<{ items: Record<string, unknown>[]; cursor: string | null; hasMore: boolean }>(`/api/jornal/companies?${query}`, {})
+    companies.push(...result.items.map(parseCompany)); cursor = result.hasMore && result.cursor ? result.cursor : ""
+  } while (cursor)
+  saveCatalog(companies)
+  return companies
+}
+
+export async function refreshCompanyMemberships() {
+  const previous = activeCompany()
+  const companies = await loadCompaniesFromServer()
+  if (!previous || companies.some((company) => company.id === previous.id && company.membershipRevision === previous.membershipRevision)) return { removed: false, companies }
+  await quarantineOutboxByPrefix(companyStoragePrefix(previous.tenantId, previous.id, previous.dataEpoch, previous.membershipRevision), "membership-revoked-or-replaced")
+  return { removed: true, companies }
 }
 
 export function selectedCompanyId(): string | null {
@@ -163,7 +181,7 @@ export async function updateCompany(company: Company, patch: { name?: string; st
 }
 
 export async function resetCompany(company: Company) {
-  const prefix = companyStoragePrefix(company.tenantId, company.id)
+  const prefix = companyStoragePrefix(company.tenantId, company.id, company.dataEpoch, company.membershipRevision)
   const response = await fetch(`${pb.baseURL.replace(/\/$/, "")}/api/jornal/companies/${encodeURIComponent(company.id)}/reset`, {
     method: "POST",
     headers: { Authorization: pb.authStore.token },
@@ -187,17 +205,18 @@ export async function uploadCompanyLogo(company: Company, file: File) {
 export async function removeCompanyLogo(company: Company) { const result = await pb.send<{ company: Record<string, unknown> }>(`/api/jornal/companies/${encodeURIComponent(company.id)}/logo`, { method: "DELETE", body: { revision: company.revision, requestId: crypto.randomUUID() } }); const updated = parseCompany(result.company); saveCatalog(loadCachedCompanies().map((item) => item.id === updated.id ? updated : item)); return updated }
 export async function loadCompanyLogo(company: Company, assetId = company.logoAssetId) { if (!assetId) return null; const result = await pb.send<{ mime: string; contentBase64: string; checksum: string }>(`/api/jornal/companies/${encodeURIComponent(company.id)}/assets/${encodeURIComponent(assetId)}`, {}); return { ...result, dataUrl: `data:${result.mime};base64,${result.contentBase64}` } }
 
-export function companyStoragePrefix(tenant: string, company: string) {
-  return `jornal.v2.${tenant}.${company}.`
+export function companyStoragePrefix(ownerTenant: string, company: string, dataEpoch = 1, membershipRevision = 1) {
+  const actor = pb.authStore.record?.id ?? ownerTenant
+  return `jornal.v3.${actor}.${ownerTenant}.${company}.${dataEpoch}.${membershipRevision}.`
 }
 
 export async function pendingChangesForCompany(company: Company) {
-  const prefix = companyStoragePrefix(company.tenantId, company.id)
+  const prefix = companyStoragePrefix(company.tenantId, company.id, company.dataEpoch, company.membershipRevision)
   return (await listOutbox()).filter((row) => row.key.startsWith(prefix)).length
 }
 
 export async function persistCompanyDrafts(company: Company) {
-  const prefix = `${companyStoragePrefix(company.tenantId, company.id)}jornal.transaction-draft.`
+  const prefix = `${companyStoragePrefix(company.tenantId, company.id, company.dataEpoch, company.membershipRevision)}jornal.transaction-draft.`
   const writes: Promise<void>[] = []
   for (let index = 0; index < window.localStorage.length; index += 1) {
     const key = window.localStorage.key(index)
@@ -212,16 +231,19 @@ export async function persistCompanyDrafts(company: Company) {
 /** Idempotently copy the old per-user namespace into the server-assigned
  * legacy company. Sources remain untouched for rollback/recovery. */
 export async function migrateLegacyCompanyData(company: Company) {
-  if (!company.legacyDefault) return
-  const marker = `${companyStoragePrefix(company.tenantId, company.id)}migration-complete.v1`
+  const actor = pb.authStore.record?.id ?? getCompanyScope().actorUserId
+  if (!company.legacyDefault || actor !== company.tenantId) return
+  const marker = `${companyStoragePrefix(company.tenantId, company.id, company.dataEpoch, company.membershipRevision)}migration-complete.v2`
   if (window.localStorage.getItem(marker) === "1") return
   const run = async () => {
     if (window.localStorage.getItem(marker) === "1") return
-    const oldPrefix = `jornal.${company.tenantId}.`
-    const newPrefix = companyStoragePrefix(company.tenantId, company.id)
-    await copyOutboxByPrefix(oldPrefix, newPrefix)
+    const oldPrefix = `jornal.v2.${company.tenantId}.${company.id}.`
+    const preCompanyPrefix = `jornal.${company.tenantId}.`
+    const newPrefix = companyStoragePrefix(company.tenantId, company.id, company.dataEpoch, company.membershipRevision)
+    const sourcePrefix = window.localStorage.getItem(`${oldPrefix}${KEYS.profile}`) !== null ? oldPrefix : preCompanyPrefix
+    await copyOutboxByPrefix(sourcePrefix, newPrefix)
     for (const key of [...Object.values(KEYS), RESET_PENDING_KEY]) {
-      const oldKey = `${oldPrefix}${key}`
+      const oldKey = `${sourcePrefix}${key}`
       const newKey = `${newPrefix}${key}`
       if (window.localStorage.getItem(newKey) !== null) continue
       let value: unknown
@@ -238,25 +260,25 @@ export async function migrateLegacyCompanyData(company: Company) {
     }
     for (let index = 0; index < window.localStorage.length; index += 1) {
       const key = window.localStorage.key(index)
-      if (!key?.startsWith(oldPrefix)) continue
-      const scopedSuffix = key.slice(oldPrefix.length)
+      if (!key?.startsWith(sourcePrefix)) continue
+      const scopedSuffix = key.slice(sourcePrefix.length)
       if (!scopedSuffix.startsWith("jornal.transaction-draft.") && !scopedSuffix.startsWith("jornal.entry-default.")) continue
-      const newKey = `${newPrefix}${key.slice(oldPrefix.length)}`
+      const newKey = `${newPrefix}${key.slice(sourcePrefix.length)}`
       if (window.localStorage.getItem(newKey) !== null) continue
       const raw = window.localStorage.getItem(key)
       if (raw === null) continue
       window.localStorage.setItem(newKey, raw)
       try { await persistState(newKey, JSON.parse(raw)) } catch { /* malformed legacy drafts stay only at source */ }
     }
-    const mirroredDrafts = await listMirroredStateByPrefix(`${oldPrefix}jornal.transaction-draft.`).catch(() => [])
+    const mirroredDrafts = await listMirroredStateByPrefix(`${sourcePrefix}jornal.transaction-draft.`).catch(() => [])
     for (const row of mirroredDrafts) {
-      const newKey = `${newPrefix}${row.key.slice(oldPrefix.length)}`
+      const newKey = `${newPrefix}${row.key.slice(sourcePrefix.length)}`
       if (window.localStorage.getItem(newKey) !== null) continue
       window.localStorage.setItem(newKey, JSON.stringify(row.value))
       await persistState(newKey, row.value)
     }
     for (const key of [...Object.values(KEYS), RESET_PENDING_KEY]) {
-      const oldKey = `${oldPrefix}${key}`
+      const oldKey = `${sourcePrefix}${key}`
       const newKey = `${newPrefix}${key}`
       const source = window.localStorage.getItem(oldKey) ?? await restoreState(oldKey).then((value) => value === undefined ? null : JSON.stringify(value)).catch(() => null)
       if (source !== null && window.localStorage.getItem(newKey) === null) throw new Error(`Migrasi lokal belum lengkap: ${key}`)

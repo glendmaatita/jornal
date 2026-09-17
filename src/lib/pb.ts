@@ -24,4 +24,9 @@ export async function loginWithGoogle(): Promise<void> {
 
 export function logout(): void {
   pb.authStore.clear()
+  try {
+    window.sessionStorage.removeItem("jornal.pending-route")
+    window.sessionStorage.removeItem("jornal.create-company-intent")
+    window.sessionStorage.removeItem("jornal.company-creation-return.v1")
+  } catch { /* logout must still complete when session storage is unavailable */ }
 }

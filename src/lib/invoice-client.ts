@@ -60,7 +60,7 @@ async function send<T>(
   options: { method?: string; body?: unknown } = {},
 ) {
   if (!pocketBaseConfigured) throw new Error("Server invoice belum tersedia");
-  return pb.send<T>(path, options);
+  return pb.send<T>(path, { ...options, headers: { "X-Jornal-Protocol": "3" } });
 }
 function command() {
   return crypto.randomUUID();

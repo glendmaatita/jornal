@@ -112,6 +112,7 @@ export function useTaxComplianceSnapshot(): SafeToSpendInput["taxCompliance"] {
     membership.effective_from.slice(0, 10) <= today
     && (!membership.effective_until || membership.effective_until.slice(0, 10) >= today)
   const membership = taxConfiguration.data?.memberships.find((item) => item.company_id === activeCompanyId && active(item))
+  if (taxConfiguration.data?.taxCoverage === "RESTRICTED_SHARED_SUBJECT" || taxAgenda.data?.taxCoverage === "RESTRICTED_SHARED_SUBJECT") return { configured: true, sharedSubject: true, knownRemaining: 0, hasUnknownAmounts: true }
   if (!membership || !taxAgenda.data) return undefined
   const sharedSubject = taxConfiguration.data!.memberships.filter((item) => item.subject_id === membership.subject_id && active(item)).length > 1
   const subjectObligations = taxAgenda.data.obligations.filter((item) => item.subjectId === membership.subject_id)

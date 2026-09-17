@@ -31,7 +31,7 @@ import {
   snoozeTaxObligation,
   setupTaxSubject,
   taxComplianceEnabled,
-  updateTaxNotificationPreference,
+  updateTaxNotificationPreference, saveOwnTaxNotificationPreference,
   updateTaxSubject,
   uploadTaxEvidence,
 } from "@/lib/tax-compliance-client"
@@ -117,6 +117,9 @@ export function TaxCompliancePanel({ profile, transactions }: { profile: Busines
     <Card><CardContent className="p-5 text-sm text-amber-900">Agenda pajak belum dapat dimuat. Hubungkan ke server dan coba lagi.</CardContent></Card>
   )
   if (!company) return null
+  if (configuration.data?.taxCoverage === "RESTRICTED_SHARED_SUBJECT" || agenda.data?.taxCoverage === "RESTRICTED_SHARED_SUBJECT") return (
+    <Card><CardContent className="space-y-2 p-5"><h2 className="text-lg tracking-tight">Agenda pajak gabungan dibatasi</h2><p className="text-sm text-muted-foreground">Subjek pajak company ini juga memakai data company lain yang belum Anda akses. Nominal, bukti, laporan, dan tindakan pajak disembunyikan. Safe to Spend tetap menganggap kewajiban pajak belum diketahui.</p></CardContent></Card>
+  )
   if (!subject) return (
     <TaxSetup
       profile={profile}
@@ -295,7 +298,10 @@ function TaxSettings({ subject, membership, registrations, preference, busy, run
     umkmEligibilityEffectiveFrom: todayIsoDate(), reason: "Diperbarui dari pengaturan agenda pajak",
   }), "Status wajib pajak diperbarui.")
   const savePreference = () => {
-    if (!preference) return
+    if (!preference) return run(() => saveOwnTaxNotificationPreference(subject.id, {
+      commandKey: commandKey("preference-create"), inAppEnabled: true, emailEnabled,
+      includeAmountInEmail: includeAmount, deliveryHour: Math.max(0, Math.min(23, Number(deliveryHour))), reason: "Diaktifkan oleh pengguna",
+    }), "Pengaturan reminder disimpan.")
     return run(() => updateTaxNotificationPreference(String(preference.id), {
       commandKey: commandKey("preference"), revision: Number(preference.revision), inAppEnabled: true,
       emailEnabled, includeAmountInEmail: includeAmount, deliveryHour: Math.max(0, Math.min(23, Number(deliveryHour))),
@@ -307,7 +313,7 @@ function TaxSettings({ subject, membership, registrations, preference, busy, run
     {open && <div className="mt-4 space-y-5 border-t border-border pt-4">
       <div className="grid gap-2 sm:grid-cols-[1fr_auto]"><label className="block"><span className="field-label">Kelayakan PPh Final UMKM</span><select className="field-shell min-h-[50px] w-full text-sm" value={eligibility} onChange={(event) => setEligibility(event.target.value as typeof eligibility)}><option value="NEEDS_REVIEW">Perlu diperiksa</option><option value="ELIGIBLE">Memenuhi syarat—dikonfirmasi</option><option value="INELIGIBLE">Tidak memenuhi syarat</option></select></label><Button className="self-end" variant="outline" disabled={busy || eligibility === subject.umkmEligibility} onClick={saveIdentity}>Simpan status</Button></div>
       {available.length > 0 && <div className="space-y-2 rounded-xl border border-border p-3"><p className="text-sm font-semibold">Tambah jenis pajak</p><select className="field-shell min-h-11 w-full text-sm" value={kind} onChange={(event) => setKind(event.target.value as TaxKind)}>{available.map((option) => <option key={option.kind} value={option.kind}>{option.label}</option>)}</select><div className="grid gap-2 sm:grid-cols-3"><TextField label="Nominal default (opsional)" type="amount" prefix="Rp" value={amount} onChange={setAmount} /><DateField label={selectedOption?.event ? "Jatuh tempo dokumen" : "Tanggal manual (opsional)"} value={dueDate} onChange={setDueDate} /><TextField label="Daerah/sumber" value={jurisdiction} onChange={setJurisdiction} /></div><Button disabled={busy} onClick={addRegistration}><Plus className="size-4" />Tambah kewajiban</Button></div>}
-      {preference && <div className="space-y-3 rounded-xl border border-border p-3"><p className="text-sm font-semibold">Reminder</p><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={emailEnabled} onChange={(event) => setEmailEnabled(event.target.checked)} />Email reminder (hanya alamat login terverifikasi)</label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeAmount} disabled={!emailEnabled} onChange={(event) => setIncludeAmount(event.target.checked)} />Sertakan nominal dalam email</label><TextField label="Jam kirim (0–23, zona waktu wajib pajak)" value={deliveryHour} onChange={setDeliveryHour} /><Button variant="outline" disabled={busy} onClick={savePreference}>Simpan reminder</Button></div>}
+      <div className="space-y-3 rounded-xl border border-border p-3"><p className="text-sm font-semibold">Reminder {preference ? "" : "(belum aktif untuk akun Anda)"}</p><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={emailEnabled} onChange={(event) => setEmailEnabled(event.target.checked)} />Email reminder (hanya alamat login terverifikasi)</label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={includeAmount} disabled={!emailEnabled} onChange={(event) => setIncludeAmount(event.target.checked)} />Sertakan nominal dalam email</label><TextField label="Jam kirim (0–23, zona waktu wajib pajak)" value={deliveryHour} onChange={setDeliveryHour} /><Button variant="outline" disabled={busy} onClick={savePreference}>Simpan reminder</Button></div>
       <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => run(() => downloadTaxReport(subject.id, currentYear), "Rekap CSV diunduh.")}><Download className="size-4" />Rekap CSV {currentYear}</Button><Button variant="outline" disabled={busy} onClick={() => run(() => downloadTaxBackup(subject.id), "Backup pajak diunduh.")}><Download className="size-4" />Backup JSON</Button></div>
       <div className="space-y-2 rounded-xl border border-border p-3"><p className="text-sm font-semibold">Pulihkan backup pajak</p><input type="file" accept="application/json,.json" className="block max-w-full text-xs" onChange={(event) => {
         const file = event.target.files?.[0]; setBackup(null); setBackupPreview(null); if (!file) return

@@ -364,6 +364,13 @@ export function SettingsPage() {
           >
             Pengaturan Invoice
           </Link>
+          {company && <Link
+            to="/companies/$companyId/team"
+            params={{ companyId: company.id }}
+            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+          >
+            Tim & undangan
+          </Link>}
           <Link
             to="/sync"
             className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
@@ -909,7 +916,7 @@ export function SettingsPage() {
               ) {
                 void resetCompany(company)
                   .then(async (updated) => {
-                    setCompanyScope(updated.id, updated.dataEpoch);
+                    setCompanyScope(updated.id, updated.dataEpoch, updated.tenantId, updated.membershipRevision);
                     await resetAllData({ remoteAlreadyReset: true });
                     window.location.href = `/companies/${encodeURIComponent(updated.id)}/setup?company=${encodeURIComponent(updated.id)}`;
                   })

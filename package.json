@@ -17,6 +17,9 @@
     "test:invoice:renderer": "bun scripts/verify-invoice-renderer.ts",
     "test:invoice:e2e": "playwright test e2e/invoices.e2e.ts",
     "test:invoice:visual": "bun run test:invoice:renderer",
+    "test:team:integration": "bun scripts/verify-team-invitations.ts",
+    "test:team:email": "bun scripts/verify-team-invitations.ts",
+    "test:team:e2e": "playwright test e2e/team-invitation.e2e.ts",
     "benchmark:document-ai": "bun scripts/benchmark-document-ai.ts",
     "benchmark:invoice-scale": "bun scripts/benchmark-invoice-scale.ts",
     "typecheck": "tsc -b --pretty false"

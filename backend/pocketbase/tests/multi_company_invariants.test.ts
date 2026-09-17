@@ -12,7 +12,7 @@ describe("multi-company backend contract", () => {
     expect(recordHooks).toContain("onRecordDeleteRequest")
     expect(recordHooks).toContain("onRecordViewRequest")
     expect(recordHooks).toContain("onFileDownloadRequest")
-    expect(helpers).toContain('protocol !== "2"')
+    expect(helpers).toContain('protocol !== "3"')
     expect(helpers).toContain("validatePayloadReferences")
   })
 

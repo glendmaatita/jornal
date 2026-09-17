@@ -1,7 +1,51 @@
 function jsonBody(event) { return event.requestInfo().body || {} }
+let taxRequestActor = null
 
 function requireTaxEnabled() {
   if ($os.getenv("JORNAL_TAX_COMPLIANCE_ENABLED") === "false") throw new ApiError(403, "Tax compliance is temporarily disabled")
+}
+
+function requestTenant(event) {
+  const access = require(`${__hooks}/company_access.js`)
+  access.requireProtocol(event)
+  const requestBody = jsonBody(event)
+  const info = event.requestInfo()
+  const headers = info.headers || {}
+  const query = info.query || {}
+  const actorId = event.auth.id
+  const companyIds = [...new Set([
+    String(requestBody.companyId || ""),
+    ...(Array.isArray(requestBody.companyIds) ? requestBody.companyIds.map(String) : []),
+    String(query.companyId || ""),
+    String(headers.x_jornal_company || ""),
+  ].filter(Boolean))]
+  let ownerTenantId = ""
+  for (const companyId of companyIds) {
+    const scope = access.companyScope($app, actorId, companyId, {})
+    if (ownerTenantId && ownerTenantId !== scope.ownerTenantId) throw new ApiError(409, "Data pajak lintas pemilik tidak didukung")
+    ownerTenantId = scope.ownerTenantId
+  }
+  const path = String(event.request.url.path || "")
+  let subjectId = String(requestBody.subjectId || query.subjectId || "")
+  const direct = path.match(/\/tax\/subjects\/([^/]+)/); if (!subjectId && direct) subjectId = direct[1]
+  if (!subjectId) {
+    const patterns = [["obligations", "tax_obligations"], ["filings", "tax_filings"], ["settlements", "tax_settlements"], ["registrations", "tax_registrations"], ["memberships", "tax_company_memberships"], ["preferences", "tax_notification_preferences"], ["evidence", "tax_evidence"]]
+    for (const pair of patterns) {
+      const match = path.match(new RegExp(`/tax/${pair[0]}/([^/]+)`)); if (!match) continue
+      try { subjectId = $app.findRecordById(pair[1], match[1]).getString("subject_id") } catch { /* normal route not-found handling follows */ }
+      break
+    }
+  }
+  if (subjectId) {
+    let subject
+    try { subject = $app.findRecordById("tax_subjects", subjectId) } catch { throw new ApiError(404, "Tax subject not found") }
+    const coverage = access.assertTaxSubjectAccess($app, actorId, subject, true)
+    if (ownerTenantId && coverage.ownerTenantId !== ownerTenantId) throw new ApiError(404, "Tax subject not found")
+    ownerTenantId = coverage.ownerTenantId
+  }
+  const tenant = ownerTenantId || actorId
+  taxRequestActor = { actorId, tenantId: tenant, at: Date.now() }
+  return tenant
 }
 
 function stableStringify(value) {
@@ -23,7 +67,8 @@ function commandHash(body) {
 }
 
 function findCommand(app, tenantId, key) {
-  try { return app.findFirstRecordByFilter("tax_commands", "tenant_id = {:tenant} && command_key = {:key}", { tenant: tenantId, key }) } catch { return null }
+  const actorId = taxRequestActor && taxRequestActor.tenantId === tenantId ? taxRequestActor.actorId : tenantId
+  try { return app.findFirstRecordByFilter("tax_commands", "tenant_id = {:tenant} && actor_user_id = {:actor} && command_key = {:key}", { tenant: tenantId, actor: actorId, key }) } catch { return null }
 }
 
 function replayCommand(app, tenantId, type, body) {
@@ -35,8 +80,9 @@ function replayCommand(app, tenantId, type, body) {
 }
 
 function saveCommand(app, tenantId, type, command, status, body) {
+  const actorId = taxRequestActor && taxRequestActor.tenantId === tenantId ? taxRequestActor.actorId : tenantId
   app.save(new Record(app.findCollectionByNameOrId("tax_commands"), {
-    tenant_id: tenantId, command_key: command.key, request_hash: command.hash,
+    tenant_id: tenantId, actor_user_id: actorId, command_key: command.key, request_hash: command.hash,
     command_type: type, response_status: status, response_body: body,
   }))
 }
@@ -52,6 +98,7 @@ function ownedCompany(app, tenantId, companyId, requireActive) {
   let company
   try { company = app.findRecordById("companies", String(companyId || "")) } catch { throw new ApiError(404, "Company not found") }
   if (company.getString("tenant_id") !== tenantId) throw new ApiError(404, "Company not found")
+  if (taxRequestActor && taxRequestActor.tenantId === tenantId && Date.now() - taxRequestActor.at < 5_000) require(`${__hooks}/company_access.js`).companyScope(app, taxRequestActor.actorId, company.id, {})
   if (requireActive && company.getString("status") !== "ACTIVE") throw new ApiError(409, "Company is archived")
   return company
 }
@@ -84,9 +131,10 @@ function isoDate(value, name, nullable) {
   return text
 }
 
-function audit(app, tenantId, subjectId, action, commandKeyValue, targetType, targetId, reason, before, after) {
+function audit(app, tenantId, subjectId, action, commandKeyValue, targetType, targetId, reason, before, after, actorId) {
+  const effectiveActor = actorId || (taxRequestActor && taxRequestActor.tenantId === tenantId && Date.now() - taxRequestActor.at < 5_000 ? taxRequestActor.actorId : tenantId)
   app.save(new Record(app.findCollectionByNameOrId("tax_audit"), {
-    tenant_id: tenantId, subject_id: subjectId || "", actor_id: tenantId,
+    tenant_id: tenantId, subject_id: subjectId || "", actor_id: effectiveActor,
     action, command_key: commandKeyValue || "", target_type: targetType, target_id: targetId || "",
     reason: String(reason || "").slice(0, 500), before: before || null, after: after || null,
   }))
@@ -163,6 +211,6 @@ function validateBackup(backup) {
 
 module.exports = {
   audit, commandHash, commandKey, findAllRecords, findCommand, isoDate, jsonArray, jsonBody, nonNegativeMoney,
-  obligationResponse, ownedCompany, ownedObligation, ownedRegistration, ownedSubject, recordJson, requireTaxEnabled,
+  obligationResponse, ownedCompany, ownedObligation, ownedRegistration, ownedSubject, recordJson, requireTaxEnabled, requestTenant,
   replayCommand, saveCommand, stableStringify, subjectResponse, validateBackup,
 }

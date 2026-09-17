@@ -13,6 +13,7 @@ export interface Company {
   legacyDefault: boolean
   dataEpoch: number
   revision: number
+  membershipRevision: number
   /** Immutable company asset used by new documents. Historical invoices keep
    * their own snapshot pointer rather than following this value. */
   logoAssetId: string | null
@@ -22,9 +23,13 @@ export interface Company {
 }
 
 export interface CompanyScope {
+  actorUserId: string
+  ownerTenantId: string
+  /** Backward-compatible alias for ownerTenantId in server payloads. */
   tenantId: string
   companyId: string
   dataEpoch: number
+  membershipRevision: number
 }
 
 export type TransactionDirection = "MONEY_IN" | "MONEY_OUT"

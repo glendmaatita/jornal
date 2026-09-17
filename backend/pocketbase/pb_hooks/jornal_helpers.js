@@ -3,23 +3,19 @@ function isJornalRecord(event) {
 }
 
 function ownedActiveCompany(event, companyId) {
-  if (!event.auth || !companyId) throw new ApiError(404, "Company not found")
-  let company
-  try { company = $app.findRecordById("companies", companyId) } catch { throw new ApiError(404, "Company not found") }
-  if (company.getString("tenant_id") !== event.auth.id) throw new ApiError(404, "Company not found")
-  if (company.getString("status") !== "ACTIVE") throw new ApiError(409, "Company is archived")
-  return company
+  return require(`${__hooks}/company_access.js`).eventScope(event, companyId, { writable: true }).company
 }
 
 function requireProtocolScope(event, companyId) {
   const headers = event.requestInfo().headers || {}
   const protocol = String(headers.x_jornal_protocol || "")
   const requestedCompany = String(headers.x_jornal_company || "")
-  if (protocol !== "2") throw new ApiError(426, "Client update required")
+  if (protocol !== "3") throw new ApiError(426, "Client update required")
   if (!requestedCompany || requestedCompany !== companyId) throw new ApiError(404, "Record not found")
 }
 
 function validatePayloadReferences(event, companyId) {
+  const scope = require(`${__hooks}/company_access.js`).eventScope(event, companyId, {})
   const entity = event.record.getString("entity")
   let payload = event.record.get("payload") || {}
   try { payload = JSON.parse(event.record.getString("payload")) } catch { /* JSONMap fallback */ }
@@ -27,7 +23,7 @@ function validatePayloadReferences(event, companyId) {
   if (value(payload, "companyId") && String(value(payload, "companyId")) !== companyId) {
     throw new ApiError(400, "Payload company is outside the record scope")
   }
-  if (value(payload, "businessId") && String(value(payload, "businessId")) !== event.auth.id) {
+  if (value(payload, "businessId") && String(value(payload, "businessId")) !== scope.ownerTenantId) {
     throw new ApiError(400, "Payload tenant is outside the record scope")
   }
   if (entity !== "transactions" && entity !== "recurringRules") return
@@ -39,7 +35,7 @@ function validatePayloadReferences(event, companyId) {
     const invoiceLinks = $app.findRecordsByFilter(
       "invoice_payments",
       "tenant_id = {:tenant} && company_id = {:company} && ledger_transaction_id = {:transaction} && status = 'ACTIVE'",
-      "", 1, 0, { tenant: event.auth.id, company: companyId, transaction: event.record.getString("app_id") },
+      "", 1, 0, { tenant: scope.ownerTenantId, company: companyId, transaction: event.record.getString("app_id") },
     )
     if (invoiceLinks.length > 0) throw new ApiError(409, "Invoice payment is locked; correct it from the invoice")
   }
@@ -66,6 +62,7 @@ function validatePayloadReferences(event, companyId) {
 }
 
 function validateNoInboundReferences(event, companyId) {
+  const scope = require(`${__hooks}/company_access.js`).eventScope(event, companyId, {})
   const entity = event.record.getString("entity")
   if (entity !== "accounts" && entity !== "transactions") return
   const targetId = event.record.getString("app_id")
@@ -88,17 +85,17 @@ function validateNoInboundReferences(event, companyId) {
       "tax_settlements",
       "tenant_id = {:tenant} && ledger_company_id = {:company} && ledger_transaction_id = {:transaction} && status = 'ACTIVE'",
       "", 1, 0,
-      { tenant: event.auth.id, company: companyId, transaction: targetId },
+      { tenant: scope.ownerTenantId, company: companyId, transaction: targetId },
     )
     if (linked.length > 0) throw new ApiError(409, "Tax payment is still allocated; correct it from the tax agenda")
     const invoiceLinked = $app.findRecordsByFilter(
       "invoice_payments",
       "tenant_id = {:tenant} && company_id = {:company} && ledger_transaction_id = {:transaction} && status = 'ACTIVE'",
       "", 1, 0,
-      { tenant: event.auth.id, company: companyId, transaction: targetId },
+      { tenant: scope.ownerTenantId, company: companyId, transaction: targetId },
     )
     if (invoiceLinked.length > 0) throw new ApiError(409, "Invoice payment is locked; correct it from the invoice")
-    const documentLinked = $app.findRecordsByFilter("document_inbox", "tenant_id = {:tenant} && company_id = {:company} && linked_transaction_id = {:transaction} && status = 'LINKED'", "", 1, 0, { tenant: event.auth.id, company: companyId, transaction: targetId })
+    const documentLinked = $app.findRecordsByFilter("document_inbox", "tenant_id = {:tenant} && company_id = {:company} && linked_transaction_id = {:transaction} && status = 'LINKED'", "", 1, 0, { tenant: scope.ownerTenantId, company: companyId, transaction: targetId })
     if (documentLinked.length > 0) throw new ApiError(409, "Transaction is linked to a document; unlink it from the inbox")
   }
 }

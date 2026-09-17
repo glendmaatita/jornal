@@ -2,19 +2,19 @@ function jsonBody(event) {
   return event.requestInfo().body || {}
 }
 
-function audit(app, tenantId, companyId, action, requestId) {
+function audit(app, tenantId, companyId, action, requestId, actorId) {
   const collection = app.findCollectionByNameOrId("company_audit")
   app.save(new Record(collection, {
     tenant_id: tenantId,
     company_id: companyId,
-    actor_id: tenantId,
+    actor_id: actorId || tenantId,
     action,
     request_id: requestId || "",
   }))
 }
 
-function companyResponse(company) {
-  return {
+function companyResponse(company, membership) {
+  const response = {
     id: company.id,
     tenantId: company.getString("tenant_id"),
     name: company.getString("name"),
@@ -28,6 +28,8 @@ function companyResponse(company) {
     createdAt: company.getString("created"),
     updatedAt: company.getString("updated"),
   }
+  if (membership) response.membershipRevision = membership.getInt("revision")
+  return response
 }
 
 function bytesFromBase64(value) { const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"; const text = String(value || "").replace(/=+$/, ""); const output = []; let buffer = 0; let bits = 0; for (let index = 0; index < text.length; index += 1) { const digit = alphabet.indexOf(text[index]); if (digit < 0) throw new ApiError(400, "Data logo tidak valid"); buffer = (buffer << 6) | digit; bits += 6; if (bits >= 8) { bits -= 8; output.push((buffer >> bits) & 255) } }; return new Uint8Array(output) }

@@ -119,16 +119,19 @@ export function OnboardingPage() {
         accounts,
       })
       setTenantScope(pb.authStore.record?.id)
-      setCompanyScope(company.id, company.dataEpoch)
+      setCompanyScope(company.id, company.dataEpoch, company.tenantId, company.membershipRevision)
       resetPocketBaseSyncState()
       await initializePocketBaseSync()
       window.sessionStorage.removeItem(`jornal.company-setup-key.${window.location.pathname}`)
+      window.sessionStorage.removeItem("jornal.create-company-intent")
       let pendingRoute = ""
       try {
         pendingRoute = window.sessionStorage.getItem("jornal.pending-route") ?? ""
         window.sessionStorage.removeItem("jornal.pending-route")
       } catch { /* continue to home when session storage is unavailable */ }
-      const destination = window.location.pathname === "/companies/new" ? "/" : pendingRoute.startsWith("/") ? pendingRoute : "/"
+      let safePending = ""
+      try { const parsed = new URL(pendingRoute, window.location.origin); if (parsed.origin === window.location.origin && pendingRoute.startsWith("/") && !pendingRoute.startsWith("//")) safePending = `${parsed.pathname}${parsed.search}${parsed.hash}` } catch { /* discard invalid route */ }
+      const destination = window.location.pathname === "/companies/new" ? "/" : safePending || "/"
       const separator = destination.includes("?") ? "&" : "?"
       window.location.assign(`${destination}${separator}company=${encodeURIComponent(company.id)}`)
     } catch (cause) {

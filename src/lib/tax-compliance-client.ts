@@ -1,6 +1,7 @@
 import { pb, pocketBaseConfigured } from "./pb"
 import { mirrorState, restoreState } from "./local-db"
 import { reconcileServerTransaction } from "./store"
+import { getCompanyScope, getDataScope } from "./store"
 import type { Transaction } from "./types"
 import type {
   TaxFiling,
@@ -18,6 +19,7 @@ export interface TaxConfiguration {
   memberships: Array<{ id: string; tenant_id: string; subject_id: string; company_id: string; effective_from: string; effective_until: string; revision: number }>
   registrations: Array<Record<string, unknown>>
   preferences: Array<Record<string, unknown>>
+  taxCoverage?: "COMPLETE" | "RESTRICTED_SHARED_SUBJECT"
 }
 
 export interface TaxAgenda {
@@ -26,11 +28,11 @@ export interface TaxAgenda {
   settlements: Array<Record<string, unknown>>
   allocations: Array<Record<string, unknown>>
   evidence: Array<Record<string, unknown>>
+  taxCoverage?: "COMPLETE" | "RESTRICTED_SHARED_SUBJECT"
 }
 
-function tenantId() { return pb.authStore.record?.id ?? "local" }
-function configurationKey(ownerId = tenantId()) { return `jornal.${ownerId}.tax.configuration.v1` }
-function agendaKey(companyId?: string, ownerId = tenantId()) { return `jornal.${ownerId}.tax.agenda.${companyId || "all"}.v1` }
+function configurationKey(ownerId = getDataScope()) { return `jornal.v3.${ownerId}.tax.configuration.v1` }
+function agendaKey(companyId?: string, ownerId = getDataScope()) { return `jornal.v3.${ownerId}.tax.agenda.${companyId || "all"}.v1` }
 
 async function cache<T>(key: string, value: T) {
   try { window.localStorage.setItem(key, JSON.stringify(value)) } catch { /* IndexedDB remains available */ }
@@ -48,17 +50,17 @@ async function cached<T>(key: string): Promise<T | null> {
 
 async function send<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   if (!pocketBaseConfigured || !taxComplianceEnabled) throw new Error("Modul agenda pajak belum tersedia pada server ini.")
-  return pb.send<T>(path, options)
+  return pb.send<T>(path, { ...options, headers: { "X-Jornal-Company": getCompanyScope().companyId, "X-Jornal-Protocol": "3" } })
 }
 
 export async function loadTaxConfiguration(): Promise<TaxConfiguration> {
-  const ownerId = tenantId()
+  const ownerId = getDataScope()
   try {
-    const result = await send<TaxConfiguration>("/api/jornal/tax/configuration")
-    if (tenantId() !== ownerId) throw new Error("Sesi berubah saat data pajak dimuat.")
+    const result = await send<TaxConfiguration>(`/api/jornal/tax/configuration?companyId=${encodeURIComponent(getCompanyScope().companyId)}`)
+    if (getDataScope() !== ownerId) throw new Error("Sesi berubah saat data pajak dimuat.")
     return cache(configurationKey(ownerId), result)
   } catch (error) {
-    if (tenantId() !== ownerId) throw error
+    if (getDataScope() !== ownerId) throw error
     const local = await cached<TaxConfiguration>(configurationKey(ownerId))
     if (local) return local
     throw error
@@ -66,19 +68,19 @@ export async function loadTaxConfiguration(): Promise<TaxConfiguration> {
 }
 
 export async function loadTaxAgenda(companyId?: string): Promise<TaxAgenda> {
-  const ownerId = tenantId()
+  const ownerId = getDataScope()
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""
   try {
     const wire = await send<{ obligations: Array<Record<string, unknown>>; filings: Array<Record<string, unknown>>; settlements?: Array<Record<string, unknown>>; allocations?: Array<Record<string, unknown>>; evidence?: Array<Record<string, unknown>> }>(`/api/jornal/tax/agenda${query}`)
     const result = {
       obligations: wire.obligations.map(parseObligation),
       filings: wire.filings.map(parseFiling),
-      settlements: wire.settlements ?? [], allocations: wire.allocations ?? [], evidence: wire.evidence ?? [],
+      settlements: wire.settlements ?? [], allocations: wire.allocations ?? [], evidence: wire.evidence ?? [], taxCoverage: (wire as { taxCoverage?: TaxAgenda["taxCoverage"] }).taxCoverage,
     }
-    if (tenantId() !== ownerId) throw new Error("Sesi berubah saat agenda pajak dimuat.")
+    if (getDataScope() !== ownerId) throw new Error("Sesi berubah saat agenda pajak dimuat.")
     return cache(agendaKey(companyId, ownerId), result)
   } catch (error) {
-    if (tenantId() !== ownerId) throw error
+    if (getDataScope() !== ownerId) throw error
     const local = await cached<TaxAgenda>(agendaKey(companyId, ownerId))
     if (local) return local
     throw error
@@ -252,6 +254,12 @@ export async function updateTaxNotificationPreference(preferenceId: string, inpu
   return send<Record<string, unknown>>(`/api/jornal/tax/preferences/${encodeURIComponent(preferenceId)}`, { method: "PATCH", body: input })
 }
 
+export async function saveOwnTaxNotificationPreference(subjectId: string, input: {
+  commandKey: string; inAppEnabled: boolean; emailEnabled: boolean; includeAmountInEmail?: boolean; deliveryHour?: number; timezone?: string; reason?: string
+}) {
+  return send<Record<string, unknown>>(`/api/jornal/tax/subjects/${encodeURIComponent(subjectId)}/preferences/me`, { method: "PUT", body: input })
+}
+
 export async function endTaxMembership(membershipId: string, input: { commandKey: string; revision: number; effectiveUntil: string; reason: string }) {
   return send<Record<string, unknown>>(`/api/jornal/tax/memberships/${encodeURIComponent(membershipId)}/end`, { method: "POST", body: input })
 }
@@ -285,7 +293,7 @@ export async function uploadTaxEvidence(input: {
   const form = new FormData(); form.append("commandKey", input.commandKey); form.append("subjectId", input.subjectId)
   form.append("parentType", input.parentType); form.append("parentId", input.parentId); form.append("sha256", sha256)
   form.append("reason", input.reason ?? ""); form.append("document", input.file, input.file.name)
-  return pb.send<Record<string, unknown>>("/api/jornal/tax/evidence", { method: "POST", body: form })
+  return pb.send<Record<string, unknown>>("/api/jornal/tax/evidence", { method: "POST", body: form, headers: { "X-Jornal-Company": getCompanyScope().companyId, "X-Jornal-Protocol": "3" } })
 }
 
 export async function loadTaxEvidence(subjectId: string) {
@@ -303,7 +311,7 @@ function download(name: string, blob: Blob) {
 
 async function downloadAuthenticated(path: string, name: string) {
   if (!pocketBaseConfigured || !pb.authStore.token) throw new Error("Sesi login diperlukan untuk mengunduh data pajak.")
-  const response = await fetch(`${pb.baseURL}${path}`, { headers: { Authorization: pb.authStore.token } })
+  const response = await fetch(`${pb.baseURL}${path}`, { headers: { Authorization: pb.authStore.token, "X-Jornal-Company": getCompanyScope().companyId, "X-Jornal-Protocol": "3" } })
   if (!response.ok) throw new Error(`Unduhan gagal (${response.status}).`)
   download(name, await response.blob())
 }

@@ -60,7 +60,7 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
     const data = await response.json().catch(() => ({})) as Record<string, unknown>
     return { response, data }
   }
-  const jsonHeaders = (token: string) => ({ Authorization: token, "Content-Type": "application/json" })
+  const jsonHeaders = (token: string) => ({ Authorization: token, "Content-Type": "application/json", "X-Jornal-Protocol": "3" })
   const admin = await send("/api/collections/_superusers/auth-with-password", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ identity: "admin@example.com", password: "StrongPass123!" }),
@@ -163,7 +163,7 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
   expect((generatedOpening.data.obligations as Array<Record<string, unknown>>).find((item) => item.kind === "PPH_FINAL_UMKM"))
     .toMatchObject({ liability_amount: 100_000, amount_state: "CONFIRMED" })
 
-  const agenda = await send(`/api/jornal/tax/agenda?companyId=${companyId}`, { headers: { Authorization: owner.token } })
+  const agenda = await send(`/api/jornal/tax/agenda?companyId=${companyId}`, { headers: jsonHeaders(owner.token) })
   expect(agenda.response.status).toBe(200)
   expect((agenda.data.obligations as unknown[]).length).toBe(4)
   expect((agenda.data.filings as unknown[]).length).toBe(4)
@@ -192,7 +192,7 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
     }),
   })
   expect(paidOnlyUmkm.response.status).toBe(201)
-  const sharedAgenda = await send(`/api/jornal/tax/agenda?subjectId=${subjectId}`, { headers: { Authorization: owner.token } })
+  const sharedAgenda = await send(`/api/jornal/tax/agenda?subjectId=${subjectId}`, { headers: jsonHeaders(owner.token) })
   const sharedFiling = (sharedAgenda.data.filings as Array<Record<string, unknown>>).find((item) => item.period === "2026-03" && item.filing_group === "SPT_MASA_UNIFIKASI")!
   expect(sharedFiling.status).toBe("PENDING")
 
@@ -232,7 +232,7 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
     method: "POST", headers: jsonHeaders(owner.token), body: JSON.stringify({ commandKey: "reverse-over", revision: overSettlement.revision, reason: "Uji koreksi lebih bayar" }),
   })
   expect((undoOverpayment.data.obligations as Array<Record<string, unknown>>)[0]).toMatchObject({ remaining_payable: 0, payment_status: "PAID" })
-  const afterPayment = await send(`/api/jornal/tax/agenda?companyId=${companyId}`, { headers: { Authorization: owner.token } })
+  const afterPayment = await send(`/api/jornal/tax/agenda?companyId=${companyId}`, { headers: jsonHeaders(owner.token) })
   const paidUmkm = (afterPayment.data.obligations as Array<Record<string, unknown>>).find((item) => item.id === umkm!.id)!
   const snoozed = await send(`/api/jornal/tax/obligations/${umkm!.id}/snooze`, {
     method: "POST", headers: jsonHeaders(owner.token), body: JSON.stringify({ commandKey: "snooze-umkm", revision: paidUmkm.revision, snoozedUntil: "2026-10-01", reason: "Menunggu dokumen" }),
@@ -242,12 +242,12 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
   const umkmFiling = (afterPayment.data.filings as Array<Record<string, unknown>>).find((item) => item.filing_group === "SPT_MASA_UNIFIKASI" && item.period === "2026-02")
   if (umkmFiling?.status !== "FULFILLED_BY_PAYMENT") throw new Error(`filing not fulfilled: ${JSON.stringify(umkmFiling)}`)
   const ledger = await send("/api/collections/jornal_records/records?filter=app_id%3D%27tax-payment-feb%27", {
-    headers: { Authorization: owner.token, "X-Jornal-Protocol": "2", "X-Jornal-Company": companyId },
+    headers: { Authorization: owner.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": companyId },
   })
   expect(ledger.response.status).toBe(200)
   const ledgerRecord = (ledger.data.items as Array<Record<string, unknown>>)[0]
   const blockedDelete = await send(`/api/collections/jornal_records/records/${ledgerRecord.id}`, {
-    method: "DELETE", headers: { Authorization: owner.token, "X-Jornal-Protocol": "2", "X-Jornal-Company": companyId },
+    method: "DELETE", headers: { Authorization: owner.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": companyId },
   })
   expect(blockedDelete.response.status).toBe(409)
 
@@ -276,20 +276,20 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
   evidenceForm.append("sha256", "a".repeat(64))
   const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="), (character) => character.charCodeAt(0))
   evidenceForm.append("document", new File([png], "bukti.png", { type: "image/png" }))
-  const evidence = await send("/api/jornal/tax/evidence", { method: "POST", headers: { Authorization: owner.token }, body: evidenceForm })
+  const evidence = await send("/api/jornal/tax/evidence", { method: "POST", headers: { Authorization: owner.token, "X-Jornal-Protocol": "3" }, body: evidenceForm })
   if (evidence.response.status !== 201) throw new Error(`evidence upload failed ${evidence.response.status}: ${JSON.stringify(evidence.data)}`)
   expect(evidence.response.status).toBe(201)
-  const evidenceDownload = await fetch(`${origin}/api/jornal/tax/evidence/${evidence.data.id}/download`, { headers: { Authorization: owner.token } })
+  const evidenceDownload = await fetch(`${origin}/api/jornal/tax/evidence/${evidence.data.id}/download`, { headers: { Authorization: owner.token, "X-Jornal-Protocol": "3" } })
   if (evidenceDownload.status !== 200) throw new Error(`evidence download failed ${evidenceDownload.status}: ${await evidenceDownload.text()}`)
   expect(evidenceDownload.status).toBe(200)
   expect((await evidenceDownload.arrayBuffer()).byteLength).toBe(png.byteLength)
-  const foreignEvidence = await fetch(`${origin}/api/jornal/tax/evidence/${evidence.data.id}/download`, { headers: { Authorization: foreign.token } })
+  const foreignEvidence = await fetch(`${origin}/api/jornal/tax/evidence/${evidence.data.id}/download`, { headers: { Authorization: foreign.token, "X-Jornal-Protocol": "3" } })
   expect(foreignEvidence.status).toBe(404)
 
-  const report = await fetch(`${origin}/api/jornal/tax/subjects/${subjectId}/report/2026`, { headers: { Authorization: owner.token } })
+  const report = await fetch(`${origin}/api/jornal/tax/subjects/${subjectId}/report/2026`, { headers: { Authorization: owner.token, "X-Jornal-Protocol": "3" } })
   expect(report.status).toBe(200)
   expect(await report.text()).toContain("PPH_FINAL_UMKM")
-  const exported = await send(`/api/jornal/tax/export?subjectId=${subjectId}`, { headers: { Authorization: owner.token } })
+  const exported = await send(`/api/jornal/tax/export?subjectId=${subjectId}`, { headers: jsonHeaders(owner.token) })
   expect(exported.response.status).toBe(200)
   expect((exported.data.manifest as Record<string, unknown>).format).toBe("jornal-tax-backup")
   expect((exported.data.manifest as Record<string, unknown>).notificationsEnabled).toBe(false)
@@ -322,7 +322,7 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
   const health = await send("/api/jornal/admin/tax/health", { headers: { Authorization: String(admin.data.token) } })
   expect(health.response.status).toBe(200)
   expect(health.data).toMatchObject({ complianceEnabled: true, emailDeliveryEnabled: true, smtpConfigured: true })
-  const annualAgenda = await send(`/api/jornal/tax/agenda?companyId=${companyId}`, { headers: { Authorization: owner.token } })
+  const annualAgenda = await send(`/api/jornal/tax/agenda?companyId=${companyId}`, { headers: jsonHeaders(owner.token) })
   const pph29 = (annualAgenda.data.obligations as Array<Record<string, unknown>>).find((item) => item.kind === "PPH_29" && item.period === "2026")!
   expect(pph29).toMatchObject({ liability_amount: 20_000_000, remaining_payable: 20_000_000 })
   const annualCredit = await send("/api/jornal/tax/settlements", { method: "POST", headers: jsonHeaders(owner.token), body: JSON.stringify({
@@ -338,12 +338,12 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
   for (let batch = 0; batch < 3; batch += 1) {
     await send("/api/jornal/admin/tax/run-jobs", { method: "POST", headers: { Authorization: String(admin.data.token) } })
   }
-  const inbox = await send("/api/jornal/tax/inbox", { headers: { Authorization: owner.token } })
+  const inbox = await send("/api/jornal/tax/inbox", { headers: jsonHeaders(owner.token) })
   expect(inbox.response.status).toBe(200)
   expect((inbox.data.items as unknown[]).length).toBeGreaterThan(0)
   const inboxCount = (inbox.data.items as unknown[]).length
   await send("/api/jornal/admin/tax/run-jobs", { method: "POST", headers: { Authorization: String(admin.data.token) } })
-  const inboxAfterReplay = await send("/api/jornal/tax/inbox", { headers: { Authorization: owner.token } })
+  const inboxAfterReplay = await send("/api/jornal/tax/inbox", { headers: jsonHeaders(owner.token) })
   expect((inboxAfterReplay.data.items as unknown[]).length).toBe(inboxCount)
   const inboxIds = (inboxAfterReplay.data.items as Array<Record<string, unknown>>).map((item) => String(item.id))
   const readBody = { commandKey: "read-inbox", ids: inboxIds }
@@ -351,7 +351,7 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
   expect(read.data.updated).toBe(inboxCount)
   const readReplay = await send("/api/jornal/tax/inbox/read", { method: "POST", headers: jsonHeaders(owner.token), body: JSON.stringify(readBody) })
   expect(readReplay.data.updated).toBe(inboxCount)
-  const emptyInbox = await send("/api/jornal/tax/inbox", { headers: { Authorization: owner.token } })
+  const emptyInbox = await send("/api/jornal/tax/inbox", { headers: jsonHeaders(owner.token) })
   expect(emptyInbox.data.items).toEqual([])
 
   const staleReminder = await send("/api/collections/tax_notifications/records", {
@@ -373,10 +373,13 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
   expect(reversed.response.status).toBe(200)
   expect((reversed.data.settlement as Record<string, unknown>).status).toBe("REVERSED")
   expect((reversed.data.obligations as Array<Record<string, unknown>>)[0]).toMatchObject({ remaining_payable: 60_000, payment_status: "PARTIAL" })
+  const reversedLedger = await send(`/api/collections/jornal_records/records/${ledgerRecord.id}`, { headers: { Authorization: owner.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": companyId } })
   const deleteReversedLedger = await send(`/api/collections/jornal_records/records/${ledgerRecord.id}`, {
-    method: "DELETE", headers: { Authorization: owner.token, "X-Jornal-Protocol": "2", "X-Jornal-Company": companyId },
+    method: "DELETE", headers: { Authorization: owner.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": companyId, "X-Jornal-Revision": String(reversedLedger.data.revision) },
   })
-  expect(deleteReversedLedger.response.status).toBe(204)
+  expect(deleteReversedLedger.response.status).toBe(200)
+  const tombstone = await send(`/api/collections/jornal_records/records/${ledgerRecord.id}`, { headers: { Authorization: owner.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": companyId } })
+  expect(tombstone.data.deleted_at).toBeTruthy()
 
   const notificationList = await send("/api/collections/tax_notifications/records?perPage=500", { headers: { Authorization: String(admin.data.token) } })
   const notifications = notificationList.data.items as Array<Record<string, unknown>>
@@ -405,7 +408,7 @@ integrationTest("tax compliance API isolates subjects and generates cumulative U
   const failureHealth = await send("/api/jornal/admin/tax/health", { headers: { Authorization: String(admin.data.token) } })
   expect(((failureHealth.data.queue as Record<string, number>).retryableFailed ?? 0)).toBeGreaterThan(0)
 
-  const foreignAgenda = await send("/api/jornal/tax/agenda", { headers: { Authorization: foreign.token } })
+  const foreignAgenda = await send("/api/jornal/tax/agenda", { headers: jsonHeaders(foreign.token) })
   expect(foreignAgenda.response.status).toBe(200)
   expect((foreignAgenda.data.obligations as unknown[]).length).toBeGreaterThan(0)
   const rawSubjects = await send("/api/collections/tax_subjects/records", { headers: { Authorization: owner.token } })

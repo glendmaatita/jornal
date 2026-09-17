@@ -2,6 +2,12 @@
 
 A calm, local-first journal built with Bun, React, TanStack Router and Query, shadcn/ui conventions, Tailwind CSS, and Vite PWA.
 
+Company team invitations are implemented from
+[TEAM_INVITATION_PLAN.md](TEAM_INVITATION_PLAN.md): Google-bound acceptance,
+shared company access, queued SMTP delivery, revocation, and protocol-3 cache
+isolation. Deployment and rollback steps are in
+[TEAM_INVITATION_RUNBOOK.md](TEAM_INVITATION_RUNBOOK.md).
+
 ## Local development
 
 ```bash
@@ -16,6 +22,9 @@ bun run lint
 bun run test
 bun run typecheck
 bun run build
+bun run test:team:integration # requires POCKETBASE_BIN=.../pocketbase 0.40.2
+bun run test:team:email       # SMTP capture + retry/permanent failure assertions
+bun run test:team:e2e         # requires POCKETBASE_BIN and Playwright Chromium
 bun run test:tax:integration # requires POCKETBASE_BIN=.../pocketbase 0.40.2
 bun run test:tax:e2e         # also requires Playwright Chromium
 ```

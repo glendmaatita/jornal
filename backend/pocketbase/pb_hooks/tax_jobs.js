@@ -26,8 +26,11 @@ function taxJsonArray(record, field, fallback) {
   } catch { return fallback }
 }
 
-function taxPreference(subjectId, tenantId) {
-  try { return $app.findFirstRecordByFilter("tax_notification_preferences", "tenant_id = {:tenant} && subject_id = {:subject}", { tenant: tenantId, subject: subjectId }) } catch { return null }
+function taxPreferences(subjectId, tenantId) {
+  return $app.findRecordsByFilter("tax_notification_preferences", "tenant_id = {:tenant} && subject_id = {:subject}", "recipient_user_id,id", 0, 0, { tenant: tenantId, subject: subjectId })
+}
+function taxPreference(subjectId, tenantId, recipientId) {
+  try { return $app.findFirstRecordByFilter("tax_notification_preferences", "tenant_id = {:tenant} && subject_id = {:subject} && recipient_user_id = {:recipient}", { tenant: tenantId, subject: subjectId, recipient: recipientId }) } catch { return null }
 }
 
 function taxFiscalYearEnd(subject, year) {
@@ -109,7 +112,7 @@ function taxGenerateUpcomingObligations() {
   const currentPeriod = `${year}-${String(month).padStart(2, "0")}`
   const previousDate = new Date(Date.UTC(year, month - 2, 1))
   const previousPeriod = `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, "0")}`
-  const subjects = $app.findRecordsByFilter("tax_subjects", "status = 'ACTIVE'", "created", 500, 0)
+  const subjects = require(`${__hooks}/tax_helpers.js`).findAllRecords($app, "tax_subjects", "status = 'ACTIVE'", "created,id")
   for (const subject of subjects) {
     taxEnsurePeriod(subject, currentPeriod, "MONTHLY")
     taxEnsurePeriod(subject, previousPeriod, "MONTHLY")
@@ -119,9 +122,9 @@ function taxGenerateUpcomingObligations() {
   }
 }
 
-function taxCancelOldSchedules(tenantId, obligationId, filingId, action, channel, scheduleVersion) {
-  const filters = ["tenant_id = {:tenant}", "action = {:action}", "channel = {:channel}", "status = 'PENDING'"]
-  const params = { tenant: tenantId, action, channel }
+function taxCancelOldSchedules(tenantId, recipientId, obligationId, filingId, action, channel, scheduleVersion) {
+  const filters = ["tenant_id = {:tenant}", "recipient_user_id = {:recipient}", "action = {:action}", "channel = {:channel}", "status = 'PENDING'"]
+  const params = { tenant: tenantId, recipient: recipientId, action, channel }
   if (obligationId) { filters.push("obligation_id = {:target}"); params.target = obligationId }
   else { filters.push("filing_id = {:target}"); params.target = filingId }
   const existing = $app.findRecordsByFilter("tax_notifications", filters.join(" && "), "", 0, 0, params)
@@ -131,7 +134,7 @@ function taxCancelOldSchedules(tenantId, obligationId, filingId, action, channel
 }
 
 function taxEnsureNotification(input) {
-  const dedupeKey = [input.tenantId, input.subjectId, input.obligationId || input.filingId, input.action, input.channel, input.marker, input.scheduleVersion].join(":")
+  const dedupeKey = [input.recipientId, input.subjectId, input.obligationId || input.filingId, input.action, input.channel, input.marker, input.scheduleVersion].join(":")
   try {
     const existing = $app.findFirstRecordByFilter("tax_notifications", "tenant_id = {:tenant} && dedupe_key = {:key}", { tenant: input.tenantId, key: dedupeKey })
     if (existing.getString("status") === "CANCELLED") {
@@ -140,10 +143,10 @@ function taxEnsureNotification(input) {
     }
     return
   } catch { /* create */ }
-  taxCancelOldSchedules(input.tenantId, input.obligationId, input.filingId, input.action, input.channel, input.scheduleVersion)
+  taxCancelOldSchedules(input.tenantId, input.recipientId, input.obligationId, input.filingId, input.action, input.channel, input.scheduleVersion)
   try {
     $app.save(new Record($app.findCollectionByNameOrId("tax_notifications"), {
-      tenant_id: input.tenantId, subject_id: input.subjectId,
+      tenant_id: input.tenantId, recipient_user_id: input.recipientId, subject_id: input.subjectId,
       obligation_id: input.obligationId || "", filing_id: input.filingId || "",
       action: input.action, channel: input.channel, scheduled_at: input.scheduledAt,
       dedupe_key: dedupeKey, status: "PENDING", attempt_count: 0, schedule_version: input.scheduleVersion,
@@ -167,21 +170,22 @@ function taxScheduleAction(target, targetType, action, preference) {
   const snoozedUntil = targetType === "obligation" ? taxDateOnly(target.getString("snoozed_until")) : ""
   const offsets = taxJsonArray(preference, annual ? "annual_offsets" : "monthly_offsets", annual ? [30, 14, 7, 3, 1, 0] : [7, 3, 1, 0])
   const tenantId = target.getString("tenant_id"); const subjectId = target.getString("subject_id")
+  const recipientId = preference.getString("recipient_user_id") || tenantId
   const scheduleVersion = taxScheduleVersion(target, targetType, preference)
   const channels = preference.getBool("in_app_enabled") ? ["IN_APP"] : []
   if (preference.getBool("email_enabled") && $os.getenv("JORNAL_TAX_EMAIL_ENABLED") === "true") channels.push("EMAIL")
   for (const offset of offsets) for (const channel of channels) {
     const scheduleDate = taxShiftDate(due, -offset); if (snoozedUntil && scheduleDate < snoozedUntil) continue
-    taxEnsureNotification({ tenantId, subjectId, obligationId: targetType === "obligation" ? target.id : "", filingId: targetType === "filing" ? target.id : "", action, channel, marker: `before-${offset}`, scheduleVersion, scheduledAt: taxScheduledAt(scheduleDate, preference.getInt("delivery_hour"), preference.getString("timezone")) })
+    taxEnsureNotification({ tenantId, recipientId, subjectId, obligationId: targetType === "obligation" ? target.id : "", filingId: targetType === "filing" ? target.id : "", action, channel, marker: `before-${offset}`, scheduleVersion, scheduledAt: taxScheduledAt(scheduleDate, preference.getInt("delivery_hour"), preference.getString("timezone")) })
   }
   if (snoozedUntil) for (const channel of channels) taxEnsureNotification({
-    tenantId, subjectId, obligationId: target.id, filingId: "", action, channel, marker: "snoozed", scheduleVersion,
+    tenantId, recipientId, subjectId, obligationId: target.id, filingId: "", action, channel, marker: "snoozed", scheduleVersion,
     scheduledAt: taxScheduledAt(snoozedUntil, preference.getInt("delivery_hour"), preference.getString("timezone")),
   })
   const overdueLimit = Math.min(12, preference.getInt("overdue_weekly_limit") || 0)
   for (let week = 1; week <= overdueLimit; week += 1) for (const channel of channels) {
     const scheduleDate = taxShiftDate(due, week * 7); if (snoozedUntil && scheduleDate < snoozedUntil) continue
-    taxEnsureNotification({ tenantId, subjectId, obligationId: targetType === "obligation" ? target.id : "", filingId: targetType === "filing" ? target.id : "", action: "OVERDUE", channel, marker: `overdue-${week}`, scheduleVersion, scheduledAt: taxScheduledAt(scheduleDate, preference.getInt("delivery_hour"), preference.getString("timezone")) })
+    taxEnsureNotification({ tenantId, recipientId, subjectId, obligationId: targetType === "obligation" ? target.id : "", filingId: targetType === "filing" ? target.id : "", action: "OVERDUE", channel, marker: `overdue-${week}`, scheduleVersion, scheduledAt: taxScheduledAt(scheduleDate, preference.getInt("delivery_hour"), preference.getString("timezone")) })
   }
 }
 
@@ -195,8 +199,8 @@ function taxGenerateNotificationQueue() {
     "effective_due_date,id",
   )
   for (const obligation of obligations) {
-    const preference = taxPreference(obligation.getString("subject_id"), obligation.getString("tenant_id")); if (!preference) continue
-    taxScheduleAction(obligation, "obligation", obligation.getString("amount_state") === "UNKNOWN" ? "PREPARE" : "PAY", preference)
+    const preferences = taxPreferences(obligation.getString("subject_id"), obligation.getString("tenant_id"))
+    for (const preference of preferences) taxScheduleAction(obligation, "obligation", obligation.getString("amount_state") === "UNKNOWN" ? "PREPARE" : "PAY", preference)
   }
   const filings = helpers.findAllRecords(
     $app,
@@ -205,7 +209,7 @@ function taxGenerateNotificationQueue() {
     "effective_due_date,id",
   )
   for (const filing of filings) {
-    const preference = taxPreference(filing.getString("subject_id"), filing.getString("tenant_id")); if (preference) taxScheduleAction(filing, "filing", "FILE", preference)
+    const preferences = taxPreferences(filing.getString("subject_id"), filing.getString("tenant_id")); for (const preference of preferences) taxScheduleAction(filing, "filing", "FILE", preference)
   }
 }
 
@@ -215,7 +219,7 @@ function taxClaimDueNotifications() {
     const records = tx.findRecordsByFilter("tax_notifications", "(status = 'PENDING' || status = 'RETRYABLE_FAILED') && scheduled_at <= {:now}", "scheduled_at", 100, 0, { now })
     for (const record of records) {
       record.set("status", "LEASED"); record.set("lease_until", new Date(Date.now() + 5 * 60_000).toISOString()); tx.save(record)
-      claimed.push({ id: record.id, tenantId: record.getString("tenant_id"), subjectId: record.getString("subject_id"), obligationId: record.getString("obligation_id"), filingId: record.getString("filing_id"), channel: record.getString("channel"), action: record.getString("action"), scheduleVersion: record.getString("schedule_version") })
+      claimed.push({ id: record.id, tenantId: record.getString("tenant_id"), recipientId: record.getString("recipient_user_id") || record.getString("tenant_id"), subjectId: record.getString("subject_id"), obligationId: record.getString("obligation_id"), filingId: record.getString("filing_id"), channel: record.getString("channel"), action: record.getString("action"), scheduleVersion: record.getString("schedule_version") })
     }
   })
   return claimed
@@ -234,7 +238,10 @@ function taxCancel(ids, reason) {
 
 function taxNotificationStillApplicable(item) {
   if ($os.getenv("JORNAL_TAX_COMPLIANCE_ENABLED") === "false") return false
-  const preference = taxPreference(item.subjectId, item.tenantId)
+  let subject
+  try { subject = $app.findRecordById("tax_subjects", item.subjectId) } catch { return false }
+  try { require(`${__hooks}/company_access.js`).assertTaxSubjectAccess($app, item.recipientId, subject, true) } catch { return false }
+  const preference = taxPreference(item.subjectId, item.tenantId, item.recipientId)
   if (!preference) return false
   if (item.channel === "IN_APP" && !preference.getBool("in_app_enabled")) return false
   if (item.channel === "EMAIL" && (!preference.getBool("email_enabled") || $os.getenv("JORNAL_TAX_EMAIL_ENABLED") !== "true")) return false
@@ -284,24 +291,24 @@ function taxMark(ids, status, error) {
 function taxDeliverNotifications() {
   const claimed = taxRevalidateNotifications(taxClaimDueNotifications())
   const inApp = claimed.filter((item) => item.channel === "IN_APP"); if (inApp.length) taxMark(inApp.map((item) => item.id), "SENT", "")
-  const emailByTenant = {}
+  const emailByRecipient = {}
   for (const item of claimed.filter((candidate) => candidate.channel === "EMAIL")) {
-    if (!emailByTenant[item.tenantId]) emailByTenant[item.tenantId] = []
-    emailByTenant[item.tenantId].push(item)
+    if (!emailByRecipient[item.recipientId]) emailByRecipient[item.recipientId] = []
+    emailByRecipient[item.recipientId].push(item)
   }
-  for (const tenantId of Object.keys(emailByTenant)) {
-    const items = taxRevalidateNotifications(emailByTenant[tenantId]); if (!items.length) continue
+  for (const recipientId of Object.keys(emailByRecipient)) {
+    const items = taxRevalidateNotifications(emailByRecipient[recipientId]); if (!items.length) continue
     let user
-    try { user = $app.findRecordById("users", tenantId) } catch { taxMark(items.map((item) => item.id), "PERMANENTLY_FAILED", "Recipient not found"); continue }
+    try { user = $app.findRecordById("users", recipientId) } catch { taxMark(items.map((item) => item.id), "PERMANENTLY_FAILED", "Recipient not found"); continue }
     if (!user.getBool("verified") || !user.getString("email")) { taxMark(items.map((item) => item.id), "PERMANENTLY_FAILED", "Recipient email is not verified"); continue }
     const actionCounts = items.reduce((result, item) => { result[item.action] = (result[item.action] || 0) + 1; return result }, {})
     const summary = Object.keys(actionCounts).map((action) => `${action}: ${actionCounts[action]}`).join(", ")
     let amountSummary = ""
-    const canIncludeAmounts = items.some((item) => { const preference = taxPreference(item.subjectId, tenantId); return preference && preference.getBool("include_amount_in_email") })
+    const canIncludeAmounts = items.some((item) => { const preference = taxPreference(item.subjectId, item.tenantId, recipientId); return preference && preference.getBool("include_amount_in_email") })
     if (canIncludeAmounts) {
       const total = items.reduce((sum, item) => {
         if (!item.obligationId) return sum
-        const preference = taxPreference(item.subjectId, tenantId); if (!preference || !preference.getBool("include_amount_in_email")) return sum
+        const preference = taxPreference(item.subjectId, item.tenantId, recipientId); if (!preference || !preference.getBool("include_amount_in_email")) return sum
         try { const obligation = $app.findRecordById("tax_obligations", item.obligationId); return obligation.getBool("has_remaining_payable") ? sum + obligation.getInt("remaining_payable") : sum } catch { return sum }
       }, 0)
       amountSummary = ` Total sisa terkonfirmasi pada agenda ini: Rp${total.toLocaleString("id-ID")}.`

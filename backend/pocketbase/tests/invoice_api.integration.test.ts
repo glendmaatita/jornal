@@ -101,6 +101,7 @@ integrationTest(
     const headers = (token: string) => ({
       Authorization: token,
       "Content-Type": "application/json",
+      "X-Jornal-Protocol": "3",
     });
     const createUser = async (email: string) => {
       const user = await send("/api/collections/users/records", {
@@ -257,7 +258,7 @@ integrationTest(
       {
         headers: {
           Authorization: owner.token,
-          "X-Jornal-Protocol": "2",
+          "X-Jornal-Protocol": "3",
           "X-Jornal-Company": companyId,
         },
       },
@@ -347,7 +348,7 @@ integrationTest(
         method: "POST",
         headers: {
           ...headers(owner.token),
-          "X-Jornal-Protocol": "2",
+          "X-Jornal-Protocol": "3",
           "X-Jornal-Company": companyId,
         },
         body: JSON.stringify({
@@ -417,12 +418,12 @@ integrationTest(
     expect(voidDuplicate.response.status).toBe(200);
     const list = await send(
       `/api/jornal/invoicing/invoices?companyId=${companyId}&dataEpoch=1`,
-      { headers: { Authorization: owner.token } },
+      { headers: headers(owner.token) },
     );
     expect((list.data.items as unknown[]).length).toBe(2);
     const summary = await send(
       `/api/jornal/invoicing/summary?companyId=${companyId}&dataEpoch=1`,
-      { headers: { Authorization: owner.token } },
+      { headers: headers(owner.token) },
     );
     expect(summary.data).toMatchObject({ unpaidTotal: 0, unpaidCount: 0 });
     const archivedCustomer = await send(
@@ -476,7 +477,7 @@ integrationTest(
     expect(logoAssetId).toBeTruthy();
     const logoAsset = await send(
       `/api/jornal/companies/${companyId}/assets/${logoAssetId}`,
-      { headers: { Authorization: owner.token } },
+      { headers: headers(owner.token) },
     );
     expect(logoAsset.response.status).toBe(200);
     expect(logoAsset.data.contentBase64).toBe(tinyPng);
@@ -492,7 +493,7 @@ integrationTest(
     );
     const document = await send("/api/jornal/documents", {
       method: "POST",
-      headers: { Authorization: owner.token },
+      headers: { Authorization: owner.token, "X-Jornal-Protocol": "3" },
       body: documentForm,
     });
     expect(document.response.status).toBe(201);
@@ -501,7 +502,7 @@ integrationTest(
     );
     const documentDetail = await send(
       `/api/jornal/documents/${documentId}?companyId=${companyId}&dataEpoch=1`,
-      { headers: { Authorization: owner.token } },
+      { headers: headers(owner.token) },
     );
     expect(documentDetail.response.status).toBe(200);
     expect(documentDetail.data.contentBase64).toBe(tinyPng);
@@ -561,7 +562,7 @@ integrationTest(
       {
         headers: {
           Authorization: owner.token,
-          "X-Jornal-Protocol": "2",
+          "X-Jornal-Protocol": "3",
           "X-Jornal-Company": companyId,
         },
       },
@@ -583,12 +584,12 @@ integrationTest(
     const other = await createUser("invoice-other@example.com");
     const forbiddenLogo = await send(
       `/api/jornal/companies/${companyId}/assets/${logoAssetId}`,
-      { headers: { Authorization: other.token } },
+      { headers: headers(other.token) },
     );
     expect(forbiddenLogo.response.status).toBe(404);
     const forbiddenDocument = await send(
       `/api/jornal/documents/${documentId}?companyId=${companyId}&dataEpoch=1`,
-      { headers: { Authorization: other.token } },
+      { headers: headers(other.token) },
     );
     expect(forbiddenDocument.response.status).toBe(404);
 
@@ -657,9 +658,33 @@ integrationTest(
           hideAmounts: true,
         },
         timezone: "Asia/Jakarta",
+        quietStartHour: 1,
+        quietEndHour: 1,
       }),
     });
     expect(subscription.response.status).toBe(201);
+    const reminderSettings = await send(
+      `/api/jornal/invoicing/settings?companyId=${companyId}&dataEpoch=1`,
+      { headers: headers(owner.token) },
+    );
+    const reminderSetting = reminderSettings.data.settings as Record<string, unknown>;
+    const reminderUpdate = await send("/api/jornal/invoicing/settings", {
+      method: "PUT",
+      headers: headers(owner.token),
+      body: JSON.stringify({
+        ...base,
+        commandKey: "reminder-clock-deterministic",
+        expectedRevision: reminderSetting.revision,
+        senderName: reminderSetting.senderName,
+        numberingStart: reminderSetting.numberingStart,
+        numberingPadding: reminderSetting.numberingPadding,
+        reminderEnabled: true,
+        reminderTimezone: new Date(Date.now() + 7 * 3_600_000).getUTCHours() === 0 ? "UTC" : "Asia/Jakarta",
+        reminderHour: 1,
+        reminderRepeatDays: 7,
+      }),
+    });
+    if (reminderUpdate.response.status !== 200) throw new Error(`reminder settings failed ${reminderUpdate.response.status}: ${JSON.stringify(reminderUpdate.data)}`);
     const jobs = await send("/api/jornal/admin/invoices/run-jobs", {
       method: "POST",
       headers: { Authorization: String(admin.data.token) },
@@ -668,7 +693,7 @@ integrationTest(
     expect(Number(jobs.data.created)).toBeGreaterThanOrEqual(1);
     const reminders = await send(
       `/api/jornal/invoicing/reminders?companyId=${companyId}&dataEpoch=1`,
-      { headers: { Authorization: owner.token } },
+      { headers: headers(owner.token) },
     );
     expect(reminders.data.items as unknown[]).toHaveLength(1);
     const pushJobs = await send("/api/jornal/admin/push/run-jobs", {
@@ -692,6 +717,18 @@ integrationTest(
     const claimedItems = claimed.data.items as Array<Record<string, unknown>>;
     expect(claimedItems.length).toBeGreaterThanOrEqual(1);
     expect(JSON.stringify(claimedItems)).not.toContain("75000");
+    const validatedPush = await send(
+      `/api/jornal/internal/push/${claimedItems[0].id}/validate`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Jornal-Push-Secret": "test-push-secret",
+        },
+        body: JSON.stringify({ leaseId: claimedItems[0].leaseId }),
+      },
+    );
+    expect(validatedPush.data.valid).toBe(true);
     const completedPush = await send(
       `/api/jornal/internal/push/${claimedItems[0].id}/complete`,
       {
@@ -700,7 +737,7 @@ integrationTest(
           "Content-Type": "application/json",
           "X-Jornal-Push-Secret": "test-push-secret",
         },
-        body: JSON.stringify({ outcome: "SENT" }),
+        body: JSON.stringify({ leaseId: claimedItems[0].leaseId, outcome: "SENT" }),
       },
     );
     expect(completedPush.response.status).toBe(200);
@@ -717,7 +754,7 @@ integrationTest(
     );
     const matchDocument = await send("/api/jornal/documents", {
       method: "POST",
-      headers: { Authorization: owner.token },
+      headers: { Authorization: owner.token, "X-Jornal-Protocol": "3" },
       body: matchForm,
     });
     const matchDocumentId = String(
@@ -769,7 +806,7 @@ integrationTest(
     expect(correctedMatch.response.status).toBe(200);
     const documentAfterCorrection = await send(
       `/api/jornal/documents/${matchDocumentId}?companyId=${companyId}&dataEpoch=1`,
-      { headers: { Authorization: owner.token } },
+      { headers: headers(owner.token) },
     );
     expect(
       (documentAfterCorrection.data.document as Record<string, unknown>).status,
@@ -796,13 +833,13 @@ integrationTest(
     expect(paidOverdue.response.status).toBe(200);
     const resolvedReminders = await send(
       `/api/jornal/invoicing/reminders?companyId=${companyId}&dataEpoch=1`,
-      { headers: { Authorization: owner.token } },
+      { headers: headers(owner.token) },
     );
     expect(resolvedReminders.data.items as unknown[]).toHaveLength(0);
 
     const backup = await send(
       `/api/jornal/invoicing/backup?companyId=${companyId}&dataEpoch=1`,
-      { headers: { Authorization: owner.token } },
+      { headers: headers(owner.token) },
     );
     if (backup.response.status !== 200)
       throw new Error(

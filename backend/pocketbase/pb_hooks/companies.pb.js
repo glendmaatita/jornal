@@ -1,7 +1,10 @@
 routerAdd("POST", "/api/jornal/companies/setup", (event) => {
   const { audit, companyResponse, jsonBody } = require(`${__hooks}/company_helpers.js`)
+  const access = require(`${__hooks}/company_access.js`)
   const body = jsonBody(event)
-  const tenantId = event.auth.id
+  const actorId = event.auth.id
+  const respond = (record) => companyResponse(record, access.membershipFor($app, actorId, record.id, true))
+  let tenantId = actorId
   const name = String(body.name || "").trim().slice(0, 100)
   const initialSetup = body.initialSetup === true || String(body.initialSetup) === "true"
   const requestedCreationKey = String(body.creationKey || "").trim().slice(0, 100)
@@ -12,21 +15,24 @@ routerAdd("POST", "/api/jornal/companies/setup", (event) => {
   let company
   if (body.companyId) {
     try { company = $app.findRecordById("companies", String(body.companyId)) } catch { throw event.notFoundError("Company not found", {}) }
-    if (company.getString("tenant_id") !== tenantId) throw event.notFoundError("Company not found", {})
-    if (company.getString("onboarding_completed_at")) return event.json(200, companyResponse(company))
+    const scope = access.eventScope(event, company.id, { writable: true })
+    tenantId = scope.ownerTenantId
+    if (company.getString("onboarding_completed_at")) return event.json(200, respond(company))
   }
   if (!company) {
     try {
       company = $app.findFirstRecordByFilter("companies", "tenant_id = {:tenant} && creation_key = {:key}", { tenant: tenantId, key: creationKey })
       if (!initialSetup && company.getString("name") !== name) throw new ApiError(409, "Creation key payload differs")
-      return event.json(200, companyResponse(company))
+      return event.json(200, respond(company))
     } catch (error) {
       if (error && error.status && error.status !== 404) throw error
     }
   }
   if (initialSetup) {
-    const first = $app.findRecordsByFilter("companies", "tenant_id = {:tenant}", "created", 1, 0, { tenant: tenantId })
-    if (first.length > 0) return event.json(200, companyResponse(first[0]))
+    const accessible = $app.findRecordsByFilter("company_memberships", "user_id = {:user} && status = 'ACTIVE'", "created,id", 1, 0, { user: actorId })
+    if (accessible.length > 0) {
+      try { return event.json(200, respond($app.findRecordById("companies", accessible[0].getString("company_id")))) } catch { /* continue only for an orphaned membership */ }
+    }
   }
   if (!initialSetup && !body.companyId && $os.getenv("JORNAL_MULTI_COMPANY_ENABLED") === "false") {
     throw new ApiError(403, "Creating additional companies is temporarily disabled")
@@ -48,9 +54,24 @@ routerAdd("POST", "/api/jornal/companies/setup", (event) => {
   }
 
   const creatingCompany = !company
+  let joinedInstead = false
   try { $app.runInTransaction((tx) => {
     const companies = tx.findCollectionByNameOrId("companies")
     const records = tx.findCollectionByNameOrId("jornal_records")
+    if (initialSetup && !company) {
+      const currentMemberships = tx.findRecordsByFilter("company_memberships", "user_id = {:user} && status = 'ACTIVE'", "created,id", 1, 0, { user: actorId })
+      if (currentMemberships.length) {
+        company = tx.findRecordById("companies", currentMemberships[0].getString("company_id")); joinedInstead = true; return
+      }
+      const team = require(`${__hooks}/team_helpers.js`); const identity = team.identityFor(tx, actorId)
+      if (identity) {
+        const invitations = tx.findRecordsByFilter("company_invitations", "email_normalized = {:email} && status = 'PENDING'", "id", 100, 0, { email: identity.getString("email_normalized") })
+        for (const invitation of invitations) {
+          const claimed = team.claimInvitation(tx, invitation.id, actorId, identity.getString("email_normalized"))
+          if (claimed.accepted) { company = tx.findRecordById("companies", claimed.companyId); joinedInstead = true; return }
+        }
+      }
+    }
     if (!company) {
       const existingCompanies = tx.findRecordsByFilter("companies", "tenant_id = {:tenant}", "created", 1, 0, { tenant: tenantId })
       company = new Record(companies, {
@@ -94,36 +115,40 @@ routerAdd("POST", "/api/jornal/companies/setup", (event) => {
         entity: "accounts", app_id: String(account.id), payload: account, revision: 1,
       }))
     }
-    audit(tx, tenantId, company.id, creatingCompany ? "company-created" : "company-setup-completed", body.requestId)
+    let ownerMembership
+    try { ownerMembership = tx.findFirstRecordByFilter("company_memberships", "company_id = {:company} && user_id = {:user}", { company: company.id, user: actorId }) } catch { ownerMembership = null }
+    if (!ownerMembership) tx.save(new Record(tx.findCollectionByNameOrId("company_memberships"), { company_id: company.id, user_id: actorId, status: "ACTIVE", joined_at: new Date().toISOString(), revision: 1 }))
+    audit(tx, tenantId, company.id, creatingCompany ? "company-created" : "company-setup-completed", body.requestId, actorId)
   }) } catch (error) {
     // A simultaneous tab can win either unique creation_key or the unique
     // first-company guard. Resolve the winner instead of creating duplicates.
     try {
       const existing = $app.findFirstRecordByFilter("companies", "tenant_id = {:tenant} && creation_key = {:key}", { tenant: tenantId, key: creationKey })
       if (!initialSetup && existing.getString("name") !== name) throw new ApiError(409, "Creation key payload differs")
-      return event.json(200, companyResponse(existing))
+      return event.json(200, respond(existing))
     } catch (lookupError) {
-      if (initialSetup) {
-        const first = $app.findRecordsByFilter("companies", "tenant_id = {:tenant}", "created", 1, 0, { tenant: tenantId })
-        if (first.length > 0) return event.json(200, companyResponse(first[0]))
-      }
       if (lookupError && lookupError.status && lookupError.status !== 404) throw lookupError
       throw error
     }
   }
-  return event.json(201, companyResponse(company))
+  return event.json(joinedInstead ? 200 : 201, respond(company))
 }, $apis.requireAuth())
 
 routerAdd("PATCH", "/api/jornal/companies/{id}", (event) => {
   const { audit, companyResponse, jsonBody } = require(`${__hooks}/company_helpers.js`)
-  const tenantId = event.auth.id
+  const access = require(`${__hooks}/company_access.js`)
+  const actorId = event.auth.id
   const companyId = event.request.pathValue("id")
   const body = jsonBody(event)
   let response
   $app.runInTransaction((tx) => {
     let company
     try { company = tx.findRecordById("companies", companyId) } catch { throw event.notFoundError("Company not found", {}) }
-    if (company.getString("tenant_id") !== tenantId) throw event.notFoundError("Company not found", {})
+    const scope = access.companyScope(tx, actorId, companyId, {})
+    const tenantId = scope.ownerTenantId
+    if (company.getString("status") !== "ACTIVE" && (String(body.status || "") !== "ACTIVE" || body.name !== undefined)) {
+      throw new ApiError(409, "Company diarsipkan")
+    }
     const expectedRevision = Number(body.revision || 0)
     if (expectedRevision !== company.getInt("revision")) throw new ApiError(409, "Company revision is out of date")
     const actions = []
@@ -149,29 +174,34 @@ routerAdd("PATCH", "/api/jornal/companies/{id}", (event) => {
       company.set("revision", company.getInt("revision") + 1)
       tx.save(company)
       if (company.getString("status") === "ARCHIVED") {
+        const invitations = tx.findRecordsByFilter("company_invitations", "company_id = {:company} && status = 'PENDING'", "", 0, 0, { company: companyId })
+        const team = require(`${__hooks}/team_helpers.js`)
+        for (const invitation of invitations) { invitation.set("status", "REVOKED"); invitation.set("revoked_by", actorId); invitation.set("revoked_at", new Date().toISOString()); invitation.set("revision", invitation.getInt("revision") + 1); tx.save(invitation); team.cancelDeliveries(tx, invitation.id, "COMPANY_ARCHIVED") }
         const reminders = tx.findRecordsByFilter("invoice_reminders", "tenant_id = {:tenant} && company_id = {:company} && status != 'RESOLVED'", "", 0, 0, { tenant: tenantId, company: companyId })
         for (const reminder of reminders) { reminder.set("status", "RESOLVED"); reminder.set("resolved_at", new Date().toISOString()); tx.save(reminder) }
         const jobs = tx.findRecordsByFilter("ai_jobs", "tenant_id = {:tenant} && company_id = {:company} && (status = 'QUEUED' || status = 'RUNNING')", "", 0, 0, { tenant: tenantId, company: companyId })
         for (const job of jobs) { job.set("status", "CANCELLED"); job.set("error_code", "COMPANY_ARCHIVED"); job.set("lease_until", ""); tx.save(job) }
         const deliveries = tx.findRecordsByFilter("notification_deliveries", "tenant_id = {:tenant} && company_id = {:company} && (status = 'PENDING' || status = 'LEASED' || status = 'RETRYABLE_FAILED')", "", 0, 0, { tenant: tenantId, company: companyId }); for (const delivery of deliveries) { delivery.set("status", "CANCELLED"); delivery.set("lease_until", ""); delivery.set("last_error", "Company archived"); tx.save(delivery) }
       }
-      for (const action of actions) audit(tx, tenantId, companyId, action, String(body.requestId || ""))
+      for (const action of actions) audit(tx, tenantId, companyId, action, String(body.requestId || ""), actorId)
     }
-    response = companyResponse(company)
+    response = companyResponse(company, scope.membership)
   })
   return event.json(200, response)
 }, $apis.requireAuth())
 
 routerAdd("POST", "/api/jornal/companies/{id}/reset", (event) => {
   const { audit, companyResponse } = require(`${__hooks}/company_helpers.js`)
+  const access = require(`${__hooks}/company_access.js`)
   const taxHelpers = require(`${__hooks}/tax_helpers.js`)
-  const tenantId = event.auth.id
+  const actorId = event.auth.id
   const companyId = event.request.pathValue("id")
   let response
   $app.runInTransaction((tx) => {
     let company
     try { company = tx.findRecordById("companies", companyId) } catch { throw event.notFoundError("Company not found", {}) }
-    if (company.getString("tenant_id") !== tenantId) throw event.notFoundError("Company not found", {})
+    const scope = access.companyScope(tx, actorId, companyId, { writable: true })
+    const tenantId = scope.ownerTenantId
     if (company.getString("status") !== "ACTIVE") throw new ApiError(409, "Company is archived")
     const nextEpoch = company.getInt("data_epoch") + 1
     const settlements = tx.findRecordsByFilter("tax_settlements", "tenant_id = {:tenant} && ledger_company_id = {:company} && ledger_transaction_id != ''", "", 0, 0, { tenant: tenantId, company: companyId })
@@ -188,7 +218,7 @@ routerAdd("POST", "/api/jornal/companies/{id}/reset", (event) => {
       for (const obligation of obligations) {
         obligation.set("data_status", "NEEDS_RECONCILIATION"); obligation.set("amount_state", "NEEDS_REVIEW"); obligation.set("revision", obligation.getInt("revision") + 1); tx.save(obligation)
       }
-      taxHelpers.audit(tx, tenantId, membership.getString("subject_id"), "tax-ledger-reset", "", "company", companyId, "Ledger company was reset", null, { dataEpoch: nextEpoch })
+      taxHelpers.audit(tx, tenantId, membership.getString("subject_id"), "tax-ledger-reset", "", "company", companyId, "Ledger company was reset", null, { dataEpoch: nextEpoch }, actorId)
     }
     const invoicePayments = tx.findRecordsByFilter("invoice_payments", "tenant_id = {:tenant} && company_id = {:company} && lifecycle = 'CURRENT'", "", 0, 0, { tenant: tenantId, company: companyId })
     for (const payment of invoicePayments) { payment.set("lifecycle", "ARCHIVED_EPOCH"); payment.set("revision", payment.getInt("revision") + 1); tx.save(payment) }
@@ -203,20 +233,23 @@ routerAdd("POST", "/api/jornal/companies/{id}/reset", (event) => {
     company.set("onboarding_completed_at", "")
     company.set("revision", company.getInt("revision") + 1)
     tx.save(company)
-    audit(tx, tenantId, companyId, "company-reset", "")
-    response = companyResponse(company)
+    const invitations = tx.findRecordsByFilter("company_invitations", "company_id = {:company} && status = 'PENDING'", "", 0, 0, { company: companyId })
+    const team = require(`${__hooks}/team_helpers.js`)
+    for (const invitation of invitations) { invitation.set("status", "REVOKED"); invitation.set("revoked_by", actorId); invitation.set("revoked_at", new Date().toISOString()); invitation.set("revision", invitation.getInt("revision") + 1); tx.save(invitation); team.cancelDeliveries(tx, invitation.id, "COMPANY_RESET") }
+    audit(tx, tenantId, companyId, "company-reset", "", actorId)
+    response = companyResponse(company, scope.membership)
   })
   return event.json(200, response)
 }, $apis.requireAuth())
 
 routerAdd("PUT", "/api/jornal/companies/{id}/logo", (event) => {
-  const h = require(`${__hooks}/company_helpers.js`); const body = { revision: event.request.formValue("revision"), requestId: event.request.formValue("requestId"), filename: event.request.formValue("filename"), contentBase64: event.request.formValue("contentBase64") }; const tenantId = event.auth.id; const companyId = event.request.pathValue("id"); const requestId = String(body.requestId || ""); const encoded = String(body.contentBase64 || ""); if (!requestId || !encoded) throw new ApiError(400, "requestId dan file wajib diisi"); if (encoded.length > 2_800_000) throw new ApiError(413, "Logo maksimal 2 MB")
-  const requestHash = $security.sha256(`PUT_LOGO:${Number(body.revision)}:${encoded}`); let existing; try { existing = $app.findFirstRecordByFilter("company_asset_commands", "tenant_id = {:tenant} && company_id = {:company} && request_id = {:request}", { tenant: tenantId, company: companyId, request: requestId }) } catch { existing = null }; if (existing) { if (existing.getString("request_hash") !== requestHash || existing.getString("action") !== "PUT_LOGO") throw new ApiError(409, "Request ID sudah digunakan"); return event.json(200, existing.get("response")) }
+  const h = require(`${__hooks}/company_helpers.js`); const access = require(`${__hooks}/company_access.js`); const body = { revision: event.request.formValue("revision"), requestId: event.request.formValue("requestId"), filename: event.request.formValue("filename"), contentBase64: event.request.formValue("contentBase64") }; const actorId = event.auth.id; const companyId = event.request.pathValue("id"); const outerScope = access.eventScope(event, companyId, { writable: true }); const tenantId = outerScope.ownerTenantId; const requestId = String(body.requestId || ""); const encoded = String(body.contentBase64 || ""); if (!requestId || !encoded) throw new ApiError(400, "requestId dan file wajib diisi"); if (encoded.length > 2_800_000) throw new ApiError(413, "Logo maksimal 2 MB")
+  const requestHash = $security.sha256(`PUT_LOGO:${Number(body.revision)}:${encoded}`); let existing; try { existing = $app.findFirstRecordByFilter("company_asset_commands", "actor_user_id = {:actor} && tenant_id = {:tenant} && company_id = {:company} && request_id = {:request}", { actor: actorId, tenant: tenantId, company: companyId, request: requestId }) } catch { existing = null }; if (existing) { if (existing.getString("request_hash") !== requestHash || existing.getString("action") !== "PUT_LOGO") throw new ApiError(409, "Request ID sudah digunakan"); return event.json(200, existing.get("response")) }
   const bytes = h.bytesFromBase64(encoded); if (!bytes.length || bytes.length > 2_097_152) throw new ApiError(413, "Logo maksimal 2 MB"); const info = h.imageInfo(bytes); if (info.width < 1 || info.height < 1 || info.width > 4096 || info.height > 4096 || info.width * info.height > 16_000_000) throw new ApiError(413, "Dimensi logo maksimal 4096 px dan 16 megapixel"); let response
   const uploaded = event.findUploadedFiles("file"); if (!uploaded || !uploaded.length) throw new ApiError(400, "File logo wajib diisi")
-  $app.runInTransaction((tx) => { let company; try { company = tx.findRecordById("companies", companyId) } catch { throw new ApiError(404, "Company tidak ditemukan") }; if (company.getString("tenant_id") !== tenantId) throw new ApiError(404, "Company tidak ditemukan"); if (company.getString("status") !== "ACTIVE") throw new ApiError(409, "Company diarsipkan"); if (company.getInt("revision") !== Number(body.revision)) throw new ApiError(409, "Company telah berubah"); const asset = new Record(tx.findCollectionByNameOrId("company_assets"), { tenant_id: tenantId, company_id: companyId, kind: "COMPANY_LOGO", file: uploaded[0], mime: info.mime, byte_size: bytes.length, width: info.width, height: info.height, checksum: $security.sha256(encoded), content_base64: encoded }); tx.save(asset); company.set("logo_asset_id", asset.id); company.set("revision", company.getInt("revision") + 1); tx.save(company); response = { company: h.companyResponse(company), asset: { id: asset.id, mime: info.mime, byteSize: bytes.length, width: info.width, height: info.height, checksum: asset.getString("checksum") } }; tx.save(new Record(tx.findCollectionByNameOrId("company_asset_commands"), { tenant_id: tenantId, company_id: companyId, request_id: requestId, action: "PUT_LOGO", request_hash: requestHash, response })); h.audit(tx, tenantId, companyId, "company-logo-updated", requestId) }); return event.json(200, response)
+  $app.runInTransaction((tx) => { const scope = access.companyScope(tx, actorId, companyId, { writable: true }); const company = scope.company; if (company.getInt("revision") !== Number(body.revision)) throw new ApiError(409, "Company telah berubah"); const asset = new Record(tx.findCollectionByNameOrId("company_assets"), { tenant_id: tenantId, company_id: companyId, kind: "COMPANY_LOGO", file: uploaded[0], mime: info.mime, byte_size: bytes.length, width: info.width, height: info.height, checksum: $security.sha256(encoded), content_base64: encoded }); tx.save(asset); company.set("logo_asset_id", asset.id); company.set("revision", company.getInt("revision") + 1); tx.save(company); response = { company: h.companyResponse(company, scope.membership), asset: { id: asset.id, mime: info.mime, byteSize: bytes.length, width: info.width, height: info.height, checksum: asset.getString("checksum") } }; tx.save(new Record(tx.findCollectionByNameOrId("company_asset_commands"), { actor_user_id: actorId, tenant_id: tenantId, company_id: companyId, request_id: requestId, action: "PUT_LOGO", request_hash: requestHash, response })); h.audit(tx, tenantId, companyId, "company-logo-updated", requestId, actorId) }); return event.json(200, response)
 }, $apis.requireAuth())
 
-routerAdd("DELETE", "/api/jornal/companies/{id}/logo", (event) => { const h = require(`${__hooks}/company_helpers.js`); const body = h.jsonBody(event); const tenantId = event.auth.id; const companyId = event.request.pathValue("id"); let response; $app.runInTransaction((tx) => { let company; try { company = tx.findRecordById("companies", companyId) } catch { throw new ApiError(404, "Company tidak ditemukan") }; if (company.getString("tenant_id") !== tenantId) throw new ApiError(404, "Company tidak ditemukan"); if (company.getString("status") !== "ACTIVE") throw new ApiError(409, "Company diarsipkan"); if (company.getInt("revision") !== Number(body.revision)) throw new ApiError(409, "Company telah berubah"); company.set("logo_asset_id", ""); company.set("revision", company.getInt("revision") + 1); tx.save(company); response = { company: h.companyResponse(company) }; h.audit(tx, tenantId, companyId, "company-logo-removed", String(body.requestId || "")) }); return event.json(200, response) }, $apis.requireAuth())
+routerAdd("DELETE", "/api/jornal/companies/{id}/logo", (event) => { const h = require(`${__hooks}/company_helpers.js`); const access = require(`${__hooks}/company_access.js`); const body = h.jsonBody(event); const actorId = event.auth.id; const companyId = event.request.pathValue("id"); let response; $app.runInTransaction((tx) => { const scope = access.companyScope(tx, actorId, companyId, { writable: true }); const company = scope.company; if (company.getInt("revision") !== Number(body.revision)) throw new ApiError(409, "Company telah berubah"); company.set("logo_asset_id", ""); company.set("revision", company.getInt("revision") + 1); tx.save(company); response = { company: h.companyResponse(company, scope.membership) }; h.audit(tx, scope.ownerTenantId, companyId, "company-logo-removed", String(body.requestId || ""), actorId) }); return event.json(200, response) }, $apis.requireAuth())
 
-routerAdd("GET", "/api/jornal/companies/{id}/assets/{assetId}", (event) => { const h = require(`${__hooks}/company_helpers.js`); const companyId = event.request.pathValue("id"); let asset; try { asset = $app.findRecordById("company_assets", event.request.pathValue("assetId")) } catch { throw new ApiError(404, "Aset tidak ditemukan") }; if (asset.getString("tenant_id") !== event.auth.id || asset.getString("company_id") !== companyId) throw new ApiError(404, "Aset tidak ditemukan"); return event.json(200, { id: asset.id, mime: asset.getString("mime"), width: asset.getInt("width"), height: asset.getInt("height"), checksum: asset.getString("checksum"), contentBase64: h.jsonValue(asset, "content_base64", "") }) }, $apis.requireAuth())
+routerAdd("GET", "/api/jornal/companies/{id}/assets/{assetId}", (event) => { const h = require(`${__hooks}/company_helpers.js`); const access = require(`${__hooks}/company_access.js`); const companyId = event.request.pathValue("id"); const scope = access.eventScope(event, companyId, {}); let asset; try { asset = $app.findRecordById("company_assets", event.request.pathValue("assetId")) } catch { throw new ApiError(404, "Aset tidak ditemukan") }; if (asset.getString("tenant_id") !== scope.ownerTenantId || asset.getString("company_id") !== companyId) throw new ApiError(404, "Aset tidak ditemukan"); return event.json(200, { id: asset.id, mime: asset.getString("mime"), width: asset.getInt("width"), height: asset.getInt("height"), checksum: asset.getString("checksum"), contentBase64: h.jsonValue(asset, "content_base64", "") }) }, $apis.requireAuth())

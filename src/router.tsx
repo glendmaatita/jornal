@@ -35,6 +35,9 @@ const DocumentReviewPage = lazy(() => import("@/pages/document-review-page").the
 const SyncCenterPage = lazy(() => import("@/pages/sync-center-page").then((m) => ({ default: m.SyncCenterPage })))
 const SearchPage = lazy(() => import("@/pages/search-page").then((m) => ({ default: m.SearchPage })))
 const TransactionTemplatesPage = lazy(() => import("@/pages/transaction-templates-page").then((m) => ({ default: m.TransactionTemplatesPage })))
+const CompanyTeamPage = lazy(() => import("@/pages/company-team-page").then((m) => ({ default: m.CompanyTeamPage })))
+const NoCompanyPage = lazy(() => import("@/pages/no-company-page").then((m) => ({ default: m.NoCompanyPage })))
+const InvitationPage = lazy(() => import("@/pages/invitation-page").then((m) => ({ default: m.InvitationPage })))
 
 function NotFoundPage() {
   return (
@@ -79,6 +82,12 @@ const unavailableRoute = createRoute({
   component: BackendUnavailablePage,
 })
 
+const invitationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/invitations/$publicId",
+  component: () => <InvitationPage publicId={invitationRoute.useParams().publicId} />,
+})
+
 // Pathless authenticated layout: everything below requires a logged-in tenant.
 const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -88,11 +97,12 @@ const appLayoutRoute = createRoute({
   beforeLoad: async ({ location }) => {
     // Keep the public login entry lightweight. The auth, local-store, and
     // sync graph is only needed after a protected route is actually matched.
-    const [{ pb, pocketBaseConfigured }, store, sync, companyStore] = await Promise.all([
+    const [{ pb, pocketBaseConfigured }, store, sync, companyStore, team] = await Promise.all([
       import("@/lib/pb"),
       import("@/lib/store"),
       import("@/lib/pocketbase-sync"),
       import("@/lib/companies"),
+      import("@/lib/team-client"),
     ])
     if (!pb.authStore.isValid) {
       try {
@@ -104,6 +114,7 @@ const appLayoutRoute = createRoute({
     }
     const tenantId = pb.authStore.record?.id ?? "local"
     store.setTenantScope(tenantId)
+    try { await team.bootstrapSession() } catch { throw redirect({ to: "/data-unavailable", replace: true }) }
     let companies
     try {
       companies = await companyStore.loadCompanies()
@@ -113,12 +124,18 @@ const appLayoutRoute = createRoute({
     const companyIndependent = location.pathname === "/onboarding"
       || location.pathname === "/companies"
       || location.pathname === "/companies/new"
+      || location.pathname === "/companies/empty"
       || /^\/companies\/[^/]+\/setup$/.test(location.pathname)
     if (companies.length === 0) {
-      store.setCompanyScope(tenantId)
+      store.setCompanyScope(tenantId, 1, tenantId, 1)
+      if (location.pathname === "/onboarding") {
+        let explicitCreate = false
+        try { explicitCreate = window.sessionStorage.getItem("jornal.create-company-intent") === "1" } catch { /* fail closed */ }
+        if (!explicitCreate) throw redirect({ to: "/companies/empty", replace: true })
+      }
       if (!companyIndependent) {
         try { if (location.href) window.sessionStorage.setItem("jornal.pending-route", location.href) } catch { /* ignore */ }
-        throw redirect({ to: "/onboarding", replace: true })
+        throw redirect({ to: "/companies/empty", replace: true })
       }
       return
     }
@@ -131,7 +148,7 @@ const appLayoutRoute = createRoute({
       throw redirect({ to: "/companies", replace: true })
     }
     companyStore.selectCompany(selected.id)
-    store.setCompanyScope(selected.id, selected.dataEpoch)
+    store.setCompanyScope(selected.id, selected.dataEpoch, selected.tenantId, selected.membershipRevision)
     store.setCompanyWritable(selected.status === "ACTIVE")
     store.setCompanyLegacyDefault(selected.legacyDefault)
     store.setCompanyDisplayName(selected.name)
@@ -178,6 +195,18 @@ const companySetupRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/companies/$companyId/setup",
   component: OnboardingPage,
+})
+
+const noCompanyRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/companies/empty",
+  component: NoCompanyPage,
+})
+
+const companyTeamRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/companies/$companyId/team",
+  component: CompanyTeamPage,
 })
 
 const addRoute = createRoute({
@@ -274,12 +303,15 @@ const transactionTemplatesRoute = createRoute({ getParentRoute: () => appLayoutR
 const routeTree = rootRoute.addChildren([
   loginRoute,
   unavailableRoute,
+  invitationRoute,
   appLayoutRoute.addChildren([
     indexRoute,
     onboardingRoute,
     companiesRoute,
     newCompanyRoute,
     companySetupRoute,
+    noCompanyRoute,
+    companyTeamRoute,
     addRoute,
     accountsRoute,
     transactionsRoute,

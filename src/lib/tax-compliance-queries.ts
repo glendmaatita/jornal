@@ -3,12 +3,12 @@ import { getCompanyScope } from "./store"
 import { loadTaxAgenda, loadTaxConfiguration, loadTaxInbox } from "./tax-compliance-client"
 
 export const taxQueryKeys = {
-  get configuration() { return ["jornal-tax", getCompanyScope().tenantId, "configuration"] as const },
+  get configuration() { const scope = getCompanyScope(); return ["jornal-tax", scope.actorUserId, scope.tenantId, scope.companyId, "configuration"] as const },
   get agenda() {
     const scope = getCompanyScope()
-    return ["jornal-tax", scope.tenantId, scope.companyId, "agenda"] as const
+    return ["jornal-tax", scope.actorUserId, scope.tenantId, scope.companyId, "agenda"] as const
   },
-  get inbox() { return ["jornal-tax", getCompanyScope().tenantId, "inbox"] as const },
+  get inbox() { const scope = getCompanyScope(); return ["jornal-tax", scope.actorUserId, scope.tenantId, scope.companyId, "inbox"] as const },
 }
 
 export function useTaxConfiguration() {

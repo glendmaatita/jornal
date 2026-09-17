@@ -50,15 +50,11 @@ export const CLIENT_UPDATE_REQUIRED_EVENT = "jornal:client-update-required"
 
 function companyScope(): CompanyScope {
   const scope = getCompanyScope()
-  return {
-    tenantId: pb.authStore.isValid ? (pb.authStore.record?.id ?? scope.tenantId) : scope.tenantId,
-    companyId: scope.companyId,
-    dataEpoch: scope.dataEpoch,
-  }
+  return scope
 }
 
 function sameScope(a: CompanyScope, b = companyScope()) {
-  return a.tenantId === b.tenantId && a.companyId === b.companyId && a.dataEpoch === b.dataEpoch
+  return a.actorUserId === b.actorUserId && a.ownerTenantId === b.ownerTenantId && a.companyId === b.companyId && a.dataEpoch === b.dataEpoch && a.membershipRevision === b.membershipRevision
 }
 
 let testUrlOverride: string | null = null
@@ -86,7 +82,7 @@ const scopeRuntimes = new Map<string, ScopeRuntime>()
 const syncStatusListeners = new Set<(status: SyncStatus) => void>()
 
 function scopeId(scope: CompanyScope) {
-  return `${scope.tenantId}:${scope.companyId}:${scope.dataEpoch}`
+  return `${scope.actorUserId}:${scope.ownerTenantId}:${scope.companyId}:${scope.dataEpoch}:${scope.membershipRevision}`
 }
 
 function runtimeFor(scope = companyScope()) {
@@ -97,6 +93,18 @@ function runtimeFor(scope = companyScope()) {
     scopeRuntimes.set(id, runtime)
   }
   return runtime
+}
+
+function revisionKey(scope: CompanyScope) { return storageKeyForScope(scope, "remote-revisions.v1") }
+function revisionId(entity: EntityName, appId: string) { return `${entity}:${appId}` }
+function loadRevisions(scope: CompanyScope): Record<string, number> {
+  try { return JSON.parse(window.localStorage.getItem(revisionKey(scope)) || "{}") as Record<string, number> } catch { return {} }
+}
+function baseRevision(scope: CompanyScope, entity: EntityName, appId: string) { return loadRevisions(scope)[revisionId(entity, appId)] }
+function saveBaseRevision(scope: CompanyScope, entity: EntityName, appId: string, revision: number) {
+  const revisions = loadRevisions(scope); revisions[revisionId(entity, appId)] = revision
+  try { window.localStorage.setItem(revisionKey(scope), JSON.stringify(revisions)) } catch { /* conflicts still fail closed when storage is unavailable */ }
+  void mirrorState(revisionKey(scope), revisions).catch(() => undefined)
 }
 
 export function getSyncStatus() {
@@ -243,7 +251,7 @@ function hasCachedCompanyState(scope: CompanyScope) {
     .some((key) => window.localStorage.getItem(storageKeyForScope(scope, key)) !== null)
 }
 
-function mergeLocalArray(remotePayloads: unknown[], key: string, scope?: CompanyScope): unknown[] {
+function mergeLocalArray(remotePayloads: unknown[], key: string, scope?: CompanyScope, deletedAppIds: Set<string> = new Set()): unknown[] {
   const local = localJson<unknown[]>(key, [], scope)
   const identity = (value: unknown) => {
     if (!value || typeof value !== "object") return String(value)
@@ -252,6 +260,7 @@ function mergeLocalArray(remotePayloads: unknown[], key: string, scope?: Company
     return candidate.id ?? JSON.stringify(value)
   }
   const merged = new Map(local.map((value) => [identity(value), value]))
+  for (const deletedId of deletedAppIds) merged.delete(deletedId)
   for (const value of remotePayloads) merged.set(identity(value), value)
   return [...merged.values()]
 }
@@ -341,7 +350,7 @@ async function requestJson<T>(path: string, init?: RequestInit, scope = companyS
   if (pb.authStore.isValid) {
     headers.set("Authorization", pb.authStore.token)
   }
-  headers.set("X-Jornal-Protocol", "2")
+  headers.set("X-Jornal-Protocol", "3")
   headers.set("X-Jornal-Company", scope.companyId)
   headers.set("X-Jornal-Data-Epoch", String(scope.dataEpoch))
   const controller = new AbortController()
@@ -381,11 +390,12 @@ async function requestJson<T>(path: string, init?: RequestInit, scope = companyS
   return (text ? JSON.parse(text) : undefined) as T
 }
 
-function recordFileUrl(record: PocketBaseRecord, fileToken: string): string | null {
+function recordFileUrl(record: PocketBaseRecord, fileToken: string, fileGrant: string): string | null {
   if (!record.attachment) return null
   // Protected files (collection has a viewRule) need a short-lived file token.
-  const query = new URLSearchParams({ protocol: "2", company: record.company_id ?? companyScope().companyId })
+  const query = new URLSearchParams({ protocol: "3", company: record.company_id ?? companyScope().companyId })
   if (fileToken) query.set("token", fileToken)
+  if (fileGrant) query.set("grant", fileGrant)
   return `${baseUrl()}/api/files/${COLLECTION}/${record.id}/${encodeURIComponent(record.attachment)}?${query.toString()}`
 }
 
@@ -396,12 +406,13 @@ function transactionPayloadForRemote(transaction: Transaction) {
   return { ...payload, attachmentDataUrl: null }
 }
 
-function transactionPayloadForLocal(record: PocketBaseRecord, payload: Transaction, fileToken: string): Transaction {
-  const remoteFileUrl = recordFileUrl(record, fileToken)
+function transactionPayloadForLocal(record: PocketBaseRecord, payload: Transaction, fileToken: string, fileGrant: string): Transaction {
+  const remoteFileUrl = recordFileUrl(record, fileToken, fileGrant)
   let stableRemoteFileUrl: string | null = null
   if (remoteFileUrl) {
     const parsed = new URL(remoteFileUrl)
     parsed.searchParams.delete("token")
+    parsed.searchParams.delete("grant")
     stableRemoteFileUrl = parsed.toString()
   }
   return {
@@ -442,6 +453,7 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
   // race window between two devices.
   const existing = await listRecords(entity, appId, requestedScope)
   const found = existing.find((record) => record.app_id === appId)
+  const base = baseRevision(requestedScope, entity, appId)
   const sanitizedPayload =
     entity === "transactions" && payload && typeof payload === "object"
       ? transactionPayloadForRemote(payload as Transaction)
@@ -453,8 +465,13 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
     entity,
     app_id: appId,
     payload: sanitizedPayload,
-    revision: (found?.revision ?? 0) + 1,
+    revision: found ? (base ?? 0) + 1 : 1,
     deleted_at: null,
+  }
+  if (found && (base === undefined || base !== Number(found.revision || 0))) {
+    const error = new Error(`Conflict: ${entity}/${appId} berubah di perangkat lain`)
+    recordSyncConflict(error, { entity, appId, localPayload: sanitizedPayload, remotePayload: found.payload }, requestedScope)
+    throw error
   }
   if (found && found.payload && payload && typeof found.payload === "object" && typeof payload === "object") {
     const remoteUpdatedAt = (found.payload as { updatedAt?: unknown }).updatedAt
@@ -490,21 +507,23 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
   const hasAttachment = entity === "transactions" && payload && typeof payload === "object" && isDataUrl((payload as Transaction).attachmentDataUrl)
   try {
     if (found) {
-      await requestJson(
+      const saved = await requestJson<PocketBaseRecord>(
         `/api/collections/${COLLECTION}/records/${found.id}`,
         hasAttachment
           ? { method: "PATCH", body: formData }
           : { method: "PATCH", body: JSON.stringify(body) },
         requestedScope,
       )
+      saveBaseRevision(requestedScope, entity, appId, Number(saved.revision || body.revision))
     } else {
-      await requestJson(
+      const saved = await requestJson<PocketBaseRecord>(
         `/api/collections/${COLLECTION}/records`,
         hasAttachment
           ? { method: "POST", body: formData }
           : { method: "POST", body: JSON.stringify(body) },
         requestedScope,
       )
+      saveBaseRevision(requestedScope, entity, appId, Number(saved.revision || 1))
     }
   } catch (error) {
     if (String(error).includes("PocketBase 409")) {
@@ -529,7 +548,15 @@ async function pruneExplicitlyDeleted(entity: EntityName, requestedScope = compa
   await Promise.all(
     remote
       .filter((record) => deletedIds.has(record.app_id))
-      .map((record) => requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" }, requestedScope)),
+      .map((record) => {
+        const base = baseRevision(requestedScope, entity, record.app_id)
+        if (base === undefined || base !== Number(record.revision || 0)) {
+          const error = new Error(`Conflict: penghapusan ${entity}/${record.app_id} memakai revisi lama`)
+          recordSyncConflict(error, { entity, appId: record.app_id, remotePayload: record.payload }, requestedScope)
+          return Promise.reject(error)
+        }
+        return requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE", headers: { "X-Jornal-Revision": String(base) } }, requestedScope)
+      }),
   )
 }
 
@@ -542,7 +569,7 @@ async function processPendingReset(runScope: CompanyScope) {
     const records = await listRecords(entity, undefined, runScope)
     for (const record of records) {
       try {
-        await requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE" }, runScope)
+        await requestJson(`/api/collections/${COLLECTION}/records/${record.id}`, { method: "DELETE", headers: { "X-Jornal-Revision": String(record.revision || 0) } }, runScope)
       } catch (error) {
         // A concurrent device may have deleted the row already; reset remains
         // idempotent. Other failures must keep the marker for retry.
@@ -670,10 +697,9 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
   let foundAny = false
   // Files are protected by the collection view rule; a short-lived token lets
   // payload URLs render attachments. Empty token = public files (local dev).
-  const fileToken = await pb.files
-    .getToken()
-    .then((token) => token)
-    .catch(() => "")
+  const fileAccess = await getCompanyFileAccess(runScope).catch(() => ({ token: "", grant: "" }))
+  const queuedRows = await listOutbox()
+  const queuedKeys = new Set(queuedRows.map((row) => row.key))
   for (const entity of entities) {
     if (runGeneration !== syncGeneration) throw new Error("Hydration cancelled: session changed")
     const remote = await listRecords(entity, undefined, runScope)
@@ -681,8 +707,12 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
     if (remote.length === 0) continue
     foundAny = true
     const key = entityKey(entity)
+    const entityIsDirty = queuedKeys.has(storageKeyForScope(runScope, key))
+    if (!entityIsDirty) for (const record of remote) saveBaseRevision(runScope, entity, record.app_id, Number(record.revision || 0))
+    else for (const record of remote) if (baseRevision(runScope, entity, record.app_id) === undefined) recordSyncConflict(new Error(`Perubahan lokal ${entity}/${record.app_id} perlu ditinjau setelah migrasi cache`), { entity, appId: record.app_id, localPayload: localJson(key, null, runScope), remotePayload: record.payload }, runScope)
     if (entity === "profile" || entity === "settings") {
-      const payload = remote[0]?.payload ?? null
+      const current = remote.find((record) => !record.deleted_at)
+      const payload = current?.payload ?? null
       const local = localJson<unknown>(key, null, runScope)
       const localUpdatedAt = local && typeof local === "object" ? (local as { updatedAt?: unknown }).updatedAt : undefined
       const remoteUpdatedAt = payload && typeof payload === "object" ? (payload as { updatedAt?: unknown }).updatedAt : undefined
@@ -697,22 +727,28 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
       key,
       mergeLocalArray(
         remote
+        .filter((record) => !record.deleted_at)
         .map((record) => {
           const payload = record.payload
           if (!payload || typeof payload !== "object") return payload
           if (entity === "transactions") {
-            return transactionPayloadForLocal(record, payload as Transaction, fileToken)
+            return transactionPayloadForLocal(record, payload as Transaction, fileAccess.token, fileAccess.grant)
           }
           return payload
         })
         .filter((payload) => payload !== null && payload !== undefined),
         key,
         runScope,
+        new Set(remote.filter((record) => Boolean(record.deleted_at)).map((record) => record.app_id)),
       ),
       runScope,
     )
   }
   return foundAny
+}
+
+export async function getCompanyFileAccess(scope = companyScope()) {
+  return requestJson<{ token: string; grant: string; expiresIn: number }>(`/api/jornal/companies/${encodeURIComponent(scope.companyId)}/file-token`, { method: "POST", body: "{}" }, scope)
 }
 
 export function schedulePocketBaseSync() {
@@ -738,15 +774,16 @@ export async function syncPendingCompanies() {
     import("./companies"),
     listOutbox(),
   ])
-  const tenantId = pb.authStore.record?.id ?? ""
+  const actorUserId = pb.authStore.record?.id ?? ""
   const scopes = loadCachedCompanies()
-    .filter((company) => company.tenantId === tenantId && company.status === "ACTIVE")
+    .filter((company) => company.status === "ACTIVE")
     .filter((company) => {
-      const prefix = storageKeyForScope({ tenantId, companyId: company.id, dataEpoch: company.dataEpoch }, "")
-      const resetKey = storageKeyForScope({ tenantId, companyId: company.id, dataEpoch: company.dataEpoch }, RESET_PENDING_KEY)
+      const scope = { actorUserId, ownerTenantId: company.tenantId, tenantId: company.tenantId, companyId: company.id, dataEpoch: company.dataEpoch, membershipRevision: company.membershipRevision }
+      const prefix = storageKeyForScope(scope, "")
+      const resetKey = storageKeyForScope(scope, RESET_PENDING_KEY)
       return rows.some((row) => row.key.startsWith(prefix)) || window.localStorage.getItem(resetKey) !== null
     })
-    .map((company) => ({ tenantId, companyId: company.id, dataEpoch: company.dataEpoch }))
+    .map((company) => ({ actorUserId, ownerTenantId: company.tenantId, tenantId: company.tenantId, companyId: company.id, dataEpoch: company.dataEpoch, membershipRevision: company.membershipRevision }))
   let cursor = 0
   const worker = async () => {
     while (cursor < scopes.length) {

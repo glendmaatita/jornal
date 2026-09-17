@@ -7,14 +7,22 @@ routerAdd("GET", "/api/jornal/tax/catalog", (event) => {
 routerAdd("GET", "/api/jornal/tax/configuration", (event) => {
   const { recordJson, subjectResponse } = require(`${__hooks}/tax_helpers.js`)
   require(`${__hooks}/tax_helpers.js`).requireTaxEnabled()
-  const tenantId = event.auth.id
-  const find = (collection, sort) => $app.findRecordsByFilter(collection, "tenant_id = {:tenant}", sort || "created", 0, 0, { tenant: tenantId }).map(recordJson)
-  const subjects = $app.findRecordsByFilter("tax_subjects", "tenant_id = {:tenant}", "created", 0, 0, { tenant: tenantId })
+  const tenantId = require(`${__hooks}/tax_helpers.js`).requestTenant(event)
+  const access = require(`${__hooks}/company_access.js`)
+  const query = event.request.url.query(); const companyId = String(query.get("companyId") || "")
+  const linkedIds = companyId ? [...new Set($app.findRecordsByFilter("tax_company_memberships", "tenant_id = {:tenant} && company_id = {:company}", "id", 0, 0, { tenant: tenantId, company: companyId }).map((row) => row.getString("subject_id")))] : []
+  const allowedIds = []; let restricted = false
+  for (const id of linkedIds) {
+    try { const subject = $app.findRecordById("tax_subjects", id); access.assertTaxSubjectAccess($app, event.auth.id, subject, true); allowedIds.push(id) } catch { restricted = true }
+  }
+  const find = (collection, sort) => $app.findRecordsByFilter(collection, "tenant_id = {:tenant}", sort || "created", 0, 0, { tenant: tenantId }).filter((record) => allowedIds.includes(record.getString("subject_id"))).map(recordJson)
+  const subjects = $app.findRecordsByFilter("tax_subjects", "tenant_id = {:tenant}", "created", 0, 0, { tenant: tenantId }).filter((subject) => allowedIds.includes(subject.id))
   return event.json(200, {
     subjects: subjects.map(subjectResponse),
     memberships: find("tax_company_memberships"),
     registrations: find("tax_registrations"),
-    preferences: find("tax_notification_preferences"),
+    preferences: find("tax_notification_preferences").filter((preference) => !preference.recipient_user_id || preference.recipient_user_id === event.auth.id),
+    taxCoverage: restricted ? "RESTRICTED_SHARED_SUBJECT" : "COMPLETE",
   })
 }, $apis.requireAuth())
 
@@ -22,7 +30,7 @@ routerAdd("POST", "/api/jornal/tax/setup", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`)
   helpers.requireTaxEnabled()
   const { ruleById } = require(`${__hooks}/tax_rules.js`)
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event)
   const command = helpers.replayCommand($app, tenantId, "tax-setup", body)
   if (command.response) return event.json(command.response.status, command.response.body)
   const label = String(body.label || "").trim().slice(0, 100)
@@ -85,7 +93,7 @@ routerAdd("POST", "/api/jornal/tax/setup", (event) => {
         tx.save(registration); createdRegistrations.push(helpers.recordJson(registration))
       }
       const preference = new Record(tx.findCollectionByNameOrId("tax_notification_preferences"), {
-        tenant_id: tenantId, subject_id: subject.id, subject_key: subject.id,
+        tenant_id: tenantId, recipient_user_id: event.auth.id, subject_id: subject.id, subject_key: subject.id,
         in_app_enabled: body.inAppEnabled !== false, email_enabled: body.emailEnabled === true,
         include_amount_in_email: body.includeAmountInEmail === true,
         timezone: String(body.timezone || "Asia/Jakarta").slice(0, 60), delivery_hour: Number(body.deliveryHour ?? 9),
@@ -109,7 +117,7 @@ routerAdd("POST", "/api/jornal/tax/setup", (event) => {
 routerAdd("POST", "/api/jornal/tax/period-inputs", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`)
   helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event)
   const command = helpers.replayCommand($app, tenantId, "tax-period-input", body)
   if (command.response) return event.json(command.response.status, command.response.body)
   const period = String(body.period || "")
@@ -162,7 +170,7 @@ routerAdd("POST", "/api/jornal/tax/period-inputs", (event) => {
 routerAdd("POST", "/api/jornal/tax/subjects/{id}/companies", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`)
   helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const subjectId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const subjectId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
   const command = helpers.replayCommand($app, tenantId, "tax-add-company", Object.assign({}, body, { subjectId }))
   if (command.response) return event.json(command.response.status, command.response.body)
   const companyId = String(body.companyId || ""); const effectiveFrom = helpers.isoDate(body.effectiveFrom, "effectiveFrom")
@@ -190,7 +198,7 @@ routerAdd("POST", "/api/jornal/tax/subjects/{id}/companies", (event) => {
 
 routerAdd("POST", "/api/jornal/tax/memberships/{id}/end", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const membershipId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const membershipId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
   const commandBody = Object.assign({}, body, { membershipId }); const command = helpers.replayCommand($app, tenantId, "tax-end-membership", commandBody)
   if (command.response) return event.json(command.response.status, command.response.body)
   const effectiveUntil = helpers.isoDate(body.effectiveUntil, "effectiveUntil")
@@ -222,7 +230,7 @@ routerAdd("POST", "/api/jornal/tax/obligations/generate", (event) => {
   helpers.requireTaxEnabled()
   const rules = require(`${__hooks}/tax_rules.js`)
   const calendar = require(`${__hooks}/tax_calendar.js`)
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event)
   const command = helpers.replayCommand($app, tenantId, "tax-generate", body)
   if (command.response) return event.json(command.response.status, command.response.body)
   const period = String(body.period || "")
@@ -344,48 +352,51 @@ routerAdd("GET", "/api/jornal/tax/agenda", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`)
   const { obligationResponse, recordJson } = helpers
   helpers.requireTaxEnabled()
-  const tenantId = event.auth.id
+  const tenantId = helpers.requestTenant(event)
   const query = event.request.url.query()
   const subjectId = String(query.get("subjectId") || "")
   const companyId = String(query.get("companyId") || "")
   let subjectIds = []
+  let taxCoverage = "COMPLETE"
   if (companyId) {
     let company
     try { company = $app.findRecordById("companies", companyId) } catch { throw event.notFoundError("Company not found", {}) }
     if (company.getString("tenant_id") !== tenantId) throw event.notFoundError("Company not found", {})
-    subjectIds = [...new Set($app.findRecordsByFilter("tax_company_memberships", "tenant_id = {:tenant} && company_id = {:company}", "", 0, 0, { tenant: tenantId, company: companyId }).map((record) => record.getString("subject_id")))]
+    const candidates = [...new Set($app.findRecordsByFilter("tax_company_memberships", "tenant_id = {:tenant} && company_id = {:company}", "", 0, 0, { tenant: tenantId, company: companyId }).map((record) => record.getString("subject_id")))]
+    subjectIds = candidates.filter((id) => { try { require(`${__hooks}/company_access.js`).assertTaxSubjectAccess($app, event.auth.id, $app.findRecordById("tax_subjects", id), true); return true } catch { taxCoverage = "RESTRICTED_SHARED_SUBJECT"; return false } })
   } else if (subjectId) {
     subjectIds = [subjectId]
   }
+  const scopedAgenda = Boolean(companyId || subjectId)
   if (subjectIds.length > 0) for (const id of subjectIds) {
     let subject
     try { subject = $app.findRecordById("tax_subjects", id) } catch { throw event.notFoundError("Tax subject not found", {}) }
     if (subject.getString("tenant_id") !== tenantId) throw event.notFoundError("Tax subject not found", {})
   }
   const obligations = helpers.findAllRecords($app, "tax_obligations", "tenant_id = {:tenant}", "effective_due_date,id", { tenant: tenantId })
-    .filter((record) => subjectIds.length === 0 || subjectIds.includes(record.getString("subject_id"))).map(obligationResponse)
+    .filter((record) => !scopedAgenda || subjectIds.includes(record.getString("subject_id"))).map(obligationResponse)
   const filings = helpers.findAllRecords($app, "tax_filings", "tenant_id = {:tenant}", "effective_due_date,id", { tenant: tenantId })
-    .filter((record) => subjectIds.length === 0 || subjectIds.includes(record.getString("subject_id"))).map(recordJson)
+    .filter((record) => !scopedAgenda || subjectIds.includes(record.getString("subject_id"))).map(recordJson)
   const settlements = helpers.findAllRecords($app, "tax_settlements", "tenant_id = {:tenant}", "-settlement_date,-id", { tenant: tenantId })
-    .filter((record) => subjectIds.length === 0 || subjectIds.includes(record.getString("subject_id"))).map(recordJson)
+    .filter((record) => !scopedAgenda || subjectIds.includes(record.getString("subject_id"))).map(recordJson)
   const settlementIds = new Set(settlements.map((record) => String(record.id)))
   const allocations = helpers.findAllRecords($app, "tax_allocations", "tenant_id = {:tenant}", "created,id", { tenant: tenantId })
     .filter((record) => settlementIds.has(record.getString("settlement_id"))).map(recordJson)
   const evidence = helpers.findAllRecords($app, "tax_evidence", "tenant_id = {:tenant}", "-created,-id", { tenant: tenantId })
-    .filter((record) => subjectIds.length === 0 || subjectIds.includes(record.getString("subject_id"))).map((record) => { const result = recordJson(record); delete result.document; return result })
-  return event.json(200, { obligations, filings, settlements, allocations, evidence })
+    .filter((record) => !scopedAgenda || subjectIds.includes(record.getString("subject_id"))).map((record) => { const result = recordJson(record); delete result.document; return result })
+  return event.json(200, { obligations, filings, settlements, allocations, evidence, taxCoverage })
 }, $apis.requireAuth())
 
 routerAdd("GET", "/api/jornal/tax/inbox", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id
-  const items = $app.findRecordsByFilter("tax_notifications", "tenant_id = {:tenant} && channel = 'IN_APP' && status = 'SENT' && read_at = ''", "-scheduled_at", 100, 0, { tenant: tenantId }).map(helpers.recordJson)
+  const tenantId = helpers.requestTenant(event)
+  const items = $app.findRecordsByFilter("tax_notifications", "tenant_id = {:tenant} && recipient_user_id = {:recipient} && channel = 'IN_APP' && status = 'SENT' && read_at = ''", "-scheduled_at", 100, 0, { tenant: tenantId, recipient: event.auth.id }).map(helpers.recordJson)
   return event.json(200, { items })
 }, $apis.requireAuth())
 
 routerAdd("POST", "/api/jornal/tax/inbox/read", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event)
   const command = helpers.replayCommand($app, tenantId, "tax-inbox-read", body)
   if (command.response) return event.json(command.response.status, command.response.body)
   const ids = Array.isArray(body.ids) ? [...new Set(body.ids.map(String))].slice(0, 100) : []
@@ -394,7 +405,7 @@ routerAdd("POST", "/api/jornal/tax/inbox/read", (event) => {
     for (const id of ids) {
       let notification
       try { notification = tx.findRecordById("tax_notifications", id) } catch { continue }
-      if (notification.getString("tenant_id") !== tenantId || notification.getString("channel") !== "IN_APP") continue
+      if (notification.getString("tenant_id") !== tenantId || notification.getString("recipient_user_id") !== event.auth.id || notification.getString("channel") !== "IN_APP") continue
       notification.set("read_at", new Date().toISOString()); tx.save(notification); updated += 1
     }
     helpers.saveCommand(tx, tenantId, "tax-inbox-read", command, 200, { updated })
@@ -405,7 +416,7 @@ routerAdd("POST", "/api/jornal/tax/inbox/read", (event) => {
 routerAdd("POST", "/api/jornal/tax/settlements", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`)
   helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event)
   const command = helpers.replayCommand($app, tenantId, "tax-settlement", body)
   if (command.response) return event.json(command.response.status, command.response.body)
   const amount = helpers.nonNegativeMoney(body.amount, "amount")
@@ -551,7 +562,7 @@ routerAdd("POST", "/api/jornal/tax/settlements", (event) => {
 routerAdd("POST", "/api/jornal/tax/filings/{id}/complete", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`)
   helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event); const filingId = event.request.pathValue("id")
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event); const filingId = event.request.pathValue("id")
   const command = helpers.replayCommand($app, tenantId, "tax-filing-complete", Object.assign({}, body, { filingId }))
   if (command.response) return event.json(command.response.status, command.response.body)
   let response
@@ -588,7 +599,7 @@ routerAdd("POST", "/api/jornal/tax/filings/{id}/complete", (event) => {
 
 routerAdd("POST", "/api/jornal/tax/filings/{id}/amend", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const filingId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const filingId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
   const commandBody = Object.assign({}, body, { filingId }); const command = helpers.replayCommand($app, tenantId, "tax-filing-amend", commandBody)
   if (command.response) return event.json(command.response.status, command.response.body)
   const reason = String(body.reason || "").trim().slice(0, 500)
@@ -619,7 +630,7 @@ routerAdd("POST", "/api/jornal/tax/filings/{id}/amend", (event) => {
 
 routerAdd("POST", "/api/jornal/tax/settlements/{id}/reverse", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const settlementId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const settlementId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
   const commandBody = Object.assign({}, body, { settlementId }); const command = helpers.replayCommand($app, tenantId, "tax-settlement-reverse", commandBody)
   if (command.response) return event.json(command.response.status, command.response.body)
   const reason = String(body.reason || "").trim().slice(0, 500)
@@ -682,7 +693,7 @@ routerAdd("POST", "/api/jornal/tax/settlements/{id}/reverse", (event) => {
 routerAdd("POST", "/api/jornal/tax/obligations/{id}/snooze", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`)
   helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event); const obligationId = event.request.pathValue("id")
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event); const obligationId = event.request.pathValue("id")
   const command = helpers.replayCommand($app, tenantId, "tax-snooze", Object.assign({}, body, { obligationId }))
   if (command.response) return event.json(command.response.status, command.response.body)
   let response
@@ -710,7 +721,7 @@ routerAdd("POST", "/api/jornal/tax/obligations/{id}/snooze", (event) => {
 routerAdd("POST", "/api/jornal/tax/obligations/{id}/amount", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`)
   helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event); const obligationId = event.request.pathValue("id")
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event); const obligationId = event.request.pathValue("id")
   const command = helpers.replayCommand($app, tenantId, "tax-confirm-amount", Object.assign({}, body, { obligationId }))
   if (command.response) return event.json(command.response.status, command.response.body)
   const amount = helpers.nonNegativeMoney(body.liabilityAmount, "liabilityAmount")
@@ -745,7 +756,7 @@ routerAdd("POST", "/api/jornal/tax/obligations/{id}/amount", (event) => {
 routerAdd("POST", "/api/jornal/tax/subjects/{id}/registrations", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
   const { ruleById } = require(`${__hooks}/tax_rules.js`)
-  const tenantId = event.auth.id; const subjectId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const subjectId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
   const command = helpers.replayCommand($app, tenantId, "tax-add-registration", Object.assign({}, body, { subjectId }))
   if (command.response) return event.json(command.response.status, command.response.body)
   const kind = String(body.kind || ""); const requestedActiveFrom = String(body.activeFrom || new Date().toISOString().slice(0, 10)); const rule = body.ruleId ? ruleById(String(body.ruleId)) : require(`${__hooks}/tax_rules.js`).ruleByKindAt(kind, requestedActiveFrom)
@@ -783,7 +794,7 @@ routerAdd("POST", "/api/jornal/tax/subjects/{id}/registrations", (event) => {
 
 routerAdd("POST", "/api/jornal/tax/registrations/{id}/end", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const registrationId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const registrationId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
   const commandBody = Object.assign({}, body, { registrationId }); const command = helpers.replayCommand($app, tenantId, "tax-end-registration", commandBody)
   if (command.response) return event.json(command.response.status, command.response.body)
   const activeUntil = helpers.isoDate(body.activeUntil, "activeUntil")
@@ -810,7 +821,7 @@ routerAdd("POST", "/api/jornal/tax/registrations/{id}/end", (event) => {
 
 routerAdd("POST", "/api/jornal/tax/obligations/{id}/deadline", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const obligationId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const obligationId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
   const commandBody = Object.assign({}, body, { obligationId }); const command = helpers.replayCommand($app, tenantId, "tax-deadline-override", commandBody)
   if (command.response) return event.json(command.response.status, command.response.body)
   const source = String(body.source || "").trim().slice(0, 240); const reference = String(body.reference || "").trim().slice(0, 240)
@@ -840,7 +851,7 @@ routerAdd("POST", "/api/jornal/tax/obligations/{id}/deadline", (event) => {
 
 routerAdd("PATCH", "/api/jornal/tax/subjects/{id}", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const subjectId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const subjectId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
   const command = helpers.replayCommand($app, tenantId, "tax-update-subject", Object.assign({}, body, { subjectId }))
   if (command.response) return event.json(command.response.status, command.response.body)
   let response
@@ -879,7 +890,7 @@ routerAdd("PATCH", "/api/jornal/tax/subjects/{id}", (event) => {
 
 routerAdd("PATCH", "/api/jornal/tax/preferences/{id}", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const preferenceId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const tenantId = helpers.requestTenant(event); const preferenceId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
   const commandBody = Object.assign({}, body, { preferenceId }); const command = helpers.replayCommand($app, tenantId, "tax-update-preference", commandBody)
   if (command.response) return event.json(command.response.status, command.response.body)
   let response
@@ -887,7 +898,7 @@ routerAdd("PATCH", "/api/jornal/tax/preferences/{id}", (event) => {
     $app.runInTransaction((tx) => {
       let preference
       try { preference = tx.findRecordById("tax_notification_preferences", preferenceId) } catch { throw new ApiError(404, "Tax notification preference not found") }
-      if (preference.getString("tenant_id") !== tenantId) throw new ApiError(404, "Tax notification preference not found")
+      if (preference.getString("tenant_id") !== tenantId || preference.getString("recipient_user_id") !== event.auth.id) throw new ApiError(404, "Tax notification preference not found")
       if (Number(body.revision || 0) !== preference.getInt("revision")) throw new ApiError(409, "Preference revision is out of date")
       const before = helpers.recordJson(preference)
       if (body.inAppEnabled !== undefined) preference.set("in_app_enabled", body.inAppEnabled === true)
@@ -909,9 +920,30 @@ routerAdd("PATCH", "/api/jornal/tax/preferences/{id}", (event) => {
   return event.json(200, response)
 }, $apis.requireAuth())
 
+routerAdd("PUT", "/api/jornal/tax/subjects/{id}/preferences/me", (event) => {
+  const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
+  const tenantId = helpers.requestTenant(event); const subjectId = event.request.pathValue("id"); const body = helpers.jsonBody(event)
+  const commandBody = Object.assign({}, body, { subjectId }); const command = helpers.replayCommand($app, tenantId, "tax-own-preference", commandBody)
+  if (command.response) return event.json(command.response.status, command.response.body)
+  let response; let status = 201
+  $app.runInTransaction((tx) => {
+    helpers.ownedSubject(tx, tenantId, subjectId)
+    let preference
+    try { preference = tx.findFirstRecordByFilter("tax_notification_preferences", "tenant_id = {:tenant} && subject_id = {:subject} && recipient_user_id = {:recipient}", { tenant: tenantId, subject: subjectId, recipient: event.auth.id }); status = 200 } catch {
+      preference = new Record(tx.findCollectionByNameOrId("tax_notification_preferences"), { tenant_id: tenantId, recipient_user_id: event.auth.id, subject_id: subjectId, subject_key: subjectId, revision: 0 })
+    }
+    const hour = Number(body.deliveryHour ?? 9); if (!Number.isInteger(hour) || hour < 0 || hour > 23) throw new ApiError(400, "Invalid delivery hour")
+    preference.set("in_app_enabled", body.inAppEnabled === true); preference.set("email_enabled", body.emailEnabled === true); preference.set("include_amount_in_email", body.includeAmountInEmail === true)
+    preference.set("timezone", String(body.timezone || "Asia/Jakarta").slice(0, 60)); preference.set("delivery_hour", hour)
+    preference.set("monthly_offsets", Array.isArray(body.monthlyOffsets) ? body.monthlyOffsets : [7, 3, 1, 0]); preference.set("annual_offsets", Array.isArray(body.annualOffsets) ? body.annualOffsets : [30, 14, 7, 3, 1, 0]); preference.set("overdue_weekly_limit", Number(body.overdueWeeklyLimit ?? 4)); preference.set("revision", preference.getInt("revision") + 1); tx.save(preference)
+    response = helpers.recordJson(preference); helpers.audit(tx, tenantId, subjectId, status === 201 ? "tax-preference-created" : "tax-preference-updated", command.key, "tax_notification_preference", preference.id, String(body.reason || ""), null, response); helpers.saveCommand(tx, tenantId, "tax-own-preference", command, status, response)
+  })
+  return event.json(status, response)
+}, $apis.requireAuth())
+
 routerAdd("GET", "/api/jornal/tax/subjects/{id}/evidence", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const subject = helpers.ownedSubject($app, tenantId, event.request.pathValue("id"))
+  const tenantId = helpers.requestTenant(event); const subject = helpers.ownedSubject($app, tenantId, event.request.pathValue("id"))
   const items = $app.findRecordsByFilter("tax_evidence", "tenant_id = {:tenant} && subject_id = {:subject}", "-created", 200, 0, { tenant: tenantId, subject: subject.id }).map((record) => {
     const result = helpers.recordJson(record); delete result.document; return result
   })
@@ -920,7 +952,7 @@ routerAdd("GET", "/api/jornal/tax/subjects/{id}/evidence", (event) => {
 
 routerAdd("POST", "/api/jornal/tax/evidence", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event); const command = helpers.replayCommand($app, tenantId, "tax-evidence-upload", body)
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event); const command = helpers.replayCommand($app, tenantId, "tax-evidence-upload", body)
   if (command.response) return event.json(command.response.status, command.response.body)
   const parentType = String(body.parentType || ""); const parentId = String(body.parentId || "")
   const collections = { obligation: "tax_obligations", filing: "tax_filings", settlement: "tax_settlements", registration: "tax_registrations" }
@@ -957,7 +989,7 @@ routerAdd("POST", "/api/jornal/tax/evidence", (event) => {
 
 routerAdd("GET", "/api/jornal/tax/evidence/{id}/download", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; let evidence
+  const tenantId = helpers.requestTenant(event); let evidence
   try { evidence = $app.findRecordById("tax_evidence", event.request.pathValue("id")) } catch { throw event.notFoundError("Tax evidence not found", {}) }
   if (evidence.getString("tenant_id") !== tenantId) throw event.notFoundError("Tax evidence not found", {})
   const filename = evidence.getString("document"); if (!filename) throw event.notFoundError("Tax evidence file not found", {})
@@ -968,7 +1000,7 @@ routerAdd("GET", "/api/jornal/tax/evidence/{id}/download", (event) => {
 
 routerAdd("GET", "/api/jornal/tax/subjects/{id}/report/{year}", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const subject = helpers.ownedSubject($app, tenantId, event.request.pathValue("id"))
+  const tenantId = helpers.requestTenant(event); const subject = helpers.ownedSubject($app, tenantId, event.request.pathValue("id"))
   const year = String(event.request.pathValue("year") || "")
   if (!/^\d{4}$/.test(year)) throw event.badRequestError("Invalid report year", {})
   const safeCell = (value) => {
@@ -989,8 +1021,9 @@ routerAdd("GET", "/api/jornal/tax/subjects/{id}/report/{year}", (event) => {
 
 routerAdd("GET", "/api/jornal/tax/export", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id
+  const tenantId = helpers.requestTenant(event)
   const query = event.request.url.query(); const requestedSubject = String(query.get("subjectId") || "")
+  if (!requestedSubject && event.auth.id !== tenantId) throw new ApiError(400, "subjectId wajib diisi untuk company bersama")
   if (requestedSubject) helpers.ownedSubject($app, tenantId, requestedSubject)
   const collections = ["tax_subjects", "tax_company_memberships", "tax_registrations", "tax_period_inputs", "tax_obligations", "tax_filings", "tax_settlements", "tax_allocations", "tax_evidence", "tax_notification_preferences", "tax_audit"]
   const data = {}; const checksums = {}
@@ -1017,7 +1050,7 @@ routerAdd("GET", "/api/jornal/tax/export", (event) => {
 
 routerAdd("POST", "/api/jornal/tax/import/preview", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const backup = helpers.validateBackup(helpers.jsonBody(event).backup)
+  const tenantId = helpers.requestTenant(event); const backup = helpers.validateBackup(helpers.jsonBody(event).backup)
   const allowed = ["tax_subjects", "tax_company_memberships", "tax_registrations", "tax_period_inputs", "tax_obligations", "tax_filings", "tax_settlements", "tax_allocations", "tax_evidence", "tax_notification_preferences", "tax_audit"]
   const counts = {}; for (const name of allowed) counts[name] = Array.isArray(backup.data[name]) ? backup.data[name].length : 0
   const existing = $app.findRecordsByFilter("tax_subjects", "tenant_id = {:tenant}", "", 0, 0, { tenant: tenantId })
@@ -1031,7 +1064,7 @@ routerAdd("POST", "/api/jornal/tax/import/preview", (event) => {
 
 routerAdd("POST", "/api/jornal/tax/import", (event) => {
   const helpers = require(`${__hooks}/tax_helpers.js`); helpers.requireTaxEnabled()
-  const tenantId = event.auth.id; const body = helpers.jsonBody(event); const backup = helpers.validateBackup(body.backup)
+  const tenantId = helpers.requestTenant(event); const body = helpers.jsonBody(event); const backup = helpers.validateBackup(body.backup)
   if (body.confirm !== true) throw event.badRequestError("Restore confirmation is required", {})
   const restoreSignature = { commandKey: body.commandKey, backupChecksum: $security.sha256(helpers.stableStringify(backup.checksums)), companyMap: body.companyMap || {}, confirm: true }
   const command = helpers.replayCommand($app, tenantId, "tax-import", restoreSignature)

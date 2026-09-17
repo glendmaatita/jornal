@@ -20,6 +20,7 @@ export function CompaniesPage() {
   const [pending, setPending] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({})
+  const accessEnded = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("access") === "ended"
 
   useEffect(() => {
     let cancelled = false
@@ -81,6 +82,7 @@ export function CompaniesPage() {
         <div><h1 className="text-2xl tracking-tight">Company</h1><p className="mt-1 text-sm text-muted-foreground">Setiap company memiliki pembukuan terpisah.</p></div>
         {multiCompanyCreationEnabled && <Link to="/companies/new" onClick={() => rememberCompanyCreationReturn()} className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--main-dark)] px-4 text-sm font-semibold text-white"><Plus className="size-4" />Tambah</Link>}
       </div>
+      {accessEnded && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800" role="status">Akses ke company sebelumnya sudah berakhir. Pilih company lain atau buat company baru.</p>}
       {(message || error) && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{message || String(error)}</p>}
       {companies.length > 5 && <TextField value={search} onChange={setSearch} label="Cari company" />}
       <div className="space-y-3">

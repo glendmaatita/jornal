@@ -27,8 +27,13 @@ export function LoginPage() {
         pendingRoute = window.sessionStorage.getItem("jornal.pending-route") ?? ""
         window.sessionStorage.removeItem("jornal.pending-route")
       } catch { /* continue to the home route when storage is unavailable */ }
-      if (pendingRoute.startsWith("/")) {
-        window.location.assign(pendingRoute)
+      let safePending = ""
+      try {
+        const parsed = new URL(pendingRoute, window.location.origin)
+        if (parsed.origin === window.location.origin && pendingRoute.startsWith("/") && !pendingRoute.startsWith("//")) safePending = `${parsed.pathname}${parsed.search}${parsed.hash}`
+      } catch { /* invalid intent is discarded */ }
+      if (safePending) {
+        window.location.assign(safePending)
       } else {
         await navigate({ to: "/" })
       }

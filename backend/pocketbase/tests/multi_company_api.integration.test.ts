@@ -31,7 +31,7 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   server = Bun.spawn([
     pocketBaseBin!, "serve", "--dir", dataDirectory, "--migrationsDir", migrations,
     "--hooksDir", hooks, `--http=127.0.0.1:${port}`,
-  ], { stdout: "ignore", stderr: "pipe" })
+  ], { stdout: "inherit", stderr: "inherit" })
   for (let attempt = 0; attempt < 50; attempt += 1) {
     if ((await fetch(`${origin}/api/health`).catch(() => null))?.ok) break
     await Bun.sleep(50)
@@ -118,8 +118,9 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
     setup(racing, "Race Two", "race-two", "race-account-two", true),
   ])
   expect(racingResults[0].id).toBe(racingResults[1].id)
-  const racingCatalog = await send("/api/collections/companies/records?perPage=100", { headers: authHeader(racing.token) })
-  expect(racingCatalog.data.totalItems).toBe(1)
+  const racingCatalog = await send("/api/jornal/companies?limit=100", { headers: authHeader(racing.token) })
+  if (racingCatalog.response.status !== 200) throw new Error(`catalog failed ${racingCatalog.response.status}: ${JSON.stringify(racingCatalog.data)}`)
+  expect(racingCatalog.data.items as unknown[]).toHaveLength(1)
 
   // There is no business-level company cap. Seed through the superuser so the
   // creation endpoint's independent abuse rate limit does not distort paging.
@@ -135,10 +136,15 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
     })
     expect(created.response.status).toBe(200)
     scaleCompanies.push(created.data)
+    const membership = await send("/api/collections/company_memberships/records", {
+      method: "POST", headers: { ...authHeader(adminToken), "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: created.data.id, user_id: scaleUser.id, status: "ACTIVE", joined_at: new Date().toISOString(), revision: 1 }),
+    })
+    expect(membership.response.status).toBe(200)
   }
-  const scalePage1 = await send("/api/collections/companies/records?sort=created&perPage=20&page=1", { headers: authHeader(scaleUser.token) })
-  const scalePage3 = await send("/api/collections/companies/records?sort=created&perPage=20&page=3", { headers: authHeader(scaleUser.token) })
-  expect(scalePage1.data.totalItems).toBe(50)
+  const scalePage1 = await send("/api/jornal/companies?limit=20", { headers: authHeader(scaleUser.token) })
+  const scalePage2 = await send(`/api/jornal/companies?limit=20&cursor=${encodeURIComponent(String(scalePage1.data.cursor))}`, { headers: authHeader(scaleUser.token) })
+  const scalePage3 = await send(`/api/jornal/companies?limit=20&cursor=${encodeURIComponent(String(scalePage2.data.cursor))}`, { headers: authHeader(scaleUser.token) })
   expect((scalePage1.data.items as unknown[]).length).toBe(20)
   expect((scalePage3.data.items as unknown[]).length).toBe(10)
 
@@ -156,25 +162,25 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   expect(rateLimited.response.status).toBe(429)
 
   const listRecords = (token: string, companyId?: unknown) => send("/api/collections/jornal_records/records?perPage=100", {
-    headers: companyId ? { ...authHeader(token), "X-Jornal-Protocol": "2", "X-Jornal-Company": String(companyId) } : authHeader(token),
+    headers: companyId ? { ...authHeader(token), "X-Jornal-Protocol": "3", "X-Jornal-Company": String(companyId) } : authHeader(token),
   })
-  expect((await listRecords(owner.token)).data.totalItems).toBe(0)
+  expect((await listRecords(owner.token)).response.status).toBe(426)
   expect((await listRecords(owner.token, companyA.id)).data.totalItems).toBe(3)
   expect((await listRecords(owner.token, companyB.id)).data.totalItems).toBe(3)
-  expect((await listRecords(foreign.token, companyA.id)).data.totalItems).toBe(0)
+  expect((await listRecords(foreign.token, companyA.id)).response.status).toBe(404)
 
   const batchBypass = await send("/api/batch", {
     method: "POST", headers: { ...authHeader(owner.token), "Content-Type": "application/json" },
     body: JSON.stringify({ requests: [{
       method: "POST", url: "/api/collections/jornal_records/records",
-      headers: { "X-Jornal-Protocol": "2", "X-Jornal-Company": String(companyA.id) },
+      headers: { "X-Jornal-Protocol": "3", "X-Jornal-Company": String(companyA.id) },
       body: { business_id: owner.id, company_id: companyB.id, data_epoch: 1, entity: "transactions", app_id: "batch-cross", revision: 1, payload: { id: "batch-cross", classification: "REVENUE", accountId: "account-b", updatedAt: new Date().toISOString() } },
     }] }),
   })
   expect(batchBypass.response.status).toBe(403)
 
   const recordHeaders = (token: string, companyId: unknown) => ({
-    ...authHeader(token), "X-Jornal-Protocol": "2", "X-Jornal-Company": String(companyId), "Content-Type": "application/json",
+    ...authHeader(token), "X-Jornal-Protocol": "3", "X-Jornal-Company": String(companyId), "Content-Type": "application/json",
   })
 
   const scaleCompanyId = String(scaleCompanies[0].id)
@@ -191,7 +197,7 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
     expect(largeRecord.response.status).toBe(200)
   }
   const scaleRecordsPage3 = await send(`/api/collections/jornal_records/records?perPage=50&page=3&sort=created`, {
-    headers: { ...authHeader(scaleUser.token), "X-Jornal-Protocol": "2", "X-Jornal-Company": scaleCompanyId },
+    headers: { ...authHeader(scaleUser.token), "X-Jornal-Protocol": "3", "X-Jornal-Company": scaleCompanyId },
   })
   expect(scaleRecordsPage3.data.totalItems).toBe(121)
   expect((scaleRecordsPage3.data.items as unknown[]).length).toBe(21)
@@ -221,7 +227,7 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   for (const [key, value] of Object.entries({ business_id: owner.id, company_id: String(companyA.id), data_epoch: "1", entity: "transactions", app_id: "attachment", revision: "1", payload: JSON.stringify({ id: "attachment", classification: "REVENUE", accountId: "account-a", updatedAt: new Date().toISOString() }) })) attachment.append(key, value)
   attachment.append("attachment", new File(["proof"], "proof.txt", { type: "text/plain" }))
   const fileRecord = await send("/api/collections/jornal_records/records", {
-    method: "POST", headers: { ...authHeader(owner.token), "X-Jornal-Protocol": "2", "X-Jornal-Company": String(companyA.id) }, body: attachment,
+    method: "POST", headers: { ...authHeader(owner.token), "X-Jornal-Protocol": "3", "X-Jornal-Company": String(companyA.id) }, body: attachment,
   })
   expect(fileRecord.response.status).toBe(200)
   const oldView = await send(`/api/collections/jornal_records/records/${fileRecord.data.id}`, { headers: authHeader(owner.token) })
@@ -231,11 +237,13 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
     body: JSON.stringify({ revision: 9, payload: { id: "attachment", classification: "REVENUE", accountId: "account-a", updatedAt: new Date().toISOString() } }),
   })
   expect(staleRevision.response.status).toBe(409)
-  const ownerFileToken = await send("/api/files/token", { method: "POST", headers: authHeader(owner.token) })
-  const foreignFileToken = await send("/api/files/token", { method: "POST", headers: authHeader(foreign.token) })
+  const ownerFileToken = await send(`/api/jornal/companies/${companyA.id}/file-token`, { method: "POST", headers: authHeader(owner.token) })
+  const foreignFileToken = await send(`/api/jornal/companies/${companyA.id}/file-token`, { method: "POST", headers: authHeader(foreign.token) })
+  expect(foreignFileToken.response.status).toBe(404)
   const filePath = `/api/files/jornal_records/${fileRecord.data.id}/${fileRecord.data.attachment}`
-  expect((await fetch(`${origin}${filePath}?protocol=2&company=${companyA.id}&token=${ownerFileToken.data.token}`)).status).toBe(200)
-  expect((await fetch(`${origin}${filePath}?protocol=2&company=${companyA.id}&token=${foreignFileToken.data.token}`)).status).toBe(404)
+  const ownerFile = await fetch(`${origin}${filePath}?protocol=3&company=${companyA.id}&token=${ownerFileToken.data.token}&grant=${ownerFileToken.data.grant}`)
+  if (ownerFile.status !== 200) throw new Error(`owner file failed ${ownerFile.status}: ${await ownerFile.text()}`)
+  expect((await fetch(`${origin}${filePath}?protocol=3&company=${companyA.id}&token=${ownerFileToken.data.token}`)).status).toBe(404)
   expect((await fetch(`${origin}${filePath}?token=${ownerFileToken.data.token}`)).status).toBe(426)
 
   const archive = await send(`/api/jornal/companies/${companyA.id}`, {
@@ -250,9 +258,9 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   expect(lateWrite.response.status).toBe(409)
   const restore = await send(`/api/jornal/companies/${companyA.id}`, {
     method: "PATCH", headers: { ...authHeader(owner.token), "Content-Type": "application/json" },
-    body: JSON.stringify({ status: "ACTIVE", revision: 2, requestId: "restore-a" }),
+    body: JSON.stringify({ status: "ACTIVE", revision: archive.data.revision, requestId: "restore-a" }),
   })
-  expect(restore.response.status).toBe(200)
+  if (restore.response.status !== 200) throw new Error(`restore failed ${restore.response.status}: ${JSON.stringify(restore.data)}; archive=${JSON.stringify(archive.data)}`)
   const reset = await send(`/api/jornal/companies/${companyA.id}/reset`, { method: "POST", headers: authHeader(owner.token) })
   expect(reset.data.dataEpoch).toBe(2)
   expect((await listRecords(owner.token, companyB.id)).data.totalItems).toBe(3)

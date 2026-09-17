@@ -12,7 +12,7 @@ import { queryKeys, useAccountMap, useTransactions } from "@/lib/queries"
 import { deleteTransaction, duplicateTransaction, isCompanyWritable } from "@/lib/store"
 import { TAX_TREATMENTS } from "@/lib/tax"
 import { CLASSIFICATION_LABELS, type Transaction } from "@/lib/types"
-import { pb } from "@/lib/pb"
+import { getCompanyFileAccess } from "@/lib/pocketbase-sync"
 
 export function TransactionDetailPage({ transactionId }: { transactionId: string }) {
   const writable = isCompanyWritable()
@@ -30,10 +30,11 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
     const currentUrl = transaction?.attachmentDataUrl ?? transaction?.attachmentRemoteUrl ?? null
     setAttachmentUrl(currentUrl)
     if (!currentUrl || currentUrl.startsWith("data:")) return () => { cancelled = true }
-    void pb.files.getToken().then((token) => {
-      if (cancelled || !token) return
+    void getCompanyFileAccess().then(({ token, grant }) => {
+      if (cancelled || !token || !grant) return
       const url = new URL(currentUrl, window.location.origin)
       url.searchParams.set("token", token)
+      url.searchParams.set("grant", grant)
       setAttachmentUrl(url.toString())
     }).catch(() => undefined)
     return () => { cancelled = true }

@@ -11,7 +11,7 @@ import {
   setPocketBaseUrl,
   syncToPocketBase,
 } from "./pocketbase-sync"
-import { KEYS, RESET_PENDING_KEY, scopedStorageKey, saveProfile, emptyProfile, createTransaction } from "./store"
+import { KEYS, RESET_PENDING_KEY, scopedStorageKey, saveProfile, emptyProfile, createTransaction, updateTransaction } from "./store"
 import type { Transaction } from "./types"
 
 type FetchCall = { url: string; method: string; body?: unknown }
@@ -178,19 +178,16 @@ describe("syncToPocketBase", () => {
 
   test("patches existing records without deleting remote-only records", async () => {
     setEnv("http://pb.test")
-    // Seed a transaction with a deterministic id directly (createTransaction generates ids)
-    localStorageShim.setItem(KEYS.transactions, JSON.stringify([transactionFixture("txn-1")]))
-    await flushQueuedSync()
-
     respond = (url, method) => {
       if (url.includes("/records?")) {
+        const filter = new URL(url).searchParams.get("filter") ?? ""
         return {
           status: 200,
           body: {
-            items: [
+            items: filter.includes('entity = "transactions"') ? [
               record("transactions", "txn-1", transactionFixture("txn-1"), "pb-1"),
               record("transactions", "txn-gone", transactionFixture("txn-gone"), "pb-2"),
-            ],
+            ] : [],
             totalPages: 1,
           },
         }
@@ -199,7 +196,9 @@ describe("syncToPocketBase", () => {
       if (method === "DELETE") return { status: 200, body: {} }
       return { status: 200, body: {} }
     }
-
+    await hydrateFromPocketBase()
+    expect(JSON.parse(localStorageShim.getItem("remote-revisions.v1") || "{}")["transactions:txn-1"]).toBe(1)
+    updateTransaction("txn-1", { description: "edited with base revision" })
     calls = []
     await syncToPocketBase()
     expect(calls.some((call) => call.method === "PATCH" && call.url.endsWith("/records/pb-1"))).toBe(true)
@@ -344,7 +343,7 @@ describe("attachment handling", () => {
     // Now remote has the record → PATCH with FormData
     respond = (url, method) => {
       if (url.includes("/records?")) {
-        return { status: 200, body: { items: [{ id: "pb-att", entity: "transactions", app_id: "txn-att", business_id: "local", payload: {}, updated: "", created: "" }], totalPages: 1 } }
+        return { status: 200, body: { items: [{ id: "pb-att", entity: "transactions", app_id: "txn-att", business_id: "local", payload: {}, revision: 1, updated: "", created: "" }], totalPages: 1 } }
       }
       if (method === "PATCH") return { status: 200, body: {} }
       return { status: 200, body: {} }
@@ -424,7 +423,7 @@ describe("attachment handling", () => {
     expect(txns).toHaveLength(1)
     expect(txns[0].attachmentName).toBe("receipt.txt")
     expect(txns[0].attachmentDataUrl).toBeNull()
-    expect(txns[0].attachmentRemoteUrl).toBe("http://pb.test/api/files/jornal_records/pb-9/receipt.txt?protocol=2&company=local")
+    expect(txns[0].attachmentRemoteUrl).toBe("http://pb.test/api/files/jornal_records/pb-9/receipt.txt?protocol=3&company=local")
   })
 
   test("localJson falls back when stored payload is corrupt JSON", async () => {
@@ -512,6 +511,7 @@ function record(entity: string, appId: string, payload: unknown, id: string) {
     app_id: appId,
     business_id: "local",
     payload,
+    revision: 1,
     updated: "2026-09-03T00:00:00Z",
     created: "2026-09-03T00:00:00Z",
   }

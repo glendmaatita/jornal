@@ -31,11 +31,33 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install PocketBase 0.40.2
+        run: |
+          curl --fail --location --silent --show-error https://github.com/pocketbase/pocketbase/releases/download/v0.40.2/pocketbase_0.40.2_linux_amd64.zip -o /tmp/pocketbase.zip
+          unzip -q /tmp/pocketbase.zip -d /tmp/pocketbase-0.40.2
+          echo "POCKETBASE_BIN=/tmp/pocketbase-0.40.2/pocketbase" >> "$GITHUB_ENV"
+
       - name: Lint
         run: bun run lint
 
+      - name: Typecheck
+        run: bun run typecheck
+
       - name: Test
         run: bun run test
+
+      - name: Backend integration gates
+        run: |
+          bun run test:team:integration
+          bun run test:invoice:integration
+          bun run test:tax:integration
+          bun test backend/pocketbase/tests/multi_company_api.integration.test.ts backend/pocketbase/tests/multi_company_migration.integration.test.ts
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Team browser gate
+        run: bun run test:team:e2e
 
       - name: Build
         run: bun run build

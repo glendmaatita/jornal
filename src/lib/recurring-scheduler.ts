@@ -74,12 +74,12 @@ export async function processRecurringRulesForScope(scope: CompanyScope, today =
 }
 
 export async function processRecurringRulesForCachedCompanies(today = todayIsoDate()) {
-  const tenantId = pb.authStore.record?.id
-  if (!tenantId) return 0
+  const actorUserId = pb.authStore.record?.id
+  if (!actorUserId) return 0
   let created = 0
   for (const company of loadCachedCompanies()) {
-    if (company.tenantId !== tenantId || company.status !== "ACTIVE" || !company.onboardingCompletedAt) continue
-    created += await processRecurringRulesForScope({ tenantId, companyId: company.id, dataEpoch: company.dataEpoch }, today)
+    if (company.status !== "ACTIVE" || !company.onboardingCompletedAt) continue
+    created += await processRecurringRulesForScope({ actorUserId, ownerTenantId: company.tenantId, tenantId: company.tenantId, companyId: company.id, dataEpoch: company.dataEpoch, membershipRevision: company.membershipRevision }, today)
   }
   return created
 }

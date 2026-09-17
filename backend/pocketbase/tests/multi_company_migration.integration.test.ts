@@ -67,13 +67,14 @@ integrationTest("migrates a populated single-company database without changing l
     const adminAgain = await json("/api/collections/_superusers/auth-with-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identity: "admin@example.com", password: "StrongPass123!" }) })
     const impersonated = await json(`/api/collections/users/impersonate/${userId}`, { method: "POST", headers: { Authorization: String(adminAgain.data.token) } })
     const userToken = String(impersonated.data.token)
-    const catalog = await json("/api/collections/companies/records?perPage=10", { headers: { Authorization: userToken } })
+    const catalog = await json("/api/jornal/companies?limit=10", { headers: { Authorization: userToken } })
+    if (catalog.response.status !== 200) throw new Error(`catalog failed ${catalog.response.status}: ${JSON.stringify(catalog.data)}`)
     const companies = catalog.data.items as Array<Record<string, unknown>>
     expect(companies).toHaveLength(1)
     expect(companies[0]?.name).toBe("Legacy Shop")
-    expect(companies[0]?.legacy_default).toBe(true)
+    expect(companies[0]?.legacyDefault).toBe(true)
     const companyId = String(companies[0]?.id)
-    const records = await json("/api/collections/jornal_records/records?perPage=100", { headers: { Authorization: userToken, "X-Jornal-Protocol": "2", "X-Jornal-Company": companyId } })
+    const records = await json("/api/collections/jornal_records/records?perPage=100", { headers: { Authorization: userToken, "X-Jornal-Protocol": "3", "X-Jornal-Company": companyId } })
     const items = records.data.items as Array<Record<string, unknown>>
     expect(items).toHaveLength(3)
     expect(new Set(items.map((item) => item.company_id))).toEqual(new Set([companyId]))

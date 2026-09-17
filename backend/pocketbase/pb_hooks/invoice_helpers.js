@@ -1,6 +1,7 @@
 const DEFAULT_UNITS = ["pcs", "Lusin", "Kodi", "box", "pak", "set", "kg", "meter", "jam", "unit"]
 const MAX_TOTAL = 1_000_000_000_000
 const QUANTITY_SCALE = 1_000
+let invoiceRequestActor = null
 
 function jsonBody(event) { return event.requestInfo().body || {} }
 function stableStringify(value) {
@@ -53,11 +54,13 @@ function ownedCompany(app, tenantId, companyId, epoch, writable) {
   return company
 }
 function requestScope(event, body, writable) {
+  require(`${__hooks}/company_access.js`).requireProtocol(event)
   const companyId = String(body.companyId || "")
   const epoch = Number(body.dataEpoch || 0)
   if (!companyId || !Number.isSafeInteger(epoch) || epoch < 1) throw new ApiError(400, "companyId dan dataEpoch wajib diisi")
-  ownedCompany($app, event.auth.id, companyId, epoch, writable)
-  return { tenantId: event.auth.id, companyId, epoch }
+  const access = require(`${__hooks}/company_access.js`).eventScope(event, companyId, { epoch, writable })
+  invoiceRequestActor = { actorId: event.auth.id, tenantId: access.ownerTenantId, at: Date.now() }
+  return { actorUserId: event.auth.id, tenantId: access.ownerTenantId, companyId, epoch }
 }
 function requireCommand(body) {
   const key = String(body.commandKey || "")
@@ -154,7 +157,8 @@ function invoiceDraftData(input) {
   return { customer_id: input.customerId, issue_date: input.issueDate, due_date: input.dueDate, timezone: input.timezone, items: input.items, shipping_method: input.shippingMethod, subtotal: input.subtotal, discount_amount: input.discountAmount, shipping_amount: input.shippingAmount, tax_rate_bps: input.taxRateBps, tax_amount: input.taxAmount, grand_total: input.grandTotal, currency: "IDR" }
 }
 function findCommand(tx, tenantId, companyId, epoch, key) {
-  try { return tx.findFirstRecordByFilter("invoice_commands", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && command_key = {:key}", { tenant: tenantId, company: companyId, epoch, key }) } catch { return null }
+  const actorId = invoiceRequestActor && invoiceRequestActor.tenantId === tenantId ? invoiceRequestActor.actorId : tenantId
+  try { return tx.findFirstRecordByFilter("invoice_commands", "actor_user_id = {:actor} && tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && command_key = {:key}", { actor: actorId, tenant: tenantId, company: companyId, epoch, key }) } catch { return null }
 }
 function replayCommand(tx, tenantId, companyId, epoch, key, action, hash) {
   const record = findCommand(tx, tenantId, companyId, epoch, key)
@@ -164,7 +168,8 @@ function replayCommand(tx, tenantId, companyId, epoch, key, action, hash) {
 }
 function saveCommand(tx, tenantId, companyId, epoch, key, action, hash, status, body) {
   const collection = tx.findCollectionByNameOrId("invoice_commands")
-  tx.save(new Record(collection, { tenant_id: tenantId, company_id: companyId, data_epoch: epoch, command_key: key, action, request_hash: hash, response_status: status, response_body: body }))
+  const actorId = invoiceRequestActor && invoiceRequestActor.tenantId === tenantId ? invoiceRequestActor.actorId : tenantId
+  tx.save(new Record(collection, { actor_user_id: actorId, tenant_id: tenantId, company_id: companyId, data_epoch: epoch, command_key: key, action, request_hash: hash, response_status: status, response_body: body }))
 }
 function findAllRecords(app, collection, filter, sort, params, batchSize) {
   const size = Math.max(1, Math.min(500, Number(batchSize || 500)))
@@ -177,7 +182,8 @@ function findAllRecords(app, collection, filter, sort, params, batchSize) {
   }
 }
 function audit(tx, tenantId, companyId, epoch, actorId, action, type, id, commandKey, reason, before, after) {
-  tx.save(new Record(tx.findCollectionByNameOrId("invoice_audit"), { tenant_id: tenantId, company_id: companyId, data_epoch: epoch, actor_id: actorId, action, entity_type: type, entity_id: id, command_key: commandKey || "", reason: reason || "", before_snapshot: before || null, after_snapshot: after || null }))
+  const effectiveActor = invoiceRequestActor && invoiceRequestActor.tenantId === tenantId && Date.now() - invoiceRequestActor.at < 5_000 ? invoiceRequestActor.actorId : actorId
+  tx.save(new Record(tx.findCollectionByNameOrId("invoice_audit"), { tenant_id: tenantId, company_id: companyId, data_epoch: epoch, actor_id: effectiveActor, action, entity_type: type, entity_id: id, command_key: commandKey || "", reason: reason || "", before_snapshot: before || null, after_snapshot: after || null }))
 }
 function ensureSettings(tx, tenantId, companyId, epoch, senderName) {
   let settings

@@ -124,7 +124,7 @@ describe("multi-company local isolation", () => {
     const company: Company = {
       id: "company-a", tenantId: "tenant-1", name: "Legacy", status: "ACTIVE",
       onboardingCompletedAt: "2026-09-16T00:00:00.000Z", legacyDefault: true,
-      dataEpoch: 1, revision: 1, logoAssetId: null, archivedAt: null, createdAt: "", updatedAt: "",
+      dataEpoch: 1, revision: 1, membershipRevision: 1, logoAssetId: null, archivedAt: null, createdAt: "", updatedAt: "",
     }
     const oldTransactionsKey = `jornal.tenant-1.${KEYS.transactions}`
     const oldDraftKey = "jornal.tenant-1.jornal.transaction-draft.add"
@@ -139,8 +139,8 @@ describe("multi-company local isolation", () => {
     await migrateLegacyCompanyData(company)
 
     expect(JSON.parse(localStorageShim.getItem(storageKeyForScope(getCompanyScope(), KEYS.transactions)) ?? "[]")).toEqual([{ id: "legacy-txn" }])
-    expect(JSON.parse(localStorageShim.getItem("jornal.v2.tenant-1.company-a.jornal.transaction-draft.add") ?? "{}").description).toBe("belum selesai")
-    expect(localStorageShim.getItem("jornal.v2.tenant-1.company-a.jornal.entry-default.MONEY_IN.v1")).toBe("account-a")
+    expect(JSON.parse(localStorageShim.getItem("jornal.v3.tenant-1.tenant-1.company-a.1.1.jornal.transaction-draft.add") ?? "{}").description).toBe("belum selesai")
+    expect(localStorageShim.getItem("jornal.v3.tenant-1.tenant-1.company-a.1.1.jornal.entry-default.MONEY_IN.v1")).toBe("account-a")
     expect(localStorageShim.getItem(storageKeyForScope(getCompanyScope(), RESET_PENDING_KEY))).toBe("2026-09-16T00:00:00.000Z")
     expect(localStorageShim.getItem(oldTransactionsKey)).not.toBeNull()
     expect(localStorageShim.getItem(oldDraftKey)).not.toBeNull()

@@ -36,8 +36,10 @@ export const KEYS = {
 } as const
 
 let activeTenantId = "local"
+let activeActorId = "local"
 let activeCompanyId = "local"
 let activeDataEpoch = 1
+let activeMembershipRevision = 1
 let activeCompanyWritable = true
 let activeCompanyLegacyDefault = true
 let activeCompanyName = ""
@@ -50,7 +52,8 @@ function notifyStorageWarning() {
 
 /** Legacy test/local seam. Production should set tenant and company separately. */
 export function setDataScope(scope: string | null | undefined) {
-  activeTenantId = scope?.trim() || "local"
+  activeActorId = scope?.trim() || "local"
+  activeTenantId = activeActorId
   activeCompanyId = activeTenantId
   activeDataEpoch = 1
   activeCompanyWritable = true
@@ -59,13 +62,16 @@ export function setDataScope(scope: string | null | undefined) {
 }
 
 export function setTenantScope(tenantId: string | null | undefined) {
-  activeTenantId = tenantId?.trim() || "local"
-  if (activeTenantId === "local") activeCompanyId = "local"
+  activeActorId = tenantId?.trim() || "local"
+  activeTenantId = activeActorId
+  if (activeActorId === "local") activeCompanyId = "local"
 }
 
-export function setCompanyScope(companyId: string | null | undefined, dataEpoch = 1) {
+export function setCompanyScope(companyId: string | null | undefined, dataEpoch = 1, ownerTenantId = activeActorId, membershipRevision = 1) {
+  activeTenantId = ownerTenantId?.trim() || activeActorId
   activeCompanyId = companyId?.trim() || activeTenantId
   activeDataEpoch = Math.max(1, dataEpoch)
+  activeMembershipRevision = Math.max(1, membershipRevision)
 }
 
 export function setCompanyWritable(writable: boolean) {
@@ -89,12 +95,12 @@ function assertCompanyWritable() {
 }
 
 export function getCompanyScope() {
-  return { tenantId: activeTenantId, companyId: activeCompanyId, dataEpoch: activeDataEpoch }
+  return { actorUserId: activeActorId, ownerTenantId: activeTenantId, tenantId: activeTenantId, companyId: activeCompanyId, dataEpoch: activeDataEpoch, membershipRevision: activeMembershipRevision }
 }
 
 /** Current tenant partition, used to scope all client-side caches as well. */
 export function getDataScope() {
-  return `${activeTenantId}:${activeCompanyId}:${activeDataEpoch}`
+  return `${activeActorId}:${activeTenantId}:${activeCompanyId}:${activeDataEpoch}:${activeMembershipRevision}`
 }
 
 /** The business identity must follow the active authenticated partition. */
@@ -107,14 +113,14 @@ function currentCompanyId() {
 }
 
 export function scopedStorageKey(key: string): string {
-  return storageKeyForScope({ tenantId: activeTenantId, companyId: activeCompanyId, dataEpoch: activeDataEpoch }, key)
+  return storageKeyForScope({ actorUserId: activeActorId, ownerTenantId: activeTenantId, tenantId: activeTenantId, companyId: activeCompanyId, dataEpoch: activeDataEpoch, membershipRevision: activeMembershipRevision }, key)
 }
 
-export function storageKeyForScope(scope: { tenantId: string; companyId: string; dataEpoch?: number }, key: string): string {
+export function storageKeyForScope(scope: { actorUserId?: string; ownerTenantId?: string; tenantId: string; companyId: string; dataEpoch?: number; membershipRevision?: number }, key: string): string {
   if (scope.tenantId === "local" && scope.companyId === "local") return key
-  // Preserve the v1 namespace only for the pre-migration compatibility scope.
-  if (scope.tenantId === scope.companyId) return `jornal.${scope.tenantId}.${key}`
-  return `jornal.v2.${scope.tenantId}.${scope.companyId}.${key}`
+  const actor = scope.actorUserId || scope.tenantId
+  const owner = scope.ownerTenantId || scope.tenantId
+  return `jornal.v3.${actor}.${owner}.${scope.companyId}.${scope.dataEpoch || 1}.${scope.membershipRevision || 1}.${key}`
 }
 
 // ── Low-level helpers (SSR/private-mode safe) ──
