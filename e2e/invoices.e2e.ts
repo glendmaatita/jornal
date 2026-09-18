@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test"
 
 const backend = "http://127.0.0.1:8090"
 test("creates a customer, issues an invoice, and records payment once", async ({ page, request }) => {
+  await page.setViewportSize({ width: 360, height: 800 })
   const adminAuth = await request.post(`${backend}/api/collections/_superusers/auth-with-password`, { data: { identity: "e2e-admin@jornal.test", password: "StrongPass123!" } }); expect(adminAuth.ok()).toBeTruthy(); const admin = await adminAuth.json() as { token: string }
   const email = `invoice-e2e-${Date.now()}@example.com`; const createdUser = await request.post(`${backend}/api/collections/users/records`, { headers: { Authorization: admin.token }, data: { email, verified: true, password: "UserPass123!", passwordConfirm: "UserPass123!" } }); expect(createdUser.ok()).toBeTruthy(); const user = await createdUser.json() as { id: string; email: string; verified: boolean; collectionId: string; collectionName: string }; const impersonated = await request.post(`${backend}/api/collections/users/impersonate/${user.id}`, { headers: { Authorization: admin.token } }); const auth = await impersonated.json() as { token: string }
   const setup = await request.post(`${backend}/api/jornal/companies/setup`, { headers: { Authorization: auth.token }, data: { name: "Toko Invoice Browser", creationKey: "invoice-e2e-company", requestId: "invoice-e2e-company", initialSetup: true, profile: { businessName: "Toko Invoice Browser", businessType: "INDIVIDUAL", businessStartDate: "2026-01-01", fiscalYear: 2026, taxScheme: "UMKM_FINAL", pkpStatus: false, useAccountTracking: false, openingBalance: 0, taxReserveConfirmed: 0, lastBalanceCheckIn: null, lastCheckedBalance: null, lastCheckInDelta: null, onboardingCompletedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }, accounts: [] } }); expect(setup.ok()).toBeTruthy(); const company = await setup.json() as { id: string }
@@ -11,11 +12,14 @@ test("creates a customer, issues an invoice, and records payment once", async ({
   const shortMonths = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
   await expect(page.getByLabel("Jatuh tempo")).toContainText(`${tomorrow.getDate()} ${shortMonths[tomorrow.getMonth()]} ${tomorrow.getFullYear()}`)
   const quantityBox = await page.getByLabel("Jumlah").locator("xpath=..").boundingBox()
-  const unitBox = await page.getByLabel("Satuan").boundingBox()
+  const unitBox = await page.getByLabel("Satuan").locator("xpath=..").boundingBox()
   const priceBox = await page.getByLabel("Harga").locator("xpath=..").boundingBox()
   expect(quantityBox).toBeTruthy(); expect(unitBox).toBeTruthy(); expect(priceBox).toBeTruthy()
-  expect(Math.abs(quantityBox!.y - unitBox!.y)).toBeLessThanOrEqual(1); expect(Math.abs(quantityBox!.y - priceBox!.y)).toBeLessThanOrEqual(1)
-  expect(Math.abs(quantityBox!.height - unitBox!.height)).toBeLessThanOrEqual(1); expect(Math.abs(quantityBox!.height - priceBox!.height)).toBeLessThanOrEqual(1)
+  expect(Math.abs(quantityBox!.y - unitBox!.y)).toBeLessThanOrEqual(1)
+  expect(Math.abs(quantityBox!.height - unitBox!.height)).toBeLessThanOrEqual(1)
+  expect(priceBox!.y).toBeGreaterThan(quantityBox!.y + quantityBox!.height)
+  expect(priceBox!.width).toBeGreaterThan(quantityBox!.width * 1.8)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole("button", { name: "Tambah item" }).click(); await expect(page.getByRole("button", { name: "Hapus item 2" })).toBeVisible(); await page.getByRole("button", { name: "Hapus item 2" }).click()
   await page.getByLabel("Deskripsi").fill("Jasa browser"); await page.getByLabel("Jumlah").fill("2"); await page.getByLabel("Harga").fill("100000"); await expect(page.getByText("Rp200.000")).toBeVisible(); await page.getByRole("button", { name: "Terbitkan" }).click(); await expect(page.getByRole("heading", { name: "001" })).toBeVisible(); await expect(page.getByText("UNPAID", { exact: false })).toBeVisible()
   await page.getByRole("button", { name: "Konfirmasi pelunasan" }).click(); await expect(page.getByText(/Pembayaran tercatat/)).toBeVisible(); await page.goto(`/transactions?company=${company.id}`); await expect(page.getByText("Pelunasan invoice 001", { exact: true })).toBeVisible(); await expect(page.getByRole("button", { name: "Pakai perangkat" })).toHaveCount(0)

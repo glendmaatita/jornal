@@ -196,7 +196,7 @@ export function InvoiceFormPage({
     }
   };
   return (
-    <div className="space-y-4 pb-8">
+    <div className="min-w-0 space-y-4 pb-28 sm:pb-8">
       <header>
         <h1 className="flex items-center gap-2 text-2xl">
           {invoice ? (
@@ -236,13 +236,13 @@ export function InvoiceFormPage({
             <Link
               to="/customers/new"
               search={{ returnTo: "/invoices/new" }}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--link)]"
+              className="inline-flex min-w-0 items-start gap-1.5 text-sm font-semibold leading-5 text-[var(--link)]"
             >
-              <UserPlus className="size-4" aria-hidden="true" />
+              <UserPlus className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               Tambah pelanggan tanpa kehilangan draft
             </Link>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid min-w-0 gap-3 min-[420px]:grid-cols-2">
             <DateField
               label="Tanggal invoice"
               value={form.issueDate}
@@ -297,10 +297,11 @@ export function InvoiceFormPage({
               value={item.description}
               onChange={(description) => setItem(index, { description })}
             />
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3">
               <TextField
                 label="Jumlah"
                 icon={Hash}
+                className="min-w-0"
                 value={String(item.quantityScaled / 1000)}
                 onChange={(value) =>
                   setItem(index, {
@@ -311,6 +312,7 @@ export function InvoiceFormPage({
               />
               <SelectField
                 label="Satuan"
+                className="min-w-0"
                 value={item.unitLabel}
                 onChange={(unitLabel) => setItem(index, { unitLabel })}
                 options={units.map((unit) => ({ value: unit, label: unit }))}
@@ -318,6 +320,7 @@ export function InvoiceFormPage({
               <TextField
                 label="Harga"
                 icon={Banknote}
+                className="col-span-2 min-w-0 sm:col-span-1"
                 type="amount"
                 value={
                   item.unitPrice ? item.unitPrice.toLocaleString("id-ID") : ""
@@ -348,7 +351,7 @@ export function InvoiceFormPage({
       </Button>
       <Card>
         <CardContent className="grid gap-3 p-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid min-w-0 gap-3 min-[420px]:grid-cols-2">
             <TextField
               label="Diskon"
               icon={Tag}
@@ -402,13 +405,15 @@ export function InvoiceFormPage({
               }
             />
           </div>
-          <div className="flex justify-between border-t pt-3 text-lg font-semibold">
+          <div className="flex min-w-0 items-start justify-between gap-3 border-t pt-3 text-lg font-semibold">
             <span>Total</span>
-            <span>{formatRupiah(totals?.grandTotal || 0)}</span>
+            <span className="min-w-0 break-words text-right tabular-nums">
+              {formatRupiah(totals?.grandTotal || 0)}
+            </span>
           </div>
         </CardContent>
       </Card>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 min-[420px]:grid-cols-2">
         <Button
           variant="outline"
           disabled={busy || !totals || !form.customerId}
