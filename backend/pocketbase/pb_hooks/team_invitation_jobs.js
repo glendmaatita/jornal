@@ -83,17 +83,28 @@ function teamDeliver() {
     if (!current) { teamComplete(item, "CANCELLED", "NO_LONGER_APPLICABLE"); continue }
     const inviteUrl = `${publicUrl}/invitations/${encodeURIComponent(current.invitation.getString("public_id"))}`
     const companyName = current.company.getString("name").replace(/[\r\n]+/g, " "); const inviterName = (inviter.getString("name") || inviter.getString("email") || "Anggota Jornal").replace(/[\r\n]+/g, " ")
-    const expires = current.invitation.getString("expires_at")
+    const mail = require(`${__hooks}/email_template.js`)
+    const recipientEmail = current.delivery.getString("recipient_email")
+    const expires = mail.emailFormatDateTime(current.invitation.getString("expires_at"))
     const messageId = `<team-${current.invitation.id}-${current.delivery.getInt("generation")}@jornal.dropify.id>`
     try {
       const settings = $app.settings()
       $app.newMailClient().send(new MailerMessage({
         from: { address: settings.meta.senderAddress, name: settings.meta.senderName || "Jornal" },
-        to: [{ address: current.delivery.getString("recipient_email") }],
+        to: [{ address: recipientEmail }],
         headers: { "Message-ID": messageId },
         subject: `Anda diundang ke ${companyName} di Jornal`,
-        text: `${inviterName} mengundang Anda ke ${companyName} di Jornal. Gunakan akun Google ${current.delivery.getString("recipient_email")} untuk masuk. Anda akan mendapat akses penuh untuk mengelola company ini, termasuk transaksi dan pengaturan. Undangan berlaku sampai ${expires}. Buka Jornal: ${inviteUrl}`,
-        html: `<p><strong>${teamEscape(inviterName)}</strong> mengundang Anda ke <strong>${teamEscape(companyName)}</strong> di Jornal.</p><p>Masuk dengan akun Google <strong>${teamEscape(current.delivery.getString("recipient_email"))}</strong>. Anda akan mendapat akses penuh untuk mengelola company ini, termasuk transaksi dan pengaturan.</p><p>Undangan berlaku sampai ${teamEscape(expires)}.</p><p><a href="${teamEscape(inviteUrl)}">Buka Jornal</a></p><p>${teamEscape(inviteUrl)}</p>`,
+        text: `${inviterName} mengundang Anda ke ${companyName} di Jornal. Gunakan akun Google ${recipientEmail} untuk masuk. Anda akan mendapat akses penuh untuk mengelola company ini, termasuk transaksi dan pengaturan. Undangan berlaku sampai ${expires}. Buka Jornal: ${inviteUrl}`,
+        html: mail.emailLayout({
+          publicUrl, title: `Undangan ke ${companyName} di Jornal`, preheader: `${inviterName} mengundang Anda ke ${companyName} di Jornal.`,
+          heading: `Anda diundang ke ${mail.emailEscape(companyName)}`,
+          paragraphs: [
+            `<strong>${mail.emailEscape(inviterName)}</strong> mengundang Anda bergabung ke <strong>${mail.emailEscape(companyName)}</strong> di Jornal.`,
+            `Masuk dengan akun Google <strong>${mail.emailEscape(recipientEmail)}</strong>. Anda akan mendapat akses penuh untuk mengelola company ini, termasuk transaksi dan pengaturan.`,
+          ],
+          cta: { label: "Terima undangan", url: inviteUrl },
+          note: `Undangan berlaku sampai <strong>${mail.emailEscape(expires)}</strong>.`,
+        }),
       }))
       $app.runInTransaction((tx) => {
         const row = tx.findRecordById("team_invitation_deliveries", item.id)

@@ -1,4 +1,8 @@
 function taxDateOnly(value) { return String(value || "").slice(0, 10) }
+function taxPublicUrl() {
+  const raw = String($os.getenv("JORNAL_PUBLIC_URL") || "").replace(/\/$/, "")
+  return /^https:\/\//.test(raw) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(raw) ? raw : ""
+}
 
 function taxScheduledAt(dateText, hour, timezone) {
   const offsets = { "Asia/Jakarta": 7, "Asia/Makassar": 8, "Asia/Jayapura": 9 }
@@ -314,13 +318,22 @@ function taxDeliverNotifications() {
       amountSummary = ` Total sisa terkonfirmasi pada agenda ini: Rp${total.toLocaleString("id-ID")}.`
     }
     try {
-      const settings = $app.settings()
+      const settings = $app.settings(); const mail = require(`${__hooks}/email_template.js`); const publicUrl = taxPublicUrl()
       $app.newMailClient().send(new MailerMessage({
         from: { address: settings.meta.senderAddress, name: settings.meta.senderName || "Jornal" },
         to: [{ address: user.getString("email") }],
         subject: "Pengingat agenda pajak Jornal",
         text: `Ada ${items.length} agenda pajak yang perlu diperiksa (${summary}).${amountSummary} Masuk ke Jornal untuk melihat tanggal, nominal, dan status terbaru.`,
-        html: `<p>Ada <strong>${items.length}</strong> agenda pajak yang perlu diperiksa.</p>${amountSummary ? `<p>${amountSummary}</p>` : ""}<p>Masuk ke Jornal untuk melihat tanggal, nominal, dan status terbaru.</p>`,
+        html: mail.emailLayout({
+          publicUrl, title: "Pengingat agenda pajak Jornal", preheader: `Ada ${items.length} agenda pajak yang perlu diperiksa.`,
+          heading: "Pengingat agenda pajak",
+          paragraphs: [
+            `Ada <strong>${items.length}</strong> agenda pajak yang perlu diperiksa.`,
+            ...(amountSummary ? [mail.emailEscape(amountSummary.trim())] : []),
+            "Masuk ke Jornal untuk melihat tanggal, nominal, dan status terbaru.",
+          ],
+          cta: publicUrl ? { label: "Buka Jornal", url: publicUrl } : null,
+        }),
       }))
       taxMark(items.map((item) => item.id), "SENT", "")
     } catch (error) {
