@@ -194,6 +194,27 @@ export function loadSyncConflicts(scope = companyScope()): SyncConflict[] {
 
 export async function resolveSyncConflict(id: string, choice: "local" | "remote") {
   const scope = companyScope()
+  const runtime = runtimeFor(scope)
+  // A focus/reconnect sync may still be running when the user taps a choice.
+  // Wait for it, then reserve the same per-company lane so a background sync
+  // cannot race the conflict PATCH and invalidate its freshly read revision.
+  if (runtime.running) await runtime.running.catch(() => undefined)
+  const run = resolveSyncConflictUnsafe(id, choice, scope)
+  runtime.running = run
+  let resolved = false
+  try {
+    resolved = await run
+    return resolved
+  } finally {
+    if (runtime.running === run) runtime.running = undefined
+    // The chosen record is already reconciled atomically. A later sync can
+    // safely advance the shared array outbox and surface the next record (if
+    // any) without racing this resolution.
+    if (resolved) schedulePocketBaseSync(scope)
+  }
+}
+
+async function resolveSyncConflictUnsafe(id: string, choice: "local" | "remote", scope: CompanyScope) {
   const conflicts = loadSyncConflicts(scope)
   const conflict = conflicts.find((item) => item.id === id)
   if (!conflict || !conflict.entity) return false
@@ -247,13 +268,12 @@ export async function resolveSyncConflict(id: string, choice: "local" | "remote"
   if (conflict.appId && Number.isFinite(remoteRevision)) saveBaseRevision(scope, entity, conflict.appId, Number(remoteRevision))
 
   const remaining = conflicts.filter((item) => item.id !== id)
-  // Array states share one outbox row. Syncing that entire row while another
-  // item is still conflicted makes the first choice fail on the second item.
-  // Submit only the chosen local record now; flush the shared outbox after the
-  // final conflict has been resolved and every record has a known base.
+  // Array states share one outbox row. Syncing that entire row here can race
+  // the next conflict and invalidate this record's revision. Submit only the
+  // chosen local record; the exclusive wrapper schedules the shared outbox
+  // after this resolution has left the per-company sync lane.
   try {
     if (choice === "local" && conflict.appId) await upsertRecord(entity, conflict.appId, value, scope)
-    if (remaining.length === 0) await flushPendingScope(scope)
   } catch (error) {
     const changedAgain = String(error).includes("Conflict") || String(error).includes("PocketBase 409")
     throw new Error(changedAgain
@@ -270,16 +290,6 @@ export async function resolveSyncConflict(id: string, choice: "local" | "remote"
   }
   setSyncStatus(remaining.length > 0 ? "failed" : "synced", scope)
   return true
-}
-
-async function flushPendingScope(scope: CompanyScope) {
-  const prefix = storageKeyForScope(scope, "")
-  for (let pass = 0; pass < 3; pass += 1) {
-    await syncToPocketBase(scope)
-    const pending = (await listOutbox()).some((row) => row.key.startsWith(prefix))
-    if (!pending) return
-  }
-  throw new Error("Pending changes remain after conflict resolution")
 }
 
 function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>, scope = companyScope()) {
