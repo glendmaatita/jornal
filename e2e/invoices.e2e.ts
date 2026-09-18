@@ -7,6 +7,15 @@ test("creates a customer, issues an invoice, and records payment once", async ({
   const email = `invoice-e2e-${Date.now()}@example.com`; const createdUser = await request.post(`${backend}/api/collections/users/records`, { headers: { Authorization: admin.token }, data: { email, verified: true, password: "UserPass123!", passwordConfirm: "UserPass123!" } }); expect(createdUser.ok()).toBeTruthy(); const user = await createdUser.json() as { id: string; email: string; verified: boolean; collectionId: string; collectionName: string }; const impersonated = await request.post(`${backend}/api/collections/users/impersonate/${user.id}`, { headers: { Authorization: admin.token } }); const auth = await impersonated.json() as { token: string }
   const setup = await request.post(`${backend}/api/jornal/companies/setup`, { headers: { Authorization: auth.token }, data: { name: "Toko Invoice Browser", creationKey: "invoice-e2e-company", requestId: "invoice-e2e-company", initialSetup: true, profile: { businessName: "Toko Invoice Browser", businessType: "INDIVIDUAL", businessStartDate: "2026-01-01", fiscalYear: 2026, taxScheme: "UMKM_FINAL", pkpStatus: false, useAccountTracking: false, openingBalance: 0, taxReserveConfirmed: 0, lastBalanceCheckIn: null, lastCheckedBalance: null, lastCheckInDelta: null, onboardingCompletedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }, accounts: [] } }); expect(setup.ok()).toBeTruthy(); const company = await setup.json() as { id: string }
   await page.addInitScript(({ token, record }) => localStorage.setItem("pocketbase_auth", JSON.stringify({ token, record })), { token: auth.token, record: user })
+  await page.goto(`/invoices?company=${company.id}`)
+  const unpaidCard = page.getByText("Belum bayar", { exact: true }).locator("..")
+  const overdueCard = page.getByText("Terlambat", { exact: true }).locator("..")
+  const unpaidAmountBox = await unpaidCard.getByText("Rp0", { exact: true }).boundingBox()
+  const overdueAmountBox = await overdueCard.getByText("Rp0", { exact: true }).boundingBox()
+  expect(unpaidAmountBox).toBeTruthy(); expect(overdueAmountBox).toBeTruthy()
+  expect(Math.abs(unpaidAmountBox!.y - overdueAmountBox!.y)).toBeLessThanOrEqual(1)
+  await expect(page.getByLabel("Cari invoice")).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.goto(`/customers/new?company=${company.id}`); await page.getByLabel("Nama").fill("Pelanggan Browser"); await page.getByLabel("Kode pos").fill("00123"); await page.getByRole("button", { name: "Simpan pelanggan" }).click(); await expect(page.getByRole("heading", { name: "Pelanggan Browser" })).toBeVisible(); await page.getByRole("link", { name: "Buat Invoice" }).click()
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
   const shortMonths = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
