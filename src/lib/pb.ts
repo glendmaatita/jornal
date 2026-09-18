@@ -6,6 +6,10 @@ const baseUrl = import.meta.env.VITE_POCKETBASE_URL?.trim() || ""
 export const pocketBaseConfigured = Boolean(baseUrl)
 
 export const pb = new PocketBase(baseUrl || undefined)
+// Screens fire several independent reads at mount (settings, units, customers).
+// The SDK's auto-cancellation would abort the earlier one and surface
+// "request was aborted" errors in the UI, so requests are never auto-cancelled.
+pb.autoCancellation(false)
 
 /** The authenticated tenant (PocketBase user record), if any. */
 export function currentUser(): { id: string; email: string; name: string } | null {

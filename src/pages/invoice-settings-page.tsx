@@ -423,7 +423,7 @@ export function InvoiceSettingsPage() {
               menjalankan dry-run checksum terlebih dahulu.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button
               variant="outline"
               disabled={busy}

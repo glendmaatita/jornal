@@ -13,8 +13,12 @@ export interface FieldShellProps {
   hasValue?: boolean
   focused?: boolean
   disabled?: boolean
+  /** 40px chrome for inline filters and toolbar controls */
+  compact?: boolean
   children: React.ReactNode
   className?: string
+  /** Extra classes on the bordered wrapper itself (e.g. `!rounded-full`) */
+  shellClassName?: string
 }
 
 /**
@@ -30,8 +34,10 @@ export function FieldShell({
   hasValue,
   focused,
   disabled,
+  compact,
   children,
   className,
+  shellClassName,
 }: FieldShellProps) {
   return (
     <div className={cn("w-full", disabled && "opacity-60", className)}>
@@ -48,6 +54,8 @@ export function FieldShell({
           focused && "field-shell--focus",
           error && "field-shell--error",
           disabled && "field-shell--disabled",
+          compact && "field-shell--compact",
+          shellClassName,
         )}
       >
         {Icon && (

@@ -1,5 +1,7 @@
 // Period helpers (prd.md §10.1)
 
+import { MONTHS } from "@/lib/month-names"
+
 export interface Period {
   label: string
   start: string // inclusive YYYY-MM-DD
@@ -8,10 +10,6 @@ export interface Period {
 
 export type PeriodPreset = "today" | "week" | "month" | "last_month" | "year" | "custom"
 
-const MONTHS = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-]
 
 export function resolvePeriod(preset: PeriodPreset, custom: { start: string; end: string }, now = new Date()): Period {
   const today = toIsoDate(now)

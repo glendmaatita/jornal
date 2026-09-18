@@ -15,13 +15,13 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
 
   return (
     <div className="space-y-4 pb-8">
-      <header className="flex justify-between gap-3">
+      <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#f1f5fd] text-[#16579d]"><User className="size-5" aria-hidden="true" /></span>
           <div className="min-w-0">
             <h1 className="truncate text-2xl">{customer.name}</h1>
             <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              {customer.email && <span className="inline-flex items-center gap-1"><Mail className="size-3.5" aria-hidden="true" />{customer.email}</span>}
+              {customer.email && <span className="inline-flex min-w-0 max-w-full items-center gap-1"><Mail className="size-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{customer.email}</span></span>}
               {customer.phone && <span className="inline-flex items-center gap-1"><Phone className="size-3.5" aria-hidden="true" />{customer.phone}</span>}
             </p>
           </div>

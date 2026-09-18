@@ -150,6 +150,8 @@ button:disabled {
 .field-shell {
   display: flex;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 10px;
   min-height: 50px;
@@ -192,6 +194,53 @@ button:disabled {
 .field-shell ::placeholder,
 .field-shell .placeholder {
   color: var(--placeholder);
+}
+
+/* Custom checkbox: replaces the native control so it matches the field chrome. */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  background-color: var(--white-color);
+  vertical-align: middle;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="checkbox"]::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  transform: scale(0);
+  transition: transform 0.12s ease-in-out;
+  background: center / contain no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.2 3.2L13 5'/%3E%3C/svg%3E");
+}
+
+input[type="checkbox"]:checked {
+  border-color: #16579d;
+  background-color: #16579d;
+}
+
+input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(22 87 157 / 0.18);
+}
+
+input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .field-label {
@@ -353,6 +402,112 @@ button:disabled {
 }
 
 .calendar-day--selected {
+  background: var(--main-dark);
+  color: var(--white-color);
+}
+
+/* ── Compact field chrome (inline filters, toolbars) ── */
+.field-shell--compact {
+  min-height: 40px;
+  padding: 4px 12px;
+  gap: 8px;
+}
+
+/* ── Custom listbox (SelectField) ── */
+.listbox-popover {
+  z-index: 60;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--white-color);
+  box-shadow: 0 12px 32px rgb(27 29 77 / 0.16);
+  padding: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.listbox-popover--up {
+  box-shadow: 0 -12px 32px rgb(27 29 77 / 0.16);
+}
+
+.listbox-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--foreground);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.12s ease;
+}
+
+.listbox-option--active {
+  background: var(--accent);
+}
+
+.listbox-option--selected {
+  color: var(--main-dark);
+  font-weight: 600;
+}
+
+.listbox-option--placeholder {
+  color: var(--body-text);
+  font-weight: 400;
+}
+
+.listbox-empty {
+  padding: 12px;
+  font-size: 13px;
+  color: var(--body-text);
+  text-align: center;
+}
+
+/* ── Month picker (MonthField) ── */
+.month-popover {
+  z-index: 60;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--white-color);
+  box-shadow: 0 12px 32px rgb(27 29 77 / 0.16);
+  padding: 12px;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.month-cell {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  transition: background-color 0.12s ease;
+}
+
+.month-cell:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.month-cell:disabled {
+  color: var(--placeholder);
+  cursor: not-allowed;
+}
+
+.month-cell--current {
+  box-shadow: inset 0 0 0 1.5px var(--border);
+}
+
+.month-cell--selected {
   background: var(--main-dark);
   color: var(--white-color);
 }

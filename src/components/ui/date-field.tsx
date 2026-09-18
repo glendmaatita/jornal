@@ -3,13 +3,10 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react"
 
 import { FieldShell } from "@/components/ui/field-shell"
 import { formatDateShort, toIsoDate } from "@/lib/format"
+import { MONTHS } from "@/lib/month-names"
 import { cn } from "@/lib/utils"
 
 const WEEKDAYS = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"]
-const MONTHS = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-]
 
 interface CalendarMonth {
   year: number

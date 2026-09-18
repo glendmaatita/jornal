@@ -4,6 +4,7 @@ import { ArrowDownLeft, ArrowLeftRight, ArrowUpLeft, Landmark, Plus, Trash2, Wal
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { SelectField } from "@/components/ui/select-field"
 import { TextField } from "@/components/ui/text-field"
 import { currentAccountBalance } from "@/lib/account-balance"
 import { formatDateShort, formatRupiah, formatSignedRupiah, parseAmountInput } from "@/lib/format"
@@ -74,10 +75,8 @@ export function AccountsPage() {
             <TextField label="Nama rekening" icon={Landmark} value={name} onChange={setName} placeholder="Contoh: BCA Operasional" />
             <TextField label="Saldo awal" type="amount" prefix="Rp" value={openingBalance} onChange={setOpeningBalance} hint="Saldo sebelum mutasi pertama." />
           </div>
-          <div className="flex gap-2">
-            <select value={type} onChange={(event) => setType(event.target.value as AccountType)} className="field-shell !min-h-[46px] w-full !py-0 text-sm" aria-label="Jenis rekening">
-              {ACCOUNT_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
+          <div className="flex items-center gap-2">
+            <SelectField aria-label="Jenis rekening" value={type} onChange={(value) => setType(value as AccountType)} options={ACCOUNT_TYPES.map((item) => ({ value: item.value, label: item.label }))} />
             <Button onClick={addAccount} disabled={!name.trim()}><Plus aria-hidden="true" />Tambah</Button>
           </div>
           {!profile?.useAccountTracking && (
@@ -96,8 +95,8 @@ export function AccountsPage() {
               to="/accounts"
               search={{ account: account.id }}
               className={selected?.id === account.id
-                ? "relative block rounded-[10px] after:pointer-events-none after:absolute after:inset-0 after:rounded-[10px] after:border-2 after:border-primary"
-                : "block rounded-[10px]"}
+                ? "relative block min-w-0 rounded-[10px] after:pointer-events-none after:absolute after:inset-0 after:rounded-[10px] after:border-2 after:border-primary"
+                : "block min-w-0 rounded-[10px]"}
             >
               <Card className="h-full transition-colors hover:border-primary/50"><CardContent className="flex items-start justify-between gap-3 p-5">
                 <span className="min-w-0"><span className="block truncate font-semibold">{account.name}</span><span className="text-xs text-muted-foreground">{ACCOUNT_TYPES.find((item) => item.value === account.type)?.label}</span></span>
@@ -112,7 +111,7 @@ export function AccountsPage() {
         <Card>
           <CardContent className="space-y-3 p-5">
             <div className="flex items-center justify-between gap-3">
-              <div><h2 className="flex items-center gap-2 text-lg tracking-tight"><ArrowLeftRight className="size-4 text-primary" aria-hidden="true" />Mutasi {selected.name}</h2><p className="text-xs text-muted-foreground">Saldo awal {formatRupiah(selected.openingBalance)}</p></div>
+              <div className="min-w-0"><h2 className="flex min-w-0 items-center gap-2 text-lg tracking-tight"><ArrowLeftRight className="size-4 shrink-0 text-primary" aria-hidden="true" /><span className="truncate">Mutasi {selected.name}</span></h2><p className="text-xs text-muted-foreground">Saldo awal {formatRupiah(selected.openingBalance)}</p></div>
               {writable && <Button variant="ghost" size="sm" aria-label={`Hapus ${selected.name}`} onClick={() => { if (window.confirm(`Hapus rekening ${selected.name}?`)) { deleteAccount(selected.id); invalidate() } }}><Trash2 className="size-4" aria-hidden="true" /></Button>}
             </div>
             {mutations.length === 0 ? <p className="rounded-xl bg-secondary/50 p-4 text-sm text-muted-foreground">Belum ada mutasi untuk rekening ini.</p> : (

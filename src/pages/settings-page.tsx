@@ -34,6 +34,7 @@ import { CompanyLogoEditor } from "@/components/company-logo";
 import { PageLoading } from "@/components/loading-screen";
 import { Card, CardContent } from "@/components/ui/card";
 import { DateField } from "@/components/ui/date-field";
+import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
 import { categoryName } from "@/lib/categories";
 import { activeCompany, resetCompany, updateCompany } from "@/lib/companies";
@@ -426,47 +427,30 @@ export function SettingsPage() {
             value={nameDraft ?? company?.name ?? profile.businessName}
             onChange={(value) => setNameDraft(value)}
           />
-          <label className="block">
-            <span className="field-label">Jenis usaha</span>
-            <select
-              value={selectedBusinessType}
-              onChange={(event) => {
-                const nextBusinessType = event.target.value as BusinessType;
-                setBusinessTypeDraft(nextBusinessType);
-                const nextAllowedSchemes = allowedTaxSchemes(nextBusinessType);
-                if (!nextAllowedSchemes.includes(selectedTaxScheme)) {
-                  setTaxSchemeDraft(nextAllowedSchemes[0] ?? "NOT_CALCULATED");
-                }
-              }}
-              className="field-shell !min-h-[50px] w-full !py-0 text-sm"
-            >
-              {BUSINESS_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {BUSINESS_TYPE_LABELS[type]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="field-label">
-              Skema pajak (tax rules berversi)
-            </span>
-            <select
-              value={selectedTaxScheme}
-              onChange={(event) =>
-                setTaxSchemeDraft(event.target.value as TaxScheme)
+          <SelectField
+            label="Jenis usaha"
+            value={selectedBusinessType}
+            onChange={(value) => {
+              const nextBusinessType = value as BusinessType;
+              setBusinessTypeDraft(nextBusinessType);
+              const nextAllowedSchemes = allowedTaxSchemes(nextBusinessType);
+              if (!nextAllowedSchemes.includes(selectedTaxScheme)) {
+                setTaxSchemeDraft(nextAllowedSchemes[0] ?? "NOT_CALCULATED");
               }
-              className="field-shell !min-h-[50px] w-full !py-0 text-sm"
-            >
-              {SCHEMES.filter((scheme) =>
-                allowedSchemes.includes(scheme.value),
-              ).map((scheme) => (
-                <option key={scheme.value} value={scheme.value}>
-                  {scheme.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            }}
+            options={BUSINESS_TYPES.map((type) => ({
+              value: type,
+              label: BUSINESS_TYPE_LABELS[type],
+            }))}
+          />
+          <SelectField
+            label="Skema pajak (tax rules berversi)"
+            value={selectedTaxScheme}
+            onChange={(value) => setTaxSchemeDraft(value as TaxScheme)}
+            options={SCHEMES.filter((scheme) =>
+              allowedSchemes.includes(scheme.value),
+            ).map((scheme) => ({ value: scheme.value, label: scheme.label }))}
+          />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <DateField
               label="Mulai usaha"
@@ -573,7 +557,7 @@ export function SettingsPage() {
               }
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               onClick={() =>
                 void enablePushNotifications(pushPreferences)
@@ -639,9 +623,9 @@ export function SettingsPage() {
                 {accounts.map((account) => (
                   <div
                     key={account.id}
-                    className="flex items-center gap-2 py-2"
+                    className="flex flex-wrap items-center gap-2 py-2"
                   >
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 basis-full sm:basis-0">
                       <p className="truncate text-sm font-medium">
                         {account.name}
                       </p>
@@ -656,7 +640,7 @@ export function SettingsPage() {
                     <TextField
                       type="amount"
                       prefix="Rp"
-                      className="w-36"
+                      className="min-w-0 flex-1 sm:w-36 sm:flex-none"
                       inputClassName="text-right text-sm"
                       value={
                         accountBalanceDrafts[account.id] ??
@@ -706,23 +690,20 @@ export function SettingsPage() {
                 />
               </div>
               <div className="flex items-center gap-2">
-                <select
+                <SelectField
+                  aria-label="Jenis akun"
                   value={newAccount.type}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setNewAccount((current) => ({
                       ...current,
-                      type: event.target.value as AccountType,
+                      type: value as AccountType,
                     }))
                   }
-                  className="field-shell !min-h-[46px] w-full !py-0 text-sm"
-                  aria-label="Jenis akun"
-                >
-                  {ACCOUNT_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
+                  options={ACCOUNT_TYPES.map((type) => ({
+                    value: type.value,
+                    label: type.label,
+                  }))}
+                />
                 <Button
                   onClick={() => {
                     if (!newAccount.name.trim()) return;

@@ -175,10 +175,10 @@ export function InsightsPage() {
       {stsSeries.length >= 2 && (
         <Card>
           <CardContent className="p-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <h2 className="text-lg tracking-tight">Safe To Spend — 30 hari</h2>
               {stsDeltaMonth && (
-                <span className={`flex items-center gap-1 text-xs font-medium ${stsDeltaMonth.delta >= 0 ? "money-in" : "text-destructive"}`}>
+                <span className={`flex items-center gap-1 whitespace-nowrap text-xs font-medium ${stsDeltaMonth.delta >= 0 ? "money-in" : "text-destructive"}`}>
                   {stsDeltaMonth.delta >= 0 ? (
                     <TrendingUp className="size-3.5" aria-hidden="true" />
                   ) : (

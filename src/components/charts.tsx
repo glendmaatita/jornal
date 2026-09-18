@@ -14,6 +14,7 @@ export function BarChart({ data, height = 140, color = "var(--primary)" }: { dat
 
   return (
     <div className="w-full" role="img" aria-label="Grafik batang">
+      <div className="mb-1 text-right text-[11px] text-muted-foreground">Maks. {formatCompactRupiah(max)}</div>
       <svg viewBox={`0 0 100 ${height}`} className="w-full" preserveAspectRatio="none" style={{ height }}>
         {data.map((datum, index) => {
           const barHeight = Math.max((Math.abs(datum.value) / max) * (height - 8), 1)
@@ -38,10 +39,6 @@ export function BarChart({ data, height = 140, color = "var(--primary)" }: { dat
             {datum.label}
           </span>
         ))}
-      </div>
-      <div className="flex justify-between text-[11px] text-muted-foreground">
-        <span>0</span>
-        <span>{formatCompactRupiah(max)}</span>
       </div>
     </div>
   )
@@ -98,7 +95,7 @@ export function DualBarChart({ data, height = 140 }: { data: { label: string; in
         <span className="flex items-center gap-1">
           <span className="inline-block size-2 rounded-full bg-primary" /> Keluar
         </span>
-        <span className="ml-auto">{formatCompactRupiah(max)}</span>
+        <span className="ml-auto">Maks. {formatCompactRupiah(max)}</span>
       </div>
     </div>
   )
@@ -126,7 +123,7 @@ export function LineChart({ data, height = 100 }: { data: ChartDatum[]; height?:
       </svg>
       <div className="flex justify-between text-[11px] text-muted-foreground">
         <span>{data[0].label}</span>
-        <span>{formatCompactRupiah(max)}</span>
+        <span>Maks. {formatCompactRupiah(max)}</span>
         <span>{data[data.length - 1].label}</span>
       </div>
     </div>

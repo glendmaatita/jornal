@@ -125,8 +125,8 @@ export function SafeToSpendPage() {
 
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-center justify-between gap-2">
-            <h1 className="flex items-center gap-2 text-xl tracking-tight"><ShieldCheck className="size-5 text-primary" aria-hidden="true" />Safe To Spend</h1>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="flex items-center gap-2 whitespace-nowrap text-xl tracking-tight"><ShieldCheck className="size-5 text-primary" aria-hidden="true" />Safe To Spend</h1>
             <ConfidenceBadge status={result.confidence} />
           </div>
 
@@ -285,8 +285,8 @@ export function SafeToSpendPage() {
               <span className="text-muted-foreground">{result.taxReserveSource === "ACTUAL_OBLIGATIONS" ? "Kewajiban aktual di agenda" : result.taxReserveSource === "SHARED_SUBJECT_UNATTRIBUTED" ? "Subject bersama—belum dialokasikan" : "Disarankan (proyeksi)"}</span>
               <span className="font-medium tabular-nums">{formatRupiah(result.recommendedTaxReserve)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Sudah Anda sisihkan</span>
+            <div className="flex items-center justify-between gap-3">
+              <span className="min-w-0 text-muted-foreground">Sudah Anda sisihkan</span>
               <TextField
                 type="amount"
                 prefix="Rp"

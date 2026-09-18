@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
+import { InvoicePaperFit } from "@/components/invoice/invoice-paper-fit";
 import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
 import {
@@ -333,9 +334,9 @@ export function InvoiceDetailPage({
                   "png",
                 )
                   .catch(() =>
-                    documentRef.current?.firstElementChild
+                    documentRef.current?.querySelector("[data-invoice-document]")
                       ? invoicePng(
-                          documentRef.current.firstElementChild as HTMLElement,
+                          documentRef.current.querySelector("[data-invoice-document]") as HTMLElement,
                           `invoice-${invoice.invoiceNumber || invoice.id}.png`,
                         )
                       : Promise.reject(),
@@ -349,11 +350,10 @@ export function InvoiceDetailPage({
           </div>
         </>
       )}
-      <div
-        className="overflow-auto rounded-xl bg-slate-200 p-2"
-        ref={documentRef}
-      >
-        <InvoiceDocument invoice={invoice} logoDataUrl={logo.data?.dataUrl} />
+      <div className="rounded-xl bg-slate-200 p-2" ref={documentRef}>
+        <InvoicePaperFit className="overflow-hidden">
+          <InvoiceDocument invoice={invoice} logoDataUrl={logo.data?.dataUrl} />
+        </InvoicePaperFit>
       </div>
     </div>
   );

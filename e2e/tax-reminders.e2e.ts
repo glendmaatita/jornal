@@ -31,7 +31,9 @@ test("sets up, reconciles, pays, files, and exports a tax agenda", async ({ page
 
   await page.goto(`/tax?company=${company.id}`)
   await expect(page.getByRole("heading", { name: "Aktifkan agenda pajak" })).toBeVisible()
-  await page.getByLabel("Kelayakan PPh Final UMKM").selectOption("ELIGIBLE")
+  await page.getByRole("combobox", { name: "Kelayakan PPh Final UMKM" }).click()
+  await page.getByRole("option", { name: "Sudah dikonfirmasi memenuhi syarat" }).click()
+  await expect(page.getByRole("combobox", { name: "Kelayakan PPh Final UMKM" })).toHaveText("Sudah dikonfirmasi memenuhi syarat")
   await page.getByLabel("PPh 21/26 pegawai").check()
   await page.getByRole("button", { name: "Aktifkan agenda" }).click()
   await expect(page.getByRole("heading", { name: "Agenda Pajak" })).toBeVisible()

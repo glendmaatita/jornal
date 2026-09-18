@@ -1,5 +1,5 @@
-import { ChevronDown } from "lucide-react"
 import { CompanyLogo } from "@/components/company-logo"
+import { SelectField } from "@/components/ui/select-field"
 
 import { activeCompany, loadCachedCompanies, multiCompanyCreationEnabled, persistCompanyDrafts, rememberCompanyCreationReturn, selectCompany } from "@/lib/companies"
 
@@ -7,36 +7,39 @@ export function CompanySwitcher() {
   const current = activeCompany()
   if (!current) return null
   const companies = loadCachedCompanies().filter((company) => company.status === "ACTIVE" || company.id === current.id)
+  const options = [
+    ...companies.map((company) => ({ value: company.id, label: company.name })),
+    ...(multiCompanyCreationEnabled ? [{ value: "__new", label: "+ Tambah company" }] : []),
+    { value: "__manage", label: "Kelola company" },
+  ]
+
+  const switchCompany = (next: string) => {
+    if (next === "__new") { rememberCompanyCreationReturn(); window.location.assign("/companies/new"); return }
+    if (next === "__manage") { window.location.assign("/companies"); return }
+    if (next === current.id) return
+    void persistCompanyDrafts(current).then(() => {
+      selectCompany(next)
+      const path = /^\/transactions\/[^/]+(?:\/edit)?$/.test(window.location.pathname) ? "/transactions" : window.location.pathname
+      const search = new URLSearchParams(window.location.search)
+      search.set("company", next)
+      window.location.assign(`${path}?${search.toString()}`)
+    }).catch(() => {
+      window.alert("Draft belum tersimpan dengan aman. Coba pindah company lagi.")
+    })
+  }
+
   return (
-    <label className="relative flex min-w-0 items-center gap-1.5">
-      <span className="sr-only">Company aktif</span>
+    <div className="flex min-w-0 items-center gap-1.5">
       <CompanyLogo company={current} className="size-7 shrink-0" />
-      <span className="relative min-w-0">
-        <select
-          value={current.id}
-          onChange={(event) => {
-            if (event.target.value === "__new") { rememberCompanyCreationReturn(); window.location.assign("/companies/new"); return }
-            if (event.target.value === "__manage") { window.location.assign("/companies"); return }
-            const nextCompanyId = event.target.value
-            void persistCompanyDrafts(current).then(() => {
-              selectCompany(nextCompanyId)
-              const path = /^\/transactions\/[^/]+(?:\/edit)?$/.test(window.location.pathname) ? "/transactions" : window.location.pathname
-              const search = new URLSearchParams(window.location.search)
-              search.set("company", nextCompanyId)
-              window.location.assign(`${path}?${search.toString()}`)
-            }).catch(() => {
-              event.target.value = current.id
-              window.alert("Draft belum tersimpan dengan aman. Coba pindah company lagi.")
-            })
-          }}
-          className="w-40 max-w-full appearance-none truncate rounded-full border border-border bg-white py-1.5 pr-9 pl-3 text-xs font-semibold"
-        >
-          {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-          {multiCompanyCreationEnabled && <option value="__new">+ Tambah company</option>}
-          <option value="__manage">Kelola company</option>
-        </select>
-        <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-      </span>
-    </label>
+      <SelectField
+        aria-label="Company aktif"
+        size="compact"
+        value={current.id}
+        onChange={switchCompany}
+        options={options}
+        className="w-40 max-w-full"
+        shellClassName="!min-h-8 !rounded-full !px-3 !py-0 text-xs font-semibold"
+      />
+    </div>
   )
 }

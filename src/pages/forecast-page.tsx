@@ -57,12 +57,12 @@ export function ForecastPage() {
         Safe To Spend
       </Link>
 
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl tracking-tight"><Telescope className="size-5 text-primary" aria-hidden="true" />Proyeksi Safe To Spend</h1>
-        <p className="text-xs text-muted-foreground">Perkiraan dana ke depan (§61, §63).</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-xl tracking-tight"><Telescope className="size-5 shrink-0 text-primary" aria-hidden="true" />Proyeksi Safe To Spend</h1>
+          <p className="text-xs text-muted-foreground">Perkiraan dana ke depan (§61, §63).</p>
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Horizon proyeksi">
           {HORIZONS.map((horizon) => (
             <button
               key={horizon.days}
@@ -100,8 +100,8 @@ export function ForecastPage() {
             <Row label={`Pengeluaran diharapkan (${baseline.flows.filter((flow) => flow.direction === "MONEY_OUT").length})`} value={`− ${formatRupiah(baseline.expectedOut)}`} />
             <Row label="Proyeksi dana pajak" value={`− ${formatRupiah(baseline.projectedTaxReserve)}`} />
             <Row label="Kewajiban tereservasi" value={`− ${formatRupiah(baseline.reservedObligations)}`} />
-            <div className="flex items-center justify-between border-t border-border/60 pt-2.5 font-semibold">
-              <span>Proyeksi Safe To Spend</span>
+            <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2.5 font-semibold">
+              <span className="min-w-0">Proyeksi Safe To Spend</span>
               <span className={cn("tabular-nums", baseline.projectedSafeToSpend < 0 && "text-destructive")}>
                 {formatRupiah(baseline.projectedSafeToSpend)}
               </span>

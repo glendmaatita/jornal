@@ -129,8 +129,8 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
                 </dd>
               </div>
             )}
-            <div className="flex gap-3 pt-1">
-              <dt className="w-36 shrink-0 text-muted-foreground">Perlakuan pajak</dt>
+            <div className="flex flex-col gap-1.5 pt-1 sm:flex-row sm:gap-3">
+              <dt className="text-muted-foreground sm:w-36 sm:shrink-0">Perlakuan pajak</dt>
               <dd className="flex-1 rounded-xl bg-secondary/60 p-3 text-xs leading-relaxed">
                 {TAX_TREATMENTS[transaction.taxClassification]}
               </dd>

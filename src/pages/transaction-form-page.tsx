@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
+import { SelectField } from "@/components/ui/select-field"
 import { TextField } from "@/components/ui/text-field"
 import { categoriesForKind, ALL_CATEGORIES } from "@/lib/categories"
 import {
@@ -372,12 +373,12 @@ export function TransactionFormPage() {
 
   return (
     <div className="pb-8">
-      <div className="mb-4 flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={() => window.history.back()}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={() => window.history.back()}>
           <ArrowLeft aria-hidden="true" />
           Kembali
         </Button>
-        <span className="text-right text-xs text-muted-foreground">{editing ? "Ubah transaksi" : "Transaksi baru"}<br />{activeCompany()?.name}</span>
+        <span className="min-w-0 text-right text-xs text-muted-foreground"><span className="block">{editing ? "Ubah transaksi" : "Transaksi baru"}</span><span className="block truncate">{activeCompany()?.name}</span></span>
       </div>
 
       {!editing && (
@@ -532,24 +533,20 @@ export function TransactionFormPage() {
           {mode === "transfer" ? (
             <div className="space-y-3 rounded-[10px] bg-[#f1f5fd] p-3">
               <p className="text-sm font-medium">Transfer antar rekening — tidak dihitung sebagai omzet atau biaya (§32)</p>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-[var(--body-text)]">Dari akun</span>
-                <select value={accountId ?? ""} onChange={(event) => setAccountId(event.target.value || null)} className="field-shell !min-h-[46px] w-full !py-0 text-sm">
-                  <option value="">Pilih akun</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>{account.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-[var(--body-text)]">Ke akun</span>
-                <select value={transferAccountId ?? ""} onChange={(event) => setTransferAccountId(event.target.value || null)} className="field-shell !min-h-[46px] w-full !py-0 text-sm">
-                  <option value="">Pilih akun</option>
-                  {accounts.filter((account) => account.id !== accountId).map((account) => (
-                    <option key={account.id} value={account.id}>{account.name}</option>
-                  ))}
-                </select>
-              </label>
+              <SelectField
+                label="Dari akun"
+                value={accountId ?? ""}
+                onChange={(value) => setAccountId(value || null)}
+                placeholder="Pilih akun"
+                options={accounts.map((account) => ({ value: account.id, label: account.name }))}
+              />
+              <SelectField
+                label="Ke akun"
+                value={transferAccountId ?? ""}
+                onChange={(value) => setTransferAccountId(value || null)}
+                placeholder="Pilih akun"
+                options={accounts.filter((account) => account.id !== accountId).map((account) => ({ value: account.id, label: account.name }))}
+              />
               {showErrors && transferError && <p className="field-error">{transferError}</p>}
             </div>
           ) : (
@@ -616,42 +613,32 @@ export function TransactionFormPage() {
             <div className="space-y-3 rounded-[10px] bg-[#f1f5fd] p-3">
               {mode !== "transfer" && !isReceivableCreation && !isReceivablePayment && (
                 <>
-                  <label className="block">
-                    <span className="field-label !mb-1 !text-xs">Kategori</span>
-                    <select
-                      value={effectiveCategoryId ?? ""}
-                      onChange={(event) => {
-                        setCategoryId(event.target.value || null)
-                        setClassificationOverride(null)
-                      }}
-                      className="field-shell !min-h-[46px] w-full !py-0 text-sm"
-                    >
-                      <option value="">Otomatis ({suggestion.categoryId ? ALL_CATEGORIES.find((category) => category.id === suggestion.categoryId)?.name : "tidak yakin"})</option>
-                      {categoryOptions.map((category) => (
-                        <option key={category.id} value={category.id}>{category.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="field-label !mb-1 !text-xs">Jenis klasifikasi</span>
-                    <select
+                  <SelectField
+                    label="Kategori"
+                    value={effectiveCategoryId ?? ""}
+                    onChange={(value) => {
+                      setCategoryId(value || null)
+                      setClassificationOverride(null)
+                    }}
+                    placeholder={`Otomatis (${suggestion.categoryId ? ALL_CATEGORIES.find((category) => category.id === suggestion.categoryId)?.name : "tidak yakin"})`}
+                    options={categoryOptions.map((category) => ({ value: category.id, label: category.name }))}
+                  />
+                  <div>
+                    <SelectField
+                      label="Jenis klasifikasi"
                       value={effectiveClassification}
-                      onChange={(event) => {
-                        const next = event.target.value as TransactionClassification
+                      onChange={(value) => {
+                        const next = value as TransactionClassification
                         setClassificationOverride(next)
                         if (next === "INTERNAL_TRANSFER") setMode("transfer")
                         else if (next === "OWNER_WITHDRAWAL") setMode("owner_withdrawal")
                         else if (mode === "owner_withdrawal") setMode("money_out")
                       }}
-                      className="field-shell !min-h-[46px] w-full !py-0 text-sm"
-                    >
-                      {(direction === "MONEY_IN"
+                      options={(direction === "MONEY_IN"
                         ? ["REVENUE", "CAPITAL_INJECTION", "LOAN_RECEIVED", "REFUND", "OTHER_INCOME", "INTERNAL_TRANSFER"]
                         : ["OPERATING_EXPENSE", "OWNER_WITHDRAWAL", "ASSET_PURCHASE", "LOAN_PAYMENT", "TAX_PAYMENT", "OTHER_OUTFLOW", "INTERNAL_TRANSFER"]
-                      ).map((classification) => (
-                        <option key={classification} value={classification}>{CLASSIFICATION_LABELS[classification as TransactionClassification]}</option>
-                      ))}
-                    </select>
+                      ).map((classification) => ({ value: classification, label: CLASSIFICATION_LABELS[classification as TransactionClassification] }))}
+                    />
                     {effectiveClassification === "INTERNAL_TRANSFER" && (
                       <button
                         type="button"
@@ -661,18 +648,16 @@ export function TransactionFormPage() {
                         Isi akun asal & tujuan transfer
                       </button>
                     )}
-                  </label>
+                  </div>
                 </>
               )}
-              <label className="block">
-                <span className="field-label !mb-1 !text-xs">Akun</span>
-                <select value={accountId ?? ""} onChange={(event) => setAccountId(event.target.value || null)} className="field-shell !min-h-[46px] w-full !py-0 text-sm">
-                  <option value="">Tanpa akun</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>{account.name}</option>
-                  ))}
-                </select>
-              </label>
+              <SelectField
+                label="Akun"
+                value={accountId ?? ""}
+                onChange={(value) => setAccountId(value || null)}
+                placeholder="Tanpa akun"
+                options={accounts.map((account) => ({ value: account.id, label: account.name }))}
+              />
               <TextField
                 label="Metode pembayaran"
                 icon={CreditCard}

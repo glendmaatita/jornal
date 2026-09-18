@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
+import { SelectField } from "@/components/ui/select-field"
 import { TextField } from "@/components/ui/text-field"
 import { categoriesForKind } from "@/lib/categories"
 import { formatGroupLabel, todayIsoDate } from "@/lib/format"
@@ -180,31 +181,26 @@ export function TransactionsPage() {
             <FilterChip active={direction === ""} onClick={() => setDirection("")}>Semua</FilterChip>
             <FilterChip active={direction === "MONEY_IN"} onClick={() => setDirection(direction === "MONEY_IN" ? "" : "MONEY_IN")}>Masuk</FilterChip>
             <FilterChip active={direction === "MONEY_OUT"} onClick={() => setDirection(direction === "MONEY_OUT" ? "" : "MONEY_OUT")}>Keluar</FilterChip>
-            <select
-              value={categoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
-              className="h-10 shrink-0 rounded-full border border-border bg-card px-3 text-sm"
+            <SelectField
               aria-label="Filter kategori"
-            >
-              <option value="">Semua kategori</option>
-              {categoriesForKind("income").map((category) => (
-                <option key={category.id} value={category.id}>{category.name}</option>
-              ))}
-              {categoriesForKind("expense").map((category) => (
-                <option key={category.id} value={category.id}>{category.name}</option>
-              ))}
-            </select>
-            <select
-              value={classification}
-              onChange={(event) => setClassification(event.target.value as TransactionClassification | "")}
-              className="h-10 shrink-0 rounded-full border border-border bg-card px-3 text-sm"
+              size="compact"
+              value={categoryId}
+              onChange={setCategoryId}
+              placeholder="Semua kategori"
+              options={[...categoriesForKind("income"), ...categoriesForKind("expense")].map((category) => ({ value: category.id, label: category.name }))}
+              className="shrink-0"
+              shellClassName="!rounded-full"
+            />
+            <SelectField
               aria-label="Filter klasifikasi"
-            >
-              <option value="">Semua klasifikasi</option>
-              {Object.entries(CLASSIFICATION_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
+              size="compact"
+              value={classification}
+              onChange={(value) => setClassification(value as TransactionClassification | "")}
+              placeholder="Semua klasifikasi"
+              options={Object.entries(CLASSIFICATION_LABELS).map(([value, label]) => ({ value, label }))}
+              className="shrink-0"
+              shellClassName="!rounded-full"
+            />
             <FilterChip active={dateRange !== null} onClick={() => setDateRange(dateRange ? null : { start: "", end: "" })}>
               Tanggal
             </FilterChip>
