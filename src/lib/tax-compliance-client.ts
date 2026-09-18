@@ -1,6 +1,7 @@
 import { pb, pocketBaseConfigured } from "./pb"
 import { mirrorState, restoreState } from "./local-db"
 import { reconcileServerTransaction } from "./store"
+import { acceptServerTransactionRevision } from "./pocketbase-sync"
 import { getCompanyScope, getDataScope } from "./store"
 import type { Transaction } from "./types"
 import type {
@@ -213,8 +214,11 @@ export async function createTaxSettlement(input: {
   allocations: Array<{ obligationId: string; amount: number }>
   ledgerTransaction?: { id: string; companyId: string; description: string; accountId: string | null; paymentMethod?: string; notes?: string }
 }) {
-  const result = await send<Record<string, unknown> & { ledgerTransaction?: Transaction }>("/api/jornal/tax/settlements", { method: "POST", body: input })
-  if (result.ledgerTransaction) reconcileServerTransaction(result.ledgerTransaction)
+  const result = await send<Record<string, unknown> & { ledgerTransaction?: Transaction; ledgerRevision?: number }>("/api/jornal/tax/settlements", { method: "POST", body: input })
+  if (result.ledgerTransaction) {
+    reconcileServerTransaction(result.ledgerTransaction)
+    if (result.ledgerRevision) acceptServerTransactionRevision(result.ledgerTransaction.id, result.ledgerRevision)
+  }
   return result
 }
 

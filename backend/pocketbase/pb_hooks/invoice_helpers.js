@@ -190,7 +190,7 @@ function ensureSettings(tx, tenantId, companyId, epoch, senderName) {
   try { settings = tx.findFirstRecordByFilter("invoice_settings", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch}", { tenant: tenantId, company: companyId, epoch }) } catch {
     const units = tx.findCollectionByNameOrId("invoice_units")
     DEFAULT_UNITS.forEach((label, index) => tx.save(new Record(units, { tenant_id: tenantId, company_id: companyId, data_epoch: epoch, label, normalized_label: normalize(label), status: "ACTIVE", sort_order: index, revision: 1 })))
-    settings = new Record(tx.findCollectionByNameOrId("invoice_settings"), { tenant_id: tenantId, company_id: companyId, data_epoch: epoch, sender_name: senderName, default_due_days: 7, numbering_prefix: "", numbering_padding: 3, numbering_start: 1, payment_instructions: [], reminder_enabled: true, reminder_timezone: "Asia/Jakarta", reminder_hour: 9, reminder_repeat_days: 7, schedule_version: 1, revision: 1 })
+    settings = new Record(tx.findCollectionByNameOrId("invoice_settings"), { tenant_id: tenantId, company_id: companyId, data_epoch: epoch, sender_name: senderName, default_due_days: 1, numbering_prefix: "", numbering_padding: 3, numbering_start: 1, payment_instructions: [], reminder_enabled: true, reminder_timezone: "Asia/Jakarta", reminder_hour: 9, reminder_repeat_days: 7, schedule_version: 1, revision: 1 })
     tx.save(settings)
   }
   return settings

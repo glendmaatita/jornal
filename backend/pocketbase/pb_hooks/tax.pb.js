@@ -547,7 +547,12 @@ routerAdd("POST", "/api/jornal/tax/settlements", (event) => {
         }
       }
       for (const allocated of obligations) obligationResponses.push(helpers.obligationResponse(tx.findRecordById("tax_obligations", allocated.record.id)))
-      response = { settlement: helpers.recordJson(settlement), obligations: obligationResponses, ledgerTransaction: ledgerPayload }
+      let ledgerRevision = null
+      if (transactionId && companyId) {
+        const ledgerRecord = tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && entity = 'transactions' && app_id = {:id}", { tenant: tenantId, company: companyId, id: transactionId })
+        ledgerRevision = ledgerRecord.getInt("revision")
+      }
+      response = { settlement: helpers.recordJson(settlement), obligations: obligationResponses, ledgerTransaction: ledgerPayload, ledgerRevision }
       helpers.audit(tx, tenantId, subject.id, "tax-settlement-created", command.key, "tax_settlement", settlement.id, String(body.reason || ""), null, response)
       helpers.saveCommand(tx, tenantId, "tax-settlement", command, 201, response)
     })

@@ -115,6 +115,7 @@ export function DateField({
           disabled={disabled}
           onClick={toggleOpen}
           className="flex w-full items-center justify-between gap-2 text-left"
+          aria-label={label}
           aria-haspopup="dialog"
           aria-expanded={open}
         >

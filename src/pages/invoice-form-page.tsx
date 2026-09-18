@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DateField } from "@/components/ui/date-field";
@@ -42,7 +43,7 @@ function initialDraft(
   const fallback: InvoiceDraftInput = {
     customerId: initialCustomerId || "",
     issueDate: today,
-    dueDate: plusDays(today, 7),
+    dueDate: plusDays(today, 1),
     timezone: "Asia/Jakarta",
     items: [newItem()],
     discountAmount: 0,
@@ -84,7 +85,7 @@ export function InvoiceFormPage({
     Array<{ id: string; name: string }>
   >([]);
   const [units, setUnits] = useState<string[]>(["pcs", "Lusin", "Kodi"]);
-  const [dueDays, setDueDays] = useState(7);
+  const [dueDays, setDueDays] = useState(1);
   const [form, setForm] = useState<InvoiceDraftInput>(initial.form);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -245,11 +246,16 @@ export function InvoiceFormPage({
       {form.items.map((item, index) => (
         <Card key={item.id}>
           <CardContent className="grid gap-3 p-4">
-            <div className="flex justify-between">
+            <div className="flex items-center justify-between">
               <strong>Item {index + 1}</strong>
               {form.items.length > 1 && (
-                <button
-                  className="text-xs text-red-700"
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-11 text-red-700 hover:bg-red-50 hover:text-red-700"
+                  aria-label={`Hapus item ${index + 1}`}
+                  title={`Hapus item ${index + 1}`}
                   onClick={() =>
                     setForm((current) => ({
                       ...current,
@@ -257,8 +263,8 @@ export function InvoiceFormPage({
                     }))
                   }
                 >
-                  Hapus
-                </button>
+                  <Trash2 className="size-5" aria-hidden="true" />
+                </Button>
               )}
             </div>
             <TextField
@@ -277,10 +283,10 @@ export function InvoiceFormPage({
                   })
                 }
               />
-              <label className="text-xs font-semibold">
-                Satuan
+              <label className="block">
+                <span className="field-label">Satuan</span>
                 <select
-                  className="mt-1 h-12 w-full rounded-xl border bg-white px-2"
+                  className="field-shell !min-h-[50px] w-full !py-0 text-[15px]"
                   value={item.unitLabel}
                   onChange={(event) =>
                     setItem(index, { unitLabel: event.target.value })

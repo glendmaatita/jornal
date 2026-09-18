@@ -5,6 +5,7 @@ import {
   reconcileServerTransaction,
   reconcileServerTransactionDeletion,
 } from "./store";
+import { acceptServerTransactionRevision } from "./pocketbase-sync";
 import type {
   Invoice,
   InvoiceCustomer,
@@ -328,6 +329,7 @@ export async function markInvoicePaid(
     invoice: Invoice;
     payment: InvoicePayment;
     ledgerTransaction: Transaction;
+    ledgerRevision: number;
   }>(
     `/api/jornal/invoicing/invoices/${encodeURIComponent(invoice.id)}/mark-paid`,
     {
@@ -343,6 +345,7 @@ export async function markInvoicePaid(
     },
   );
   reconcileServerTransaction(result.ledgerTransaction);
+  acceptServerTransactionRevision(result.ledgerTransaction.id, result.ledgerRevision);
   return result;
 }
 export async function correctInvoicePayment(
@@ -353,6 +356,7 @@ export async function correctInvoicePayment(
     invoice: Invoice;
     payment: InvoicePayment;
     ledgerTransaction: Transaction;
+    ledgerRevision: number;
     ledgerDeleted: boolean;
   }>(
     `/api/jornal/invoicing/payments/${encodeURIComponent(payment.id)}/correct`,
@@ -369,6 +373,7 @@ export async function correctInvoicePayment(
   if (result.ledgerDeleted)
     reconcileServerTransactionDeletion(result.ledgerTransaction);
   else reconcileServerTransaction(result.ledgerTransaction);
+  acceptServerTransactionRevision(result.ledgerTransaction.id, result.ledgerRevision);
   return result;
 }
 

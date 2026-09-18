@@ -165,6 +165,15 @@ function saveBaseRevision(scope: CompanyScope, entity: EntityName, appId: string
   void mirrorState(revisionKey(scope), revisions).catch(() => undefined)
 }
 
+/** Register a transaction already committed by an atomic backend command.
+ * The local reconciliation may enqueue its containing array, but the next
+ * sync must treat this exact server revision as its base instead of reporting
+ * a false cross-device conflict. */
+export function acceptServerTransactionRevision(appId: string, revision: number, scope = companyScope()) {
+  if (!appId || !Number.isInteger(revision) || revision < 1) return
+  saveBaseRevision(scope, "transactions", appId, revision)
+}
+
 export function getSyncStatus() {
   return runtimeFor().syncStatus
 }
