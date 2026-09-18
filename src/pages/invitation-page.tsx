@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
+import { LogIn, MailOpen, RefreshCw, UserRoundX } from "lucide-react"
+
 import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
 import { loadCompanies, selectCompany } from "@/lib/companies"
@@ -32,5 +34,5 @@ export function InvitationPage({ publicId }: { publicId: string }) {
     void run()
     return () => { cancelled = true }
   }, [finish])
-  return <main className="grid min-h-dvh place-items-center bg-[var(--background)] px-5"><div className="w-full max-w-sm space-y-4 text-center"><BrandMark className="mx-auto size-16" /><h1 className="text-xl tracking-tight">Undangan company Jornal</h1><p className="text-sm text-muted-foreground" role="status">{message}</p>{!pb.authStore.isValid ? <Button className="w-full" disabled={pending} onClick={() => { setPending(true); void loginWithGoogle().then(finish).catch(() => setMessage("Login Google gagal. Coba lagi.")).finally(() => setPending(false)) }}>{pending ? "Memeriksa…" : "Masuk dengan Google"}</Button> : <div className="space-y-2"><Button className="w-full" disabled={pending} onClick={() => { setPending(true); void finish().finally(() => setPending(false)) }}>{pending ? "Memeriksa…" : "Periksa lagi"}</Button><Button variant="outline" className="w-full" onClick={() => { logout(); window.location.reload() }}>Gunakan akun lain</Button></div>}</div></main>
+  return <main className="grid min-h-dvh place-items-center bg-[var(--background)] px-5"><div className="w-full max-w-sm space-y-4 text-center"><BrandMark className="mx-auto size-16" /><h1 className="flex items-center justify-center gap-2 text-xl tracking-tight"><MailOpen className="size-5 text-primary" aria-hidden="true" />Undangan company Jornal</h1><p className="text-sm text-muted-foreground" role="status">{message}</p>{!pb.authStore.isValid ? <Button className="w-full" disabled={pending} onClick={() => { setPending(true); void loginWithGoogle().then(finish).catch(() => setMessage("Login Google gagal. Coba lagi.")).finally(() => setPending(false)) }}><LogIn aria-hidden="true" />{pending ? "Memeriksa…" : "Masuk dengan Google"}</Button> : <div className="space-y-2"><Button className="w-full" disabled={pending} onClick={() => { setPending(true); void finish().finally(() => setPending(false)) }}><RefreshCw aria-hidden="true" />{pending ? "Memeriksa…" : "Periksa lagi"}</Button><Button variant="outline" className="w-full" onClick={() => { logout(); window.location.reload() }}><UserRoundX aria-hidden="true" />Gunakan akun lain</Button></div>}</div></main>
 }

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ArrowRight, Check, Wallet } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, Landmark, Scale, Store, Wallet } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { DateField } from "@/components/ui/date-field"
@@ -156,7 +156,7 @@ export function OnboardingPage() {
 
       {step === 0 && (
         <section>
-          <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">Selamat datang</p>
+          <p className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.2em] text-primary uppercase"><Store className="size-3.5" aria-hidden="true" />Selamat datang</p>
           <h1 className="mt-2 text-3xl tracking-tight">Ceritakan bisnis Anda</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Cukup catat uang masuk dan keluar — sisanya (klasifikasi, omzet, pajak) dihitung sistem.
@@ -164,6 +164,7 @@ export function OnboardingPage() {
           <div className="mt-6 space-y-4">
             <TextField
               label="Nama bisnis"
+              icon={Store}
               value={businessName}
               onChange={setBusinessName}
               placeholder="Kedai Kopi Senja"
@@ -201,7 +202,7 @@ export function OnboardingPage() {
 
       {step === 1 && (
         <section>
-          <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">Profil pajak</p>
+          <p className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.2em] text-primary uppercase"><Scale className="size-3.5" aria-hidden="true" />Profil pajak</p>
           <h1 className="mt-2 text-3xl tracking-tight">Skema perhitungan pajak</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Tax engine memakai aturan berversi — perubahan regulasi tidak mengubah hitungan historis Anda.
@@ -239,6 +240,7 @@ export function OnboardingPage() {
           </label>
           <div className="mt-7 flex gap-2">
             <Button variant="outline" size="lg" className="flex-1" onClick={() => setStep(0)}>
+              <ArrowLeft aria-hidden="true" />
               Kembali
             </Button>
             <Button className="flex-1" size="lg" onClick={() => setStep(2)}>
@@ -251,7 +253,7 @@ export function OnboardingPage() {
 
       {step === 2 && (
         <section>
-          <p className="text-xs font-semibold tracking-[0.2em] text-primary uppercase">Saldo awal</p>
+          <p className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.2em] text-primary uppercase"><Landmark className="size-3.5" aria-hidden="true" />Saldo awal</p>
           <h1 className="mt-2 text-3xl tracking-tight">Dari mana uang Anda sekarang?</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Saldo awal adalah titik awal — <strong>tidak dihitung sebagai omzet</strong>.
@@ -294,6 +296,7 @@ export function OnboardingPage() {
 
           <div className="mt-7 flex gap-2">
             <Button variant="outline" size="lg" className="flex-1" onClick={() => setStep(1)}>
+              <ArrowLeft aria-hidden="true" />
               Kembali
             </Button>
             <Button className="flex-1" size="lg" onClick={() => void finish()} disabled={saving}>

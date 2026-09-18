@@ -1,10 +1,13 @@
 import { useId, useState } from "react"
+import type { LucideIcon } from "lucide-react"
 
 import { FieldShell } from "@/components/ui/field-shell"
 import { cn } from "@/lib/utils"
 
 export interface TextFieldProps {
   label?: string
+  /** Leading icon rendered inside the field chrome */
+  icon?: LucideIcon
   value: string
   onChange: (value: string) => void
   onBlur?: () => void
@@ -36,6 +39,7 @@ function formatAmount(raw: string): string {
  */
 export function TextField({
   label,
+  icon,
   value,
   onChange,
   onBlur,
@@ -68,6 +72,7 @@ export function TextField({
   return (
     <FieldShell
       label={label}
+      icon={icon}
       error={error}
       hint={hint}
       required={required}

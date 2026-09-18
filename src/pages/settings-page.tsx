@@ -1,7 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Plus, Trash2 } from "lucide-react";
+import {
+  Archive,
+  BellOff,
+  BellRing,
+  Building2,
+  Calendar,
+  ChevronRight,
+  Clock,
+  Download,
+  FileCog,
+  Gauge,
+  LayoutTemplate,
+  Plus,
+  RefreshCw,
+  Save,
+  Store,
+  Trash2,
+  Upload,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBrain } from "@fortawesome/free-solid-svg-icons/faBrain";
 import { faBuilding } from "@fortawesome/free-solid-svg-icons/faBuilding";
@@ -202,7 +222,10 @@ export function SettingsPage() {
     return (
       <div className="space-y-4 pb-8">
         <div>
-          <h1 className="text-xl tracking-tight">Pengaturan</h1>
+          <h1 className="flex items-center gap-2 text-xl tracking-tight">
+            <Archive className="size-5 text-primary" aria-hidden="true" />
+            Pengaturan
+          </h1>
           <p className="text-sm text-muted-foreground">
             Company arsip hanya dapat dilihat dan diekspor.
           </p>
@@ -211,9 +234,11 @@ export function SettingsPage() {
           <CardContent className="space-y-3 p-5">
             <Link
               to="/companies"
-              className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+              className="flex items-center gap-2.5 rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
             >
-              Kelola atau pulihkan company
+              <Building2 className="size-4" aria-hidden="true" />
+              <span className="flex-1">Kelola atau pulihkan company</span>
+              <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
             </Link>
             <Button
               type="button"
@@ -221,6 +246,7 @@ export function SettingsPage() {
               className="w-full"
               onClick={exportData}
             >
+              <Download aria-hidden="true" />
               Unduh backup {company.name}
             </Button>
             {dataMessage && (
@@ -354,38 +380,49 @@ export function SettingsPage() {
           </h2>
           <Link
             to="/companies"
-            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+            className="flex items-center gap-2.5 rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
           >
-            Kelola dan tambah company
+            <Building2 className="size-4" aria-hidden="true" />
+            <span className="flex-1">Kelola dan tambah company</span>
+            <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
           </Link>
           <Link
             to="/settings/invoice"
-            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+            className="flex items-center gap-2.5 rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
           >
-            Pengaturan Invoice
+            <FileCog className="size-4" aria-hidden="true" />
+            <span className="flex-1">Pengaturan Invoice</span>
+            <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
           </Link>
           {company && <Link
             to="/companies/$companyId/team"
             params={{ companyId: company.id }}
-            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+            className="flex items-center gap-2.5 rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
           >
-            Tim & undangan
+            <Users className="size-4" aria-hidden="true" />
+            <span className="flex-1">Tim & undangan</span>
+            <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
           </Link>}
           <Link
             to="/sync"
-            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+            className="flex items-center gap-2.5 rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
           >
-            Status sync & pemulihan konflik
+            <RefreshCw className="size-4" aria-hidden="true" />
+            <span className="flex-1">Status sync & pemulihan konflik</span>
+            <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
           </Link>
           <Link
             to="/templates"
-            className="block rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
+            className="flex items-center gap-2.5 rounded-xl bg-secondary/60 px-3 py-2.5 text-sm font-semibold text-[var(--link)]"
           >
-            Template transaksi
+            <LayoutTemplate className="size-4" aria-hidden="true" />
+            <span className="flex-1">Template transaksi</span>
+            <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
           </Link>
           {company && <CompanyLogoEditor company={company} />}
           <TextField
             label="Nama bisnis"
+            icon={Store}
             value={nameDraft ?? company?.name ?? profile.businessName}
             onChange={(value) => setNameDraft(value)}
           />
@@ -438,6 +475,7 @@ export function SettingsPage() {
             />
             <TextField
               label="Tahun fiskal"
+              icon={Calendar}
               type="numeric"
               value={fiscalYearDraft ?? String(profile.fiscalYear)}
               onChange={(value) => setFiscalYearDraft(value)}
@@ -462,7 +500,10 @@ export function SettingsPage() {
 
       <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="text-lg tracking-tight">Notifikasi & PWA</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight">
+            <BellRing className="size-4 text-primary" aria-hidden="true" />
+            Notifikasi & PWA
+          </h2>
           <p className="text-xs text-muted-foreground">
             Pilih jenis notifikasi untuk perangkat ini. Setiap notifikasi selalu
             membuka layar review.
@@ -509,6 +550,7 @@ export function SettingsPage() {
           <div className="grid grid-cols-2 gap-3">
             <TextField
               label="Mode tenang mulai"
+              icon={Clock}
               type="numeric"
               value={String(pushPreferences.quietStartHour)}
               onChange={(value) =>
@@ -520,6 +562,7 @@ export function SettingsPage() {
             />
             <TextField
               label="Mode tenang selesai"
+              icon={Clock}
               type="numeric"
               value={String(pushPreferences.quietEndHour)}
               onChange={(value) =>
@@ -542,6 +585,7 @@ export function SettingsPage() {
                   .catch((error) => setDataMessage(String(error)))
               }
             >
+              <BellRing aria-hidden="true" />
               Aktifkan notifikasi
             </Button>
             <Button
@@ -552,6 +596,7 @@ export function SettingsPage() {
                 )
               }
             >
+              <BellOff aria-hidden="true" />
               Nonaktifkan
             </Button>
           </div>
@@ -643,6 +688,7 @@ export function SettingsPage() {
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <TextField
                   label="Nama akun"
+                  icon={Wallet}
                   value={newAccount.name}
                   onChange={(name) =>
                     setNewAccount((current) => ({ ...current, name }))
@@ -735,11 +781,13 @@ export function SettingsPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
               label="Auto-accept (mis. 0.90)"
+              icon={Gauge}
               value={autoAccept ?? String(settings.autoAccept)}
               onChange={(value) => setAutoAccept(value)}
             />
             <TextField
               label="Butuh review (mis. 0.70)"
+              icon={Gauge}
               value={needsReview ?? String(settings.needsReview)}
               onChange={(value) => setNeedsReview(value)}
             />
@@ -880,6 +928,7 @@ export function SettingsPage() {
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button type="button" variant="outline" onClick={exportData}>
+              <Download aria-hidden="true" />
               Unduh backup
             </Button>
             <Button
@@ -887,6 +936,7 @@ export function SettingsPage() {
               variant="outline"
               onClick={() => importInputRef.current?.click()}
             >
+              <Upload aria-hidden="true" />
               Pulihkan backup
             </Button>
           </div>
@@ -947,6 +997,7 @@ export function SettingsPage() {
           disabled={saving}
           onClick={() => void saveAllChanges()}
         >
+          <Save aria-hidden="true" />
           {saving
             ? "Menyimpan…"
             : saveComplete

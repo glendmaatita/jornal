@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { AlertTriangle, Sparkles } from "lucide-react"
+import { AlertTriangle, Archive, ArrowDownLeft, ArrowLeft, ArrowUpRight, ExternalLink, FileText, Link2, MessageSquare, PenLine, ScanSearch, Sparkles, Undo2, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
+import { SelectField } from "@/components/ui/select-field"
 import { TextField } from "@/components/ui/text-field"
 import { archiveDocument, confirmDocument, extractDocument, getAiJob, getDocument, listDocumentInvoiceCandidates, unlinkDocument } from "@/lib/document-client"
 import type { DocumentExtraction } from "@/lib/document-types"
@@ -33,24 +34,24 @@ export function DocumentReviewPage({ documentId }: { documentId: string }) {
   const confirm = async () => { if (!parsedAmount || !review.transactionDate || !review.description.trim()) { setMessage("Nominal, tanggal, dan deskripsi wajib diperiksa sebelum disimpan."); return }; const invoice = invoiceCandidates.data?.items.find((item) => item.id === invoiceId); setBusy(true); setMessage(""); try { await confirmDocument(document, invoice ? { mode: "MATCH_INVOICE", invoiceId: invoice.id, expectedInvoiceRevision: invoice.revision, direction: "MONEY_IN", amount: parsedAmount, transactionDate: review.transactionDate, description: review.description.trim() } : { direction: review.direction, amount: parsedAmount, transactionDate: review.transactionDate, description: review.description.trim() }); setMessage(invoice ? "Pembayaran invoice dan transaksi tersimpan." : "Transaksi tersimpan dan dokumen sudah ditautkan."); await detail.refetch() } catch (cause) { setMessage(String(cause)) } finally { setBusy(false) } }
 
   return <div className="space-y-4 pb-8">
-    <header><h1 className="text-2xl">Review Dokumen</h1><p className="text-sm text-muted-foreground">{document.filename} · {document.status}</p></header>
+    <header><h1 className="flex items-center gap-2 text-2xl"><ScanSearch className="size-5 text-primary" aria-hidden="true" />Review Dokumen</h1><p className="text-sm text-muted-foreground">{document.filename} · {document.status}</p></header>
     {message && <p className="rounded-xl bg-white p-3 text-sm">{message}</p>}
-    {imageUrl ? <img src={imageUrl} alt="Dokumen transaksi" className="max-h-[55vh] w-full rounded-xl bg-white object-contain" /> : <Card><CardContent className="p-8 text-center">Preview PDF belum tersedia; file tetap tersimpan.</CardContent></Card>}
+    {imageUrl ? <img src={imageUrl} alt="Dokumen transaksi" className="max-h-[55vh] w-full rounded-xl bg-white object-contain" /> : <Card><CardContent className="p-8 text-center"><FileText className="mx-auto mb-2 size-7 text-muted-foreground" aria-hidden="true" />Preview PDF belum tersedia; file tetap tersimpan.</CardContent></Card>}
     <Button className="w-full" disabled={busy || job?.status === "RUNNING" || job?.status === "QUEUED" || document.status === "LINKED"} onClick={() => void scan()}><Sparkles />{job?.status === "RUNNING" || job?.status === "QUEUED" ? "AI sedang membaca…" : "Baca dengan AI"}</Button>
     {job?.errorCode && <p className="text-sm text-red-700">AI gagal: {job.errorCode}. Input manual tetap tersedia.</p>}
     {document.status !== "LINKED" && <Card><CardContent className="grid gap-3 p-4">
-      <h2 className="font-semibold">{extraction ? "Usulan ekstraksi — wajib diperiksa" : "Isi transaksi secara manual"}</h2>
+      <h2 className="flex items-center gap-2 font-semibold">{extraction ? <Sparkles className="size-4 text-primary" aria-hidden="true" /> : <PenLine className="size-4 text-primary" aria-hidden="true" />}{extraction ? "Usulan ekstraksi — wajib diperiksa" : "Isi transaksi secara manual"}</h2>
       {extraction && <p className="text-xs text-muted-foreground">Jenis: {extraction.documentType}. Nilai berikut dapat diedit sebelum disimpan.</p>}
       <TextField label="Nominal" type="amount" value={review.amount} onChange={(amount) => setReview({ ...review, amount })} />
       <DateField label="Tanggal transaksi" value={review.transactionDate} onChange={(transactionDate) => setReview({ ...review, transactionDate })} />
-      <label className="grid gap-1 text-sm font-semibold">Arah<select className="h-12 rounded-xl border bg-white px-3" value={review.direction} onChange={(event) => setReview({ ...review, direction: event.target.value as "MONEY_IN" | "MONEY_OUT" })}><option value="MONEY_OUT">Uang keluar</option><option value="MONEY_IN">Uang masuk</option></select></label>
-      <TextField label="Deskripsi" value={review.description} onChange={(description) => setReview({ ...review, description })} />
-      {invoiceCandidates.data?.items.length ? <label className="grid gap-1 text-sm font-semibold">Cocokkan invoice (opsional)<select className="h-12 rounded-xl border bg-white px-3" value={invoiceId} onChange={(event) => setInvoiceId(event.target.value)}><option value="">Simpan sebagai transaksi biasa</option>{invoiceCandidates.data.items.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoiceNumber} · {String(invoice.customerSnapshot?.name || "Pelanggan")}</option>)}</select></label> : null}
+      <SelectField label="Arah" icon={review.direction === "MONEY_IN" ? ArrowDownLeft : ArrowUpRight} value={review.direction} onChange={(direction) => setReview({ ...review, direction: direction as "MONEY_IN" | "MONEY_OUT" })} options={[{ value: "MONEY_OUT", label: "Uang keluar" }, { value: "MONEY_IN", label: "Uang masuk" }]} />
+      <TextField label="Deskripsi" icon={PenLine} value={review.description} onChange={(description) => setReview({ ...review, description })} />
+      {invoiceCandidates.data?.items.length ? <SelectField label="Cocokkan invoice (opsional)" icon={Link2} value={invoiceId} onChange={setInvoiceId} placeholder="Simpan sebagai transaksi biasa" options={invoiceCandidates.data.items.map((invoice) => ({ value: invoice.id, label: `${invoice.invoiceNumber} · ${String(invoice.customerSnapshot?.name || "Pelanggan")}` }))} /> : null}
       {extraction && extraction.uncertainFields.length > 0 && <p className="flex gap-2 rounded-lg bg-amber-50 p-2 text-amber-900"><AlertTriangle className="size-4" />Periksa: {extraction.uncertainFields.join(", ")}</p>}
-      <Button className="mt-2" disabled={busy} onClick={() => void confirm()}>{invoiceId ? "Cocokkan & lunasi invoice" : "Simpan transaksi"}</Button>
+      <Button className="mt-2" disabled={busy} onClick={() => void confirm()}>{invoiceId ? <Link2 aria-hidden="true" /> : <Save aria-hidden="true" />}{invoiceId ? "Cocokkan & lunasi invoice" : "Simpan transaksi"}</Button>
     </CardContent></Card>}
-    {document.status === "LINKED" && <Card><CardContent className="grid gap-3 p-4"><p className="font-semibold">Dokumen sudah tertaut ke transaksi</p>{detail.data.linkedInvoiceId ? <Link to="/invoices/$invoiceId" params={{ invoiceId: detail.data.linkedInvoiceId }} className="text-sm font-semibold text-[var(--link)]">Buka invoice terkait untuk koreksi pembayaran</Link> : <><input className="rounded-xl border px-3 py-2 text-sm" value={unlinkReason} onChange={(event) => setUnlinkReason(event.target.value)} placeholder="Alasan koreksi" /><Button variant="outline" disabled={busy || !unlinkReason.trim()} onClick={() => void (async () => { setBusy(true); try { await unlinkDocument(document, unlinkReason); setMessage("Tautan dokumen dikoreksi."); await detail.refetch() } catch (cause) { setMessage(String(cause)) } finally { setBusy(false) } })()}>Koreksi tautan</Button></>}</CardContent></Card>}
-    <Button variant="ghost" disabled={document.status === "LINKED"} onClick={() => void archiveDocument(document).then(() => history.back())}>Arsipkan dokumen</Button>
-    <Link to="/inbox" className="block text-center text-sm font-semibold text-[var(--link)]">Kembali ke inbox</Link>
+    {document.status === "LINKED" && <Card><CardContent className="grid gap-3 p-4"><p className="flex items-center gap-2 font-semibold"><Link2 className="size-4 text-emerald-600" aria-hidden="true" />Dokumen sudah tertaut ke transaksi</p>{detail.data.linkedInvoiceId ? <Link to="/invoices/$invoiceId" params={{ invoiceId: detail.data.linkedInvoiceId }} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--link)]"><ExternalLink className="size-4" aria-hidden="true" />Buka invoice terkait untuk koreksi pembayaran</Link> : <><TextField label="Alasan koreksi" icon={MessageSquare} value={unlinkReason} onChange={setUnlinkReason} placeholder="Alasan koreksi" /><Button variant="outline" disabled={busy || !unlinkReason.trim()} onClick={() => void (async () => { setBusy(true); try { await unlinkDocument(document, unlinkReason); setMessage("Tautan dokumen dikoreksi."); await detail.refetch() } catch (cause) { setMessage(String(cause)) } finally { setBusy(false) } })()}><Undo2 aria-hidden="true" />Koreksi tautan</Button></>}</CardContent></Card>}
+    <Button variant="ghost" disabled={document.status === "LINKED"} onClick={() => void archiveDocument(document).then(() => history.back())}><Archive aria-hidden="true" />Arsipkan dokumen</Button>
+    <Link to="/inbox" className="flex items-center justify-center gap-1.5 text-center text-sm font-semibold text-[var(--link)]"><ArrowLeft className="size-4" aria-hidden="true" />Kembali ke inbox</Link>
   </div>
 }

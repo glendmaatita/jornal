@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { MailPlus, RefreshCw, Trash2, UserMinus, Users } from "lucide-react"
+import { ArrowLeft, Hourglass, Mail, MailPlus, RefreshCw, Trash2, UserMinus, Users } from "lucide-react"
 
 import { PageLoading } from "@/components/loading-screen"
 import { Button } from "@/components/ui/button"
@@ -48,13 +48,13 @@ export function CompanyTeamPage() {
         <p className="text-sm text-muted-foreground">Semua anggota memiliki akses penuh yang sama, termasuk transaksi, pengaturan, dan mengundang anggota lain.</p>
       </div>
       <Card><CardContent className="space-y-3 p-5">
-        <h2 className="text-lg tracking-tight">Undang anggota</h2>
-        <TextField label="Email akun Google" value={email} onChange={setEmail} placeholder="nama@perusahaan.com" disabled={Boolean(pending)} />
+        <h2 className="flex items-center gap-2 text-lg tracking-tight"><MailPlus className="size-4 text-primary" aria-hidden="true" />Undang anggota</h2>
+        <TextField label="Email akun Google" icon={Mail} value={email} onChange={setEmail} placeholder="nama@perusahaan.com" disabled={Boolean(pending)} />
         <Button disabled={!email.trim() || Boolean(pending)} onClick={() => void run("invite", () => inviteTeamMember(company.id, email).then(() => setEmail("")), "Undangan dibuat. Email akan segera dikirim.")}><MailPlus className="size-4" aria-hidden="true" />{pending === "invite" ? "Mengirim…" : "Kirim undangan"}</Button>
       </CardContent></Card>
 
       <Card><CardContent className="space-y-3 p-5">
-        <h2 className="text-lg tracking-tight">Anggota ({activeMembers.length})</h2>
+        <h2 className="flex items-center gap-2 text-lg tracking-tight"><Users className="size-4 text-primary" aria-hidden="true" />Anggota ({activeMembers.length})</h2>
         <div className="divide-y divide-border/60">
           {activeMembers.map((member: TeamMember) => <div key={member.userId} className="flex items-center gap-3 py-3">
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{member.name}</p><p className="truncate text-xs text-muted-foreground">{member.email}{member.userId === user?.id ? " · Anda" : ""}</p></div>
@@ -64,7 +64,7 @@ export function CompanyTeamPage() {
       </CardContent></Card>
 
       <Card><CardContent className="space-y-3 p-5">
-        <h2 className="text-lg tracking-tight">Undangan aktif ({pendingInvitations.length})</h2>
+        <h2 className="flex items-center gap-2 text-lg tracking-tight"><Hourglass className="size-4 text-primary" aria-hidden="true" />Undangan aktif ({pendingInvitations.length})</h2>
         {pendingInvitations.length === 0 && <p className="text-sm text-muted-foreground">Tidak ada undangan aktif.</p>}
         {pendingInvitations.map((invitation: TeamInvitation) => <div key={invitation.id} className="rounded-xl border border-border p-3">
           <p className="break-all text-sm font-semibold">{invitation.email}</p>
@@ -74,7 +74,7 @@ export function CompanyTeamPage() {
         {history.length > 0 && <details><summary className="cursor-pointer text-sm font-semibold">Riwayat undangan ({history.length})</summary><div className="mt-2 space-y-2">{history.map((item) => <p key={item.id} className="text-xs text-muted-foreground">{item.email} · {item.status}</p>)}</div></details>}
       </CardContent></Card>
       {status && <p className="rounded-xl bg-secondary p-3 text-sm" role="status">{status}</p>}
-      <Link to="/settings" className="text-sm font-semibold text-[var(--link)]">Kembali ke pengaturan</Link>
+      <Link to="/settings" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--link)]"><ArrowLeft className="size-4" aria-hidden="true" />Kembali ke pengaturan</Link>
     </div>
   )
 }

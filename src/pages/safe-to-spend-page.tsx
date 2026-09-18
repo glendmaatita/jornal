@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { AlertTriangle, ArrowLeft, CalendarClock, ClipboardCheck, PiggyBank, Plus, Repeat, Sparkles, Trash2, TrendingDown, TrendingUp } from "lucide-react"
+import { AlertTriangle, ArrowLeft, CalendarClock, ClipboardCheck, PiggyBank, Plus, Repeat, ShieldCheck, Sparkles, Tag, Trash2, TrendingDown, TrendingUp } from "lucide-react"
 
 import { ConfidenceBadge } from "@/components/transaction-item"
 import { PageLoading } from "@/components/loading-screen"
@@ -126,7 +126,7 @@ export function SafeToSpendPage() {
       <Card>
         <CardContent className="p-6">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="text-xl tracking-tight">Safe To Spend</h1>
+            <h1 className="flex items-center gap-2 text-xl tracking-tight"><ShieldCheck className="size-5 text-primary" aria-hidden="true" />Safe To Spend</h1>
             <ConfidenceBadge status={result.confidence} />
           </div>
 
@@ -315,7 +315,7 @@ export function SafeToSpendPage() {
       {/* Other reserves (§47) with due dates (§64 P1) */}
       <Card>
         <CardContent className="p-5">
-          <h2 className="text-lg tracking-tight">Reserve Lainnya</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><PiggyBank className="size-4 text-primary" aria-hidden="true" />Reserve Lainnya</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Dana yang sudah diketahui akan dibutuhkan (payroll, sewa, bayar supplier) — tidak dianggap tersedia.
           </p>
@@ -434,7 +434,7 @@ export function SafeToSpendPage() {
           )}
 
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <TextField label="Nama" value={name} onChange={setName} placeholder="Mis. Payroll" />
+            <TextField label="Nama" icon={Tag} value={name} onChange={setName} placeholder="Mis. Payroll" />
             <TextField label="Nominal" type="amount" prefix="Rp" value={amount} onChange={setAmount} placeholder="Rp0" />
           </div>
           <div className="mt-2 grid grid-cols-1 items-end gap-2 sm:grid-cols-2">

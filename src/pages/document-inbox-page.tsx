@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Camera, FileUp, Inbox } from "lucide-react";
+import {
+  Camera,
+  ChevronRight,
+  CloudOff,
+  Copy,
+  FileImage,
+  FileUp,
+  FolderInput,
+  HardDrive,
+  Inbox,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { activeCompany } from "@/lib/companies";
@@ -110,7 +122,10 @@ export function DocumentInboxPage() {
   return (
     <div className="space-y-4 pb-8">
       <header>
-        <h1 className="text-2xl">Inbox Dokumen</h1>
+        <h1 className="flex items-center gap-2 text-2xl">
+          <Inbox className="size-5 text-primary" aria-hidden="true" />
+          Inbox Dokumen
+        </h1>
         <p className="text-sm text-muted-foreground">
           Kumpulkan bukti lebih dulu; belum memengaruhi cashflow sampai
           dikonfirmasi.
@@ -146,7 +161,8 @@ export function DocumentInboxPage() {
           onChange={(event) => void take(event.target.files?.[0], "UPLOAD")}
         />
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <HardDrive className="size-3.5" aria-hidden="true" />
         Penyimpanan lokal:{" "}
         {(
           ((local.data?.bytes || 0) + (local.data?.stagedBytes || 0)) /
@@ -158,7 +174,8 @@ export function DocumentInboxPage() {
       {staged.length > 0 && (
         <Card>
           <CardContent className="space-y-3 p-4">
-            <p className="font-semibold">
+            <p className="flex items-center gap-2 font-semibold">
+              <FolderInput className="size-4 text-primary" aria-hidden="true" />
               {staged.length} dokumen dibagikan ke Jornal
             </p>
             <p className="text-xs text-muted-foreground">
@@ -170,6 +187,7 @@ export function DocumentInboxPage() {
               disabled={busy || !company}
               onClick={() => void adopt()}
             >
+              <FolderInput aria-hidden="true" />
               Masukkan ke {company?.name || "company ini"}
             </Button>
           </CardContent>
@@ -182,7 +200,8 @@ export function DocumentInboxPage() {
               <CardContent className="flex items-center justify-between gap-2 p-3">
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{draft.filename}</p>
-                  <p className="text-xs text-amber-700">
+                  <p className="flex items-center gap-1 text-xs text-amber-700">
+                    <CloudOff className="size-3.5" aria-hidden="true" />
                     Aman di perangkat · belum di server
                   </p>
                 </div>
@@ -195,6 +214,7 @@ export function DocumentInboxPage() {
                       void retry().catch((cause) => setMessage(String(cause)))
                     }
                   >
+                    <Upload aria-hidden="true" />
                     Kirim
                   </Button>
                   <Button
@@ -206,6 +226,7 @@ export function DocumentInboxPage() {
                       )
                     }
                   >
+                    <Trash2 aria-hidden="true" />
                     Hapus
                   </Button>
                 </div>
@@ -225,19 +246,24 @@ export function DocumentInboxPage() {
               className="block"
             >
               <Card>
-                <CardContent className="flex items-center justify-between p-4">
-                  <div>
-                    <p className="font-semibold">{document.filename}</p>
+                <CardContent className="flex items-center gap-3 p-4">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#f1f5fd] text-[#16579d]">
+                    <FileImage className="size-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{document.filename}</p>
                     <p className="text-xs text-muted-foreground">
                       {document.status} ·{" "}
                       {(document.byteSize / 1024).toFixed(0)} KB
                     </p>
                   </div>
                   {document.duplicateOfId && (
-                    <span className="rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                      <Copy className="size-3" aria-hidden="true" />
                       Kemungkinan duplikat
                     </span>
                   )}
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 </CardContent>
               </Card>
             </Link>

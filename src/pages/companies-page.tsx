@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { Archive, Check, Plus, RotateCcw } from "lucide-react"
+import { Archive, ArrowRight, Building2, Check, Pencil, Plus, RotateCcw, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -79,12 +79,12 @@ export function CompaniesPage() {
   return (
     <div className="space-y-4 pb-8">
       <div className="flex items-center justify-between gap-3">
-        <div><h1 className="text-2xl tracking-tight">Company</h1><p className="mt-1 text-sm text-muted-foreground">Setiap company memiliki pembukuan terpisah.</p></div>
+        <div><h1 className="flex items-center gap-2 text-2xl tracking-tight"><Building2 className="size-5 text-primary" aria-hidden="true" />Company</h1><p className="mt-1 text-sm text-muted-foreground">Setiap company memiliki pembukuan terpisah.</p></div>
         {multiCompanyCreationEnabled && <Link to="/companies/new" onClick={() => rememberCompanyCreationReturn()} className="inline-flex h-10 items-center gap-2 rounded-full bg-[var(--main-dark)] px-4 text-sm font-semibold text-white"><Plus className="size-4" />Tambah</Link>}
       </div>
       {accessEnded && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800" role="status">Akses ke company sebelumnya sudah berakhir. Pilih company lain atau buat company baru.</p>}
       {(message || error) && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{message || String(error)}</p>}
-      {companies.length > 5 && <TextField value={search} onChange={setSearch} label="Cari company" />}
+      {companies.length > 5 && <TextField value={search} onChange={setSearch} label="Cari company" icon={Search} />}
       <div className="space-y-3">
         {visibleCompanies.map((company) => (
           <Card key={company.id} className={company.id === current?.id ? "border-[#df1769]/50" : ""}>
@@ -93,10 +93,10 @@ export function CompaniesPage() {
                 <div className="flex min-w-0 items-start gap-3"><CompanyLogo company={company} /><div className="min-w-0"><p className="truncate font-semibold">{company.name}</p><p className="text-xs text-muted-foreground">{company.status === "ARCHIVED" ? "Diarsipkan" : company.id === current?.id ? "Company aktif" : "Aktif"}{pendingCounts[company.id] ? ` · ${pendingCounts[company.id]} perubahan tertunda` : ""}</p></div></div>
                 {company.id === current?.id && <Check className="size-5 text-[#df1769]" aria-label="Company aktif" />}
               </div>
-              {editing === company.id ? <div className="mt-4 flex gap-2"><div className="flex-1"><TextField value={name} onChange={setName} label="Nama company" /></div><Button className="mt-6" size="sm" onClick={() => void saveName(company)} disabled={pending === company.id}>Simpan</Button></div> : null}
+              {editing === company.id ? <div className="mt-4 flex gap-2"><div className="flex-1"><TextField value={name} onChange={setName} label="Nama company" icon={Building2} /></div><Button className="mt-6" size="sm" onClick={() => void saveName(company)} disabled={pending === company.id}><Check aria-hidden="true" />Simpan</Button></div> : null}
               <div className="mt-4 flex flex-wrap gap-2 border-t border-border/60 pt-3">
-                {company.status === "ACTIVE" && company.id !== current?.id && <Button size="sm" variant="outline" onClick={() => switchCompany(company)}>Buka company</Button>}
-                <Button size="sm" variant="ghost" onClick={() => { setEditing(company.id); setName(company.name) }}>Ubah nama</Button>
+                {company.status === "ACTIVE" && company.id !== current?.id && <Button size="sm" variant="outline" onClick={() => switchCompany(company)}><ArrowRight aria-hidden="true" />Buka company</Button>}
+                <Button size="sm" variant="ghost" onClick={() => { setEditing(company.id); setName(company.name) }}><Pencil aria-hidden="true" />Ubah nama</Button>
                 <Button size="sm" variant="ghost" onClick={() => void changeStatus(company)} disabled={pending === company.id}>{company.status === "ACTIVE" ? <><Archive />Arsipkan</> : <><RotateCcw />Pulihkan</>}</Button>
               </div>
               {company.id === current?.id && <div className="mt-3"><CompanyLogoEditor company={company} /></div>}

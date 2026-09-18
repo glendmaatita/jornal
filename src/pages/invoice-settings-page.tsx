@@ -1,8 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  BellRing,
+  Building2,
+  CalendarClock,
+  Clock,
+  CreditCard,
+  DatabaseBackup,
+  Download,
+  FileCog,
+  Globe,
+  Hash,
+  IdCard,
+  Landmark,
+  Mail,
+  Phone,
+  Plus,
+  Repeat,
+  Ruler,
+  Save,
+  SlidersHorizontal,
+  Upload,
+  User,
+  Wallet,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageLoading } from "@/components/loading-screen";
+import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
 import {
   createInvoiceUnit,
@@ -150,7 +175,10 @@ export function InvoiceSettingsPage() {
   return (
     <div className="space-y-4 pb-8">
       <header>
-        <h1 className="text-2xl">Pengaturan Invoice</h1>
+        <h1 className="flex items-center gap-2 text-2xl">
+          <FileCog className="size-5 text-primary" aria-hidden="true" />
+          Pengaturan Invoice
+        </h1>
         <p className="text-sm text-muted-foreground">
           Identitas pengirim, nomor, termin, satuan, dan reminder.
         </p>
@@ -158,14 +186,19 @@ export function InvoiceSettingsPage() {
       {message && <p className="rounded-xl bg-white p-3 text-sm">{message}</p>}
       <Card>
         <CardContent className="grid gap-4 p-4">
-          <h2 className="font-semibold">Identitas pengirim</h2>
+          <h2 className="flex items-center gap-2 font-semibold">
+            <IdCard className="size-4 text-primary" aria-hidden="true" />
+            Identitas pengirim
+          </h2>
           <TextField
             label="Nama"
+            icon={Building2}
             value={settings.senderName}
             onChange={(senderName) => setSettings({ ...settings, senderName })}
           />
           <TextField
             label="Telepon konfirmasi"
+            icon={Phone}
             value={settings.senderPhone || ""}
             onChange={(senderPhone) =>
               setSettings({ ...settings, senderPhone })
@@ -173,15 +206,20 @@ export function InvoiceSettingsPage() {
           />
           <TextField
             label="Email"
+            icon={Mail}
             value={settings.senderEmail || ""}
             onChange={(senderEmail) =>
               setSettings({ ...settings, senderEmail })
             }
           />
-          <h2 className="mt-2 font-semibold">Nomor dan termin</h2>
+          <h2 className="mt-2 flex items-center gap-2 font-semibold">
+            <Hash className="size-4 text-primary" aria-hidden="true" />
+            Nomor dan termin
+          </h2>
           <div className="grid grid-cols-2 gap-3">
             <TextField
               label="Prefix"
+              icon={Hash}
               value={settings.numberingPrefix}
               onChange={(numberingPrefix) =>
                 setSettings({ ...settings, numberingPrefix })
@@ -205,6 +243,7 @@ export function InvoiceSettingsPage() {
             />
             <TextField
               label="Termin (hari)"
+              icon={CalendarClock}
               type="numeric"
               value={String(settings.defaultDueDays)}
               onChange={(value) =>
@@ -213,6 +252,7 @@ export function InvoiceSettingsPage() {
             />
             <TextField
               label="Jam reminder"
+              icon={Clock}
               type="numeric"
               value={String(settings.reminderHour)}
               onChange={(value) =>
@@ -221,6 +261,7 @@ export function InvoiceSettingsPage() {
             />
             <TextField
               label="Ulangi setiap (hari)"
+              icon={Repeat}
               type="numeric"
               value={String(settings.reminderRepeatDays)}
               onChange={(value) =>
@@ -228,20 +269,15 @@ export function InvoiceSettingsPage() {
               }
             />
           </div>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Timezone reminder</span>
-            <input
-              className="rounded-xl border bg-white px-3 py-2"
-              value={settings.reminderTimezone}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  reminderTimezone: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm">
+          <TextField
+            label="Timezone reminder"
+            icon={Globe}
+            value={settings.reminderTimezone}
+            onChange={(reminderTimezone) =>
+              setSettings({ ...settings, reminderTimezone })
+            }
+          />
+          <label className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-sm">
             <input
               type="checkbox"
               checked={settings.reminderEnabled}
@@ -251,62 +287,50 @@ export function InvoiceSettingsPage() {
                   reminderEnabled: event.target.checked,
                 })
               }
+              className="size-4 accent-[var(--primary)]"
             />
+            <BellRing className="size-4 shrink-0 text-primary" aria-hidden="true" />
             Aktifkan reminder invoice overdue
           </label>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="grid gap-3 p-4">
-          <h2 className="font-semibold">Default invoice & penerimaan</h2>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Satuan default</span>
-            <select
-              className="rounded-xl border bg-white px-3 py-2"
-              value={settings.defaultUnitId || ""}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  defaultUnitId: event.target.value || null,
-                })
-              }
-            >
-              <option value="">pcs</option>
-              {units
-                .filter((item) => item.status === "ACTIVE")
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Rekening penerimaan default</span>
-            <select
-              className="rounded-xl border bg-white px-3 py-2"
-              value={settings.defaultAccountId || ""}
-              onChange={(event) =>
-                setSettings({
-                  ...settings,
-                  defaultAccountId: event.target.value || null,
-                })
-              }
-            >
-              <option value="">Pilih saat pelunasan</option>
-              {accounts.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <h2 className="flex items-center gap-2 font-semibold">
+            <SlidersHorizontal className="size-4 text-primary" aria-hidden="true" />
+            Default invoice & penerimaan
+          </h2>
+          <SelectField
+            label="Satuan default"
+            icon={Ruler}
+            value={settings.defaultUnitId || ""}
+            onChange={(value) =>
+              setSettings({ ...settings, defaultUnitId: value || null })
+            }
+            placeholder="pcs"
+            options={units
+              .filter((item) => item.status === "ACTIVE")
+              .map((item) => ({ value: item.id, label: item.label }))}
+          />
+          <SelectField
+            label="Rekening penerimaan default"
+            icon={Wallet}
+            value={settings.defaultAccountId || ""}
+            onChange={(value) =>
+              setSettings({ ...settings, defaultAccountId: value || null })
+            }
+            placeholder="Pilih saat pelunasan"
+            options={accounts.map((item) => ({ value: item.id, label: item.name }))}
+          />
         </CardContent>
       </Card>
       <Card>
         <CardContent className="grid gap-4 p-4">
           <div>
-            <h2 className="font-semibold">Instruksi pembayaran</h2>
+            <h2 className="flex items-center gap-2 font-semibold">
+              <Landmark className="size-4 text-primary" aria-hidden="true" />
+              Instruksi pembayaran
+            </h2>
             <p className="text-xs text-muted-foreground">
               Maksimal tiga rekening atau e-wallet. Biarkan kosong untuk
               pembayaran tunai.
@@ -316,11 +340,13 @@ export function InvoiceSettingsPage() {
             <div key={index} className="grid gap-2 rounded-xl border p-3">
               <TextField
                 label={`Metode ${index + 1}`}
+                icon={Landmark}
                 value={settings.paymentInstructions[index]?.name || ""}
                 onChange={(value) => updateInstruction(index, "name", value)}
               />
               <TextField
                 label="Nomor rekening/e-wallet"
+                icon={CreditCard}
                 value={settings.paymentInstructions[index]?.accountNumber || ""}
                 onChange={(value) =>
                   updateInstruction(index, "accountNumber", value)
@@ -328,6 +354,7 @@ export function InvoiceSettingsPage() {
               />
               <TextField
                 label="Nama pemilik"
+                icon={User}
                 value={settings.paymentInstructions[index]?.accountHolder || ""}
                 onChange={(value) =>
                   updateInstruction(index, "accountHolder", value)
@@ -339,11 +366,15 @@ export function InvoiceSettingsPage() {
       </Card>
       <Card>
         <CardContent className="p-4">
-          <h2 className="font-semibold">Satuan</h2>
+          <h2 className="flex items-center gap-2 font-semibold">
+            <Ruler className="size-4 text-primary" aria-hidden="true" />
+            Satuan
+          </h2>
           <div className="my-3 flex gap-2">
             <div className="flex-1">
               <TextField
                 label="Satuan custom"
+                icon={Ruler}
                 value={unit}
                 onChange={setUnit}
               />
@@ -358,6 +389,7 @@ export function InvoiceSettingsPage() {
                 })
               }
             >
+              <Plus aria-hidden="true" />
               Tambah
             </Button>
           </div>
@@ -381,7 +413,10 @@ export function InvoiceSettingsPage() {
       <Card>
         <CardContent className="space-y-3 p-4">
           <div>
-            <h2 className="font-semibold">Backup & pemulihan invoice</h2>
+            <h2 className="flex items-center gap-2 font-semibold">
+              <DatabaseBackup className="size-4 text-primary" aria-hidden="true" />
+              Backup & pemulihan invoice
+            </h2>
             <p className="text-xs text-muted-foreground">
               Bundle terversi menyertakan pelanggan, invoice, pembayaran, ledger
               terkait, pengaturan, satuan, audit, dan aset logo. Restore selalu
@@ -394,6 +429,7 @@ export function InvoiceSettingsPage() {
               disabled={busy}
               onClick={() => void downloadBackup()}
             >
+              <Download aria-hidden="true" />
               Unduh backup
             </Button>
             <Button
@@ -401,6 +437,7 @@ export function InvoiceSettingsPage() {
               disabled={busy}
               onClick={() => restoreInput.current?.click()}
             >
+              <Upload aria-hidden="true" />
               Pulihkan backup
             </Button>
             <input
@@ -414,6 +451,7 @@ export function InvoiceSettingsPage() {
         </CardContent>
       </Card>
       <Button className="w-full" disabled={busy} onClick={() => void save()}>
+        <Save aria-hidden="true" />
         {busy ? "Menyimpan…" : "Simpan Pengaturan"}
       </Button>
     </div>

@@ -1,9 +1,12 @@
 import * as React from "react"
+import type { LucideIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 export interface FieldShellProps {
   label?: string
+  /** Leading icon inside the shell; tinted with focus/error state */
+  icon?: LucideIcon
   error?: string
   hint?: string
   required?: boolean
@@ -20,6 +23,7 @@ export interface FieldShellProps {
  */
 export function FieldShell({
   label,
+  icon: Icon,
   error,
   hint,
   required,
@@ -46,6 +50,15 @@ export function FieldShell({
           disabled && "field-shell--disabled",
         )}
       >
+        {Icon && (
+          <Icon
+            className={cn(
+              "size-4 shrink-0 transition-colors",
+              error ? "text-destructive" : focused ? "text-[#16579d]" : "text-muted-foreground",
+            )}
+            aria-hidden="true"
+          />
+        )}
         {children}
       </div>
       {error ? (

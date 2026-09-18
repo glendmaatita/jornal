@@ -1,9 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Banknote,
+  FilePen,
+  FilePlus2,
+  Hash,
+  Package,
+  Percent,
+  Plus,
+  Save,
+  Send,
+  Tag,
+  Trash2,
+  Truck,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { DateField } from "@/components/ui/date-field";
+import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
 import { calculateInvoiceTotals } from "@/lib/invoice-math";
 import {
@@ -181,44 +198,48 @@ export function InvoiceFormPage({
   return (
     <div className="space-y-4 pb-8">
       <header>
-        <h1 className="text-2xl">{invoice ? "Edit draft" : "Buat Invoice"}</h1>
+        <h1 className="flex items-center gap-2 text-2xl">
+          {invoice ? (
+            <FilePen className="size-5 text-primary" aria-hidden="true" />
+          ) : (
+            <FilePlus2 className="size-5 text-primary" aria-hidden="true" />
+          )}
+          {invoice ? "Edit draft" : "Buat Invoice"}
+        </h1>
         <p className="text-sm text-muted-foreground">
           Nomor resmi dibuat saat invoice diterbitkan. Draft di perangkat
           dipulihkan otomatis setelah kembali atau refresh.
         </p>
       </header>
       {error && (
-        <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>
+        <p className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          {error}
+        </p>
       )}
       <Card>
         <CardContent className="grid gap-4 p-4">
-          <label className="text-sm font-semibold">
-            Pelanggan
-            <select
-              className="mt-1 h-12 w-full rounded-xl border bg-white px-3"
-              value={form.customerId}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  customerId: event.target.value,
-                }))
-              }
-            >
-              <option value="">Pilih pelanggan</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            label="Pelanggan"
+            icon={Users}
+            value={form.customerId}
+            onChange={(customerId) =>
+              setForm((current) => ({ ...current, customerId }))
+            }
+            placeholder="Pilih pelanggan"
+            options={customers.map((customer) => ({
+              value: customer.id,
+              label: customer.name,
+            }))}
+          />
           {!invoiceId && (
             <Link
               to="/customers/new"
               search={{ returnTo: "/invoices/new" }}
-              className="text-sm font-semibold text-[var(--link)]"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--link)]"
             >
-              + Tambah pelanggan tanpa kehilangan draft
+              <UserPlus className="size-4" aria-hidden="true" />
+              Tambah pelanggan tanpa kehilangan draft
             </Link>
           )}
           <div className="grid grid-cols-2 gap-3">
@@ -247,7 +268,10 @@ export function InvoiceFormPage({
         <Card key={item.id}>
           <CardContent className="grid gap-3 p-4">
             <div className="flex items-center justify-between">
-              <strong>Item {index + 1}</strong>
+              <strong className="flex items-center gap-2">
+                <Package className="size-4 text-primary" aria-hidden="true" />
+                Item {index + 1}
+              </strong>
               {form.items.length > 1 && (
                 <Button
                   type="button"
@@ -269,12 +293,14 @@ export function InvoiceFormPage({
             </div>
             <TextField
               label="Deskripsi"
+              icon={Package}
               value={item.description}
               onChange={(description) => setItem(index, { description })}
             />
             <div className="grid grid-cols-3 gap-2">
               <TextField
                 label="Jumlah"
+                icon={Hash}
                 value={String(item.quantityScaled / 1000)}
                 onChange={(value) =>
                   setItem(index, {
@@ -283,22 +309,15 @@ export function InvoiceFormPage({
                   })
                 }
               />
-              <label className="block">
-                <span className="field-label">Satuan</span>
-                <select
-                  className="field-shell !min-h-[50px] w-full !py-0 text-[15px]"
-                  value={item.unitLabel}
-                  onChange={(event) =>
-                    setItem(index, { unitLabel: event.target.value })
-                  }
-                >
-                  {units.map((unit) => (
-                    <option key={unit}>{unit}</option>
-                  ))}
-                </select>
-              </label>
+              <SelectField
+                label="Satuan"
+                value={item.unitLabel}
+                onChange={(unitLabel) => setItem(index, { unitLabel })}
+                options={units.map((unit) => ({ value: unit, label: unit }))}
+              />
               <TextField
                 label="Harga"
+                icon={Banknote}
                 type="amount"
                 value={
                   item.unitPrice ? item.unitPrice.toLocaleString("id-ID") : ""
@@ -324,6 +343,7 @@ export function InvoiceFormPage({
           }))
         }
       >
+        <Plus aria-hidden="true" />
         Tambah item
       </Button>
       <Card>
@@ -331,6 +351,7 @@ export function InvoiceFormPage({
           <div className="grid grid-cols-2 gap-3">
             <TextField
               label="Diskon"
+              icon={Tag}
               type="amount"
               value={
                 form.discountAmount
@@ -346,6 +367,7 @@ export function InvoiceFormPage({
             />
             <TextField
               label="Ongkir"
+              icon={Truck}
               type="amount"
               value={
                 form.shippingAmount
@@ -361,6 +383,7 @@ export function InvoiceFormPage({
             />
             <TextField
               label="Pajak (%)"
+              icon={Percent}
               value={String((form.taxRateBps || 0) / 100)}
               onChange={(value) =>
                 setForm((current) => ({
@@ -372,6 +395,7 @@ export function InvoiceFormPage({
             />
             <TextField
               label="Pengiriman"
+              icon={Truck}
               value={form.shippingMethod || ""}
               onChange={(shippingMethod) =>
                 setForm((current) => ({ ...current, shippingMethod }))
@@ -390,12 +414,14 @@ export function InvoiceFormPage({
           disabled={busy || !totals || !form.customerId}
           onClick={() => void persist(false)}
         >
+          <Save aria-hidden="true" />
           Simpan Draft
         </Button>
         <Button
           disabled={busy || !totals || !form.customerId}
           onClick={() => void persist(true)}
         >
+          <Send aria-hidden="true" />
           Terbitkan
         </Button>
       </div>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { Link } from "@tanstack/react-router"
-import { ArrowLeft, CalendarClock, FlaskConical, ShieldCheck } from "lucide-react"
+import { ArrowLeft, CalendarClock, FlaskConical, ShieldCheck, Telescope } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { PageLoading } from "@/components/loading-screen"
@@ -59,7 +59,7 @@ export function ForecastPage() {
 
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl tracking-tight">Proyeksi Safe To Spend</h1>
+          <h1 className="flex items-center gap-2 text-xl tracking-tight"><Telescope className="size-5 text-primary" aria-hidden="true" />Proyeksi Safe To Spend</h1>
         <p className="text-xs text-muted-foreground">Perkiraan dana ke depan (§61, §63).</p>
         </div>
         <div className="flex gap-1">

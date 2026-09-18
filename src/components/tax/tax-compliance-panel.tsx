@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { BellRing, CalendarClock, CheckCircle2, CircleDollarSign, Download, FileCheck2, Plus, Settings2 } from "lucide-react"
+import { BellRing, CalendarClock, CheckCircle2, CircleDollarSign, Download, FileCheck2, History, Plus, Settings2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -392,7 +392,7 @@ function TaxHistory({ settlements, evidence, busy, run }: {
 }) {
   const [reverseId, setReverseId] = useState(""); const [reason, setReason] = useState("")
   if (settlements.length === 0 && evidence.length === 0) return null
-  return <Card><CardContent className="space-y-4 p-5"><h2 className="text-lg">Histori pembayaran dan bukti</h2>{settlements.length > 0 && <div className="space-y-2">{settlements.map((item) => {
+  return <Card><CardContent className="space-y-4 p-5"><h2 className="flex items-center gap-2 text-lg"><History className="size-4 text-primary" aria-hidden="true" />Histori pembayaran dan bukti</h2>{settlements.length > 0 && <div className="space-y-2">{settlements.map((item) => {
     const status = String(item.status || "ACTIVE"); const id = String(item.id)
     return <div key={id} className="rounded-xl border border-border p-3 text-sm"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{String(item.settlement_type).replaceAll("_", " ")}</p><p className="text-xs text-muted-foreground">{String(item.settlement_date).slice(0, 10)} · {String(item.reference || "Tanpa referensi")}</p></div><div className="text-right"><p className="font-semibold">{formatRupiah(Number(item.amount || 0))}</p><p className={status === "REVERSED" ? "text-xs text-red-700" : "text-xs text-emerald-700"}>{status}</p></div></div>{status !== "REVERSED" && <Button className="mt-2" size="sm" variant="outline" disabled={busy} onClick={() => setReverseId(reverseId === id ? "" : id)}>Koreksi alokasi</Button>}{reverseId === id && <div className="mt-2 grid gap-2"><TextField label="Alasan koreksi" value={reason} onChange={setReason} /><Button size="sm" disabled={busy || !reason.trim()} onClick={() => run(() => reverseTaxSettlement(id, { commandKey: commandKey("reverse"), revision: Number(item.revision), reason }), "Alokasi pembayaran dibatalkan; transaksi kas historis tetap tersimpan.").then(() => { setReverseId(""); setReason("") })}>Konfirmasi koreksi</Button></div>}</div>
   })}</div>}{evidence.length > 0 && <div><p className="text-sm font-semibold">Arsip bukti</p><div className="mt-2 space-y-2">{evidence.map((item) => <div key={String(item.id)} className="flex items-center justify-between gap-2 rounded-lg bg-secondary/50 p-2 text-xs"><span className="truncate">{String(item.original_name || "Bukti pajak")}</span><Button size="sm" variant="outline" onClick={() => run(() => downloadTaxEvidence(String(item.id), String(item.original_name || "bukti-pajak")), "Bukti diunduh.")}>Unduh</Button></div>)}</div></div>}</CardContent></Card>

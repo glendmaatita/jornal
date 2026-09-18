@@ -55,7 +55,7 @@ export function TaxPage() {
     <div className="space-y-4 pb-8">
       <TaxCompliancePanel profile={profile} transactions={transactions} />
       <div className="pt-2">
-        <h2 className="text-lg tracking-tight">Proyeksi dan cadangan</h2>
+        <h2 className="flex items-center gap-2 text-lg tracking-tight"><FontAwesomeIcon icon={faPiggyBank} className="size-4 text-primary" aria-hidden="true" />Proyeksi dan cadangan</h2>
         <p className="text-xs text-muted-foreground">Perkiraan ini bukan nominal tagihan pada agenda di atas.</p>
       </div>
       <Card>

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
-import { ArrowLeft, ChevronDown, Sparkles } from "lucide-react"
+import { ArrowDownLeft, ArrowLeft, ArrowLeftRight, ArrowUpRight, Camera, ChevronDown, CreditCard, HandCoins, Paperclip, PenLine, Save, Sparkles, Tag, User, UserMinus, Wand2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -394,12 +394,14 @@ export function TransactionFormPage() {
         <Card className="mb-3">
           <CardContent className="p-3">
             <TextField
+              icon={Sparkles}
               value={smartText}
               onChange={setSmartText}
               placeholder="penjualan hari ini 12.5jt"
               hint="Contoh: bayar iklan meta 3jt, penjualan 12.5jt, bensin 500rb"
             />
             <Button size="sm" type="button" className="mt-2 w-full" onClick={applySmartInput} disabled={!smartText.trim()}>
+              <Wand2 aria-hidden="true" />
               Terapkan
             </Button>
           </CardContent>
@@ -416,12 +418,13 @@ export function TransactionFormPage() {
             setCategoryId(null)
           }}
           className={cn(
-            "rounded-[10px] border py-3 text-sm font-semibold transition-colors",
+            "flex items-center justify-center gap-1.5 rounded-[10px] border py-3 text-sm font-semibold transition-colors",
             mode === "money_in"
               ? "border-[var(--mint)] bg-[var(--mint)] text-white shadow-sm"
               : "border-border bg-white text-[var(--body-text)]",
           )}
         >
+          <ArrowDownLeft className="size-4" aria-hidden="true" />
           Masuk
         </button>
         <button
@@ -432,12 +435,13 @@ export function TransactionFormPage() {
             setCategoryId(null)
           }}
           className={cn(
-            "rounded-[10px] border py-3 text-sm font-semibold transition-colors",
+            "flex items-center justify-center gap-1.5 rounded-[10px] border py-3 text-sm font-semibold transition-colors",
             mode === "money_out"
               ? "border-[var(--main-dark)] bg-[var(--main-dark)] text-white shadow-sm"
               : "border-border bg-white text-[var(--body-text)]",
           )}
         >
+          <ArrowUpRight className="size-4" aria-hidden="true" />
           Uang Keluar
         </button>
         <button
@@ -449,12 +453,13 @@ export function TransactionFormPage() {
             setShowMore(true)
           }}
           className={cn(
-            "rounded-[10px] border py-3 text-sm font-semibold transition-colors",
+            "flex items-center justify-center gap-1.5 rounded-[10px] border py-3 text-sm font-semibold transition-colors",
             mode === "receivable"
               ? "border-[#df1769] bg-[#df1769] text-white shadow-sm"
               : "border-border bg-white text-[var(--body-text)]",
           )}
         >
+          <HandCoins className="size-4" aria-hidden="true" />
           Piutang
         </button>
         <button
@@ -465,12 +470,13 @@ export function TransactionFormPage() {
             setCategoryId(null)
           }}
           className={cn(
-            "rounded-[10px] border py-3 text-sm font-semibold transition-colors",
+            "flex items-center justify-center gap-1.5 rounded-[10px] border py-3 text-sm font-semibold transition-colors",
             mode === "owner_withdrawal"
               ? "border-[#df1769] bg-[#df1769] text-white shadow-sm"
               : "border-border bg-white text-[var(--body-text)]",
           )}
         >
+          <UserMinus className="size-4" aria-hidden="true" />
           Prive
         </button>
         <button
@@ -481,12 +487,13 @@ export function TransactionFormPage() {
             setCategoryId(null)
           }}
           className={cn(
-            "rounded-[10px] border py-3 text-sm font-semibold transition-colors",
+            "flex items-center justify-center gap-1.5 rounded-[10px] border py-3 text-sm font-semibold transition-colors",
             mode === "transfer"
               ? "border-[var(--main-dark)] bg-[var(--main-dark)] text-white shadow-sm"
               : "border-border bg-white text-[var(--body-text)]",
           )}
         >
+          <ArrowLeftRight className="size-4" aria-hidden="true" />
           Transfer
         </button>
       </div>
@@ -548,6 +555,7 @@ export function TransactionFormPage() {
           ) : (
             <TextField
               label="Keterangan"
+              icon={PenLine}
               value={description}
               onChange={(value) => {
                 setDescription(value)
@@ -667,6 +675,7 @@ export function TransactionFormPage() {
               </label>
               <TextField
                 label="Metode pembayaran"
+                icon={CreditCard}
                 value={paymentMethod}
                 onChange={setPaymentMethod}
                 placeholder="Transfer, QRIS, tunai…"
@@ -679,6 +688,7 @@ export function TransactionFormPage() {
               </datalist>
               <TextField
                 label="Supplier / Customer"
+                icon={User}
                 value={supplierCustomer}
                 onChange={setSupplierCustomer}
                 placeholder={isReceivableCreation ? "Nama orang yang meminjam" : "Nama supplier atau pelanggan"}
@@ -690,7 +700,7 @@ export function TransactionFormPage() {
                   <option key={value} value={value} />
                 ))}
               </datalist>
-              <TextField label="Tag" value={tags} onChange={setTags} placeholder="project-alpha, penting" hint="Pisahkan dengan koma" />
+              <TextField label="Tag" icon={Tag} value={tags} onChange={setTags} placeholder="project-alpha, penting" hint="Pisahkan dengan koma" />
               <Suspense fallback={<div className="field-shell text-sm text-muted-foreground">Memuat editor…</div>}>
                 <RichTextField label="Catatan" value={notes} onChange={setNotes} placeholder="Catatan tambahan…" minHeight={80} />
               </Suspense>
@@ -726,19 +736,24 @@ export function TransactionFormPage() {
                 />
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Button type="button" variant="outline" onClick={() => openAttachmentPicker("upload")}>
+                    <Paperclip aria-hidden="true" />
                     Pilih file
                   </Button>
                   <Button type="button" variant="outline" onClick={() => openAttachmentPicker("camera")}>
+                    <Camera aria-hidden="true" />
                     Ambil foto
                   </Button>
                 </div>
                 {attachmentName && (
                   <div className="rounded-[10px] border border-border bg-white p-3 text-xs text-[var(--body-text)]">
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium">{attachmentName}</div>
-                        <div className="mt-1 text-muted-foreground">
-                          {attachmentDataUrl ? "Lampiran siap disimpan" : "Lampiran tersimpan"}
+                      <div className="flex min-w-0 items-start gap-2">
+                        <Paperclip className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{attachmentName}</div>
+                          <div className="mt-1 text-muted-foreground">
+                            {attachmentDataUrl ? "Lampiran siap disimpan" : "Lampiran tersimpan"}
+                          </div>
                         </div>
                       </div>
                       <button type="button" className="font-semibold text-[var(--link)] underline" onClick={() => {
@@ -755,6 +770,7 @@ export function TransactionFormPage() {
           )}
 
           <Button type="submit" size="lg" className="w-full" disabled={save.isPending}>
+            <Save aria-hidden="true" />
             Simpan
           </Button>
           {save.isError && (

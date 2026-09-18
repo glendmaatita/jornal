@@ -1,9 +1,29 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  AlertTriangle,
+  BadgeCheck,
+  Ban,
+  CircleCheck,
+  Copy,
+  Eye,
+  FileDown,
+  FileText,
+  ImageDown,
+  Link2,
+  MessageSquare,
+  Pencil,
+  Receipt,
+  Send,
+  Trash2,
+  Undo2,
+  Wallet,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
+import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
 import {
   correctInvoicePayment,
@@ -103,7 +123,8 @@ export function InvoiceDetailPage({
         <>
           <header className="flex justify-between">
             <div>
-              <h1 className="text-2xl">
+              <h1 className="flex items-center gap-2 text-2xl">
+                <FileText className="size-5 text-primary" aria-hidden="true" />
                 {invoice.invoiceNumber || "Draft Invoice"}
               </h1>
               <p className="text-sm text-muted-foreground">
@@ -114,14 +135,16 @@ export function InvoiceDetailPage({
               <Link
                 to="/invoices/$invoiceId/edit"
                 params={{ invoiceId }}
-                className="text-sm font-semibold text-[var(--link)]"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--link)]"
               >
+                <Pencil className="size-4" aria-hidden="true" />
                 Edit
               </Link>
             )}
           </header>
           {error && (
-            <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+            <p className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               {error}
             </p>
           )}
@@ -132,6 +155,7 @@ export function InvoiceDetailPage({
                   disabled={busy}
                   onClick={() => void run(() => issueInvoice(invoice))}
                 >
+                  <Send aria-hidden="true" />
                   Terbitkan
                 </Button>
                 <Button
@@ -146,6 +170,7 @@ export function InvoiceDetailPage({
                       .finally(() => setBusy(false));
                   }}
                 >
+                  <Trash2 aria-hidden="true" />
                   Hapus Draft
                 </Button>
               </>
@@ -153,8 +178,9 @@ export function InvoiceDetailPage({
             <Link
               to="/invoices/$invoiceId/preview"
               params={{ invoiceId }}
-              className="rounded-xl border px-3 py-2 text-sm font-semibold"
+              className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-[#ced6e1] bg-white px-5 text-sm font-semibold hover:bg-[#f1f5fd]"
             >
+              <Eye className="size-4" aria-hidden="true" />
               Preview
             </Link>
             <Button
@@ -162,6 +188,7 @@ export function InvoiceDetailPage({
               disabled={busy}
               onClick={() => void run(() => duplicateInvoice(invoice))}
             >
+              <Copy aria-hidden="true" />
               Duplikasi
             </Button>
             {invoice.status === "UNPAID" && (
@@ -170,30 +197,32 @@ export function InvoiceDetailPage({
                 disabled={busy || !reason.trim()}
                 onClick={() => void run(() => voidInvoice(invoice, reason))}
               >
+                <Ban aria-hidden="true" />
                 Batalkan
               </Button>
             )}
           </div>
           {invoice.status === "UNPAID" && (
             <section className="grid gap-3 rounded-xl border bg-white p-4">
-              <h2 className="font-semibold">Tandai Lunas</h2>
-              <label className="grid gap-1 text-sm font-semibold">
-                Cara mencatat
-                <select
-                  className="h-12 rounded-xl border bg-white px-3"
-                  value={paymentMode}
-                  onChange={(event) =>
-                    setPaymentMode(
-                      event.target.value as "CREATE" | "LINK_EXISTING",
-                    )
-                  }
-                >
-                  <option value="CREATE">Buat transaksi pemasukan</option>
-                  <option value="LINK_EXISTING">
-                    Kaitkan transaksi yang sudah ada
-                  </option>
-                </select>
-              </label>
+              <h2 className="flex items-center gap-2 font-semibold">
+                <BadgeCheck className="size-4 text-primary" aria-hidden="true" />
+                Tandai Lunas
+              </h2>
+              <SelectField
+                label="Cara mencatat"
+                icon={Receipt}
+                value={paymentMode}
+                onChange={(value) =>
+                  setPaymentMode(value as "CREATE" | "LINK_EXISTING")
+                }
+                options={[
+                  { value: "CREATE", label: "Buat transaksi pemasukan" },
+                  {
+                    value: "LINK_EXISTING",
+                    label: "Kaitkan transaksi yang sudah ada",
+                  },
+                ]}
+              />
               {paymentMode === "CREATE" ? (
                 <>
                   <DateField
@@ -201,42 +230,30 @@ export function InvoiceDetailPage({
                     value={paidOn}
                     onChange={setPaidOn}
                   />
-                  <label className="text-sm font-semibold">
-                    Rekening
-                    <select
-                      className="mt-1 h-12 w-full rounded-xl border bg-white px-3"
-                      value={effectiveAccountId}
-                      onChange={(event) => setAccountId(event.target.value)}
-                    >
-                      <option value="">Tanpa rekening</option>
-                      {accounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <SelectField
+                    label="Rekening"
+                    icon={Wallet}
+                    value={effectiveAccountId}
+                    onChange={setAccountId}
+                    placeholder="Tanpa rekening"
+                    options={accounts.map((account) => ({
+                      value: account.id,
+                      label: account.name,
+                    }))}
+                  />
                 </>
               ) : (
-                <label className="grid gap-1 text-sm font-semibold">
-                  Transaksi cocok
-                  <select
-                    className="h-12 rounded-xl border bg-white px-3"
-                    value={candidateId}
-                    onChange={(event) => setCandidateId(event.target.value)}
-                  >
-                    <option value="">Pilih transaksi</option>
-                    {candidates.data?.items.map((item) => (
-                      <option
-                        key={item.transaction.id}
-                        value={item.transaction.id}
-                      >
-                        {item.transaction.transactionDate} ·{" "}
-                        {item.transaction.description}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SelectField
+                  label="Transaksi cocok"
+                  icon={Link2}
+                  value={candidateId}
+                  onChange={setCandidateId}
+                  placeholder="Pilih transaksi"
+                  options={(candidates.data?.items ?? []).map((item) => ({
+                    value: item.transaction.id,
+                    label: `${item.transaction.transactionDate} · ${item.transaction.description}`,
+                  }))}
+                />
               )}
               <Button
                 disabled={
@@ -258,10 +275,12 @@ export function InvoiceDetailPage({
                   )
                 }
               >
+                <BadgeCheck aria-hidden="true" />
                 Konfirmasi pelunasan
               </Button>
               <TextField
                 label="Alasan bila membatalkan invoice"
+                icon={MessageSquare}
                 value={reason}
                 onChange={setReason}
               />
@@ -269,11 +288,13 @@ export function InvoiceDetailPage({
           )}
           {invoice.status === "PAID" && payment && (
             <section className="grid gap-3 rounded-xl border bg-white p-4">
-              <p className="font-semibold text-emerald-700">
+              <p className="flex items-center gap-2 font-semibold text-emerald-700">
+                <CircleCheck className="size-4" aria-hidden="true" />
                 Pembayaran tercatat pada {payment.paidOn}
               </p>
               <TextField
                 label="Alasan koreksi pembayaran"
+                icon={MessageSquare}
                 value={reason}
                 onChange={setReason}
               />
@@ -284,6 +305,7 @@ export function InvoiceDetailPage({
                   void run(() => correctInvoicePayment(payment, reason))
                 }
               >
+                <Undo2 aria-hidden="true" />
                 Koreksi Pembayaran
               </Button>
             </section>
@@ -299,6 +321,7 @@ export function InvoiceDetailPage({
                 ).catch(() => printInvoice())
               }
             >
+              <FileDown aria-hidden="true" />
               PDF / Bagikan
             </Button>
             <Button
@@ -320,6 +343,7 @@ export function InvoiceDetailPage({
                   .catch((cause) => setError(String(cause)))
               }
             >
+              <ImageDown aria-hidden="true" />
               PNG / Bagikan
             </Button>
           </div>

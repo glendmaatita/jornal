@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { Link, useSearch } from "@tanstack/react-router"
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpLeft, Plus, Trash2, Wallet } from "lucide-react"
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpLeft, Landmark, Plus, Trash2, Wallet } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -69,9 +69,9 @@ export function AccountsPage() {
 
       {writable && <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="text-lg tracking-tight">Tambah rekening</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight"><Plus className="size-4 text-primary" aria-hidden="true" />Tambah rekening</h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextField label="Nama rekening" value={name} onChange={setName} placeholder="Contoh: BCA Operasional" />
+            <TextField label="Nama rekening" icon={Landmark} value={name} onChange={setName} placeholder="Contoh: BCA Operasional" />
             <TextField label="Saldo awal" type="amount" prefix="Rp" value={openingBalance} onChange={setOpeningBalance} hint="Saldo sebelum mutasi pertama." />
           </div>
           <div className="flex gap-2">
@@ -112,7 +112,7 @@ export function AccountsPage() {
         <Card>
           <CardContent className="space-y-3 p-5">
             <div className="flex items-center justify-between gap-3">
-              <div><h2 className="text-lg tracking-tight">Mutasi {selected.name}</h2><p className="text-xs text-muted-foreground">Saldo awal {formatRupiah(selected.openingBalance)}</p></div>
+              <div><h2 className="flex items-center gap-2 text-lg tracking-tight"><ArrowLeftRight className="size-4 text-primary" aria-hidden="true" />Mutasi {selected.name}</h2><p className="text-xs text-muted-foreground">Saldo awal {formatRupiah(selected.openingBalance)}</p></div>
               {writable && <Button variant="ghost" size="sm" aria-label={`Hapus ${selected.name}`} onClick={() => { if (window.confirm(`Hapus rekening ${selected.name}?`)) { deleteAccount(selected.id); invalidate() } }}><Trash2 className="size-4" aria-hidden="true" /></Button>}
             </div>
             {mutations.length === 0 ? <p className="rounded-xl bg-secondary/50 p-4 text-sm text-muted-foreground">Belum ada mutasi untuk rekening ini.</p> : (

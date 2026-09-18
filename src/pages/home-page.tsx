@@ -11,7 +11,7 @@ import { faPiggyBank } from "@fortawesome/free-solid-svg-icons/faPiggyBank"
 import { faPlus } from "@fortawesome/free-solid-svg-icons/faPlus"
 import { faShieldHalved } from "@fortawesome/free-solid-svg-icons/faShieldHalved"
 
-import { AlertTriangle, ArrowRight, CalendarClock } from "lucide-react"
+import { AlertTriangle, ArrowRight, CalendarClock, FileText, HandCoins, Inbox, Users } from "lucide-react"
 
 import { ConfidenceBadge, TransactionItem } from "@/components/transaction-item"
 import { PeriodSelector } from "@/components/period-selector"
@@ -76,7 +76,11 @@ export function HomePage() {
   return (
     <div className="space-y-4 pb-8">
       <ActionCenter />
-      <nav className="grid grid-cols-3 gap-2" aria-label="Fitur bisnis"><Link to="/invoices" className="rounded-xl bg-white p-3 text-center text-sm font-semibold text-[var(--link)] shadow-sm">Invoice</Link><Link to="/customers" className="rounded-xl bg-white p-3 text-center text-sm font-semibold text-[var(--link)] shadow-sm">Pelanggan</Link><Link to="/inbox" className="rounded-xl bg-white p-3 text-center text-sm font-semibold text-[var(--link)] shadow-sm">Inbox</Link></nav>
+      <nav className="grid grid-cols-3 gap-2" aria-label="Fitur bisnis">
+        <Link to="/invoices" className="flex flex-col items-center gap-1.5 rounded-xl bg-white p-3 text-center text-sm font-semibold text-[var(--link)] shadow-sm transition-transform active:scale-[0.98]"><span className="grid size-9 place-items-center rounded-full bg-[#f1f5fd]"><FileText className="size-4" aria-hidden="true" /></span>Invoice</Link>
+        <Link to="/customers" className="flex flex-col items-center gap-1.5 rounded-xl bg-white p-3 text-center text-sm font-semibold text-[var(--link)] shadow-sm transition-transform active:scale-[0.98]"><span className="grid size-9 place-items-center rounded-full bg-[#f1f5fd]"><Users className="size-4" aria-hidden="true" /></span>Pelanggan</Link>
+        <Link to="/inbox" className="flex flex-col items-center gap-1.5 rounded-xl bg-white p-3 text-center text-sm font-semibold text-[var(--link)] shadow-sm transition-transform active:scale-[0.98]"><span className="grid size-9 place-items-center rounded-full bg-[#f1f5fd]"><Inbox className="size-4" aria-hidden="true" /></span>Inbox</Link>
+      </nav>
       <PeriodSelector preset={preset} custom={custom} onChange={setPreset} onCustomChange={setCustom} />
 
       {/* Safe To Spend — the core differentiator (§46, §48), calm navy card */}
@@ -120,7 +124,7 @@ export function HomePage() {
 
       {outstandingReceivables > 0 && (
         <Link to="/receivables" className="flex items-center justify-between rounded-xl border border-[#df1769]/20 bg-[#fff1f7] px-4 py-3 text-sm">
-          <span><strong className="text-[#8c1249]">Piutang berjalan</strong><span className="ml-2 text-muted-foreground">Uang yang masih harus dikembalikan</span></span>
+          <span className="flex items-center gap-2"><HandCoins className="size-4 shrink-0 text-[#8c1249]" aria-hidden="true" /><span><strong className="text-[#8c1249]">Piutang berjalan</strong><span className="ml-2 text-muted-foreground">Uang yang masih harus dikembalikan</span></span></span>
           <strong className="shrink-0 text-[#8c1249]">{formatRupiah(outstandingReceivables)}</strong>
         </Link>
       )}
