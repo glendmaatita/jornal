@@ -253,7 +253,7 @@ export const CLASSIFICATION_LABELS: Record<TransactionClassification, string> = 
   REVENUE: "Omzet",
   OPERATING_EXPENSE: "Pengeluaran Bisnis",
   CAPITAL_INJECTION: "Modal Masuk",
-  OWNER_WITHDRAWAL: "Penarikan Pemilik",
+  OWNER_WITHDRAWAL: "Prive (Pengambilan Pribadi)",
   ASSET_PURCHASE: "Pembelian Aset",
   LOAN_RECEIVED: "Penerimaan Pinjaman",
   LOAN_PAYMENT: "Pembayaran Utang",

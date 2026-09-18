@@ -845,7 +845,7 @@ Ini transaksi apa?
 
 [Pengeluaran Bisnis]
 
-[Penarikan Pemilik]
+[Prive (Pengambilan Pribadi)]
 
 [Lainnya]
 ```

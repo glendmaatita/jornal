@@ -54,6 +54,16 @@ describe("classification", () => {
   test("owner withdrawal", () => {
     const result = classifyTransaction("uang pribadi", "MONEY_OUT")
     expect(result.classification).toBe("OWNER_WITHDRAWAL")
+    expect(result.businessRelevance).toBe("NON_BUSINESS")
+  })
+  test("prive cash withdrawal takes precedence over a cash-account transfer", () => {
+    const result = classifyTransaction("prive pengambilan tunai pribadi", "MONEY_OUT")
+    expect(result.classification).toBe("OWNER_WITHDRAWAL")
+    expect(result.businessRelevance).toBe("NON_BUSINESS")
+  })
+  test("cash withdrawal into the company's cash account remains an internal transfer", () => {
+    const result = classifyTransaction("tarik tunai ke kas", "MONEY_OUT")
+    expect(result.classification).toBe("INTERNAL_TRANSFER")
   })
   test("loan payment stays an outflow", () => {
     const result = classifyTransaction("cicilan pinjaman bank", "MONEY_OUT")

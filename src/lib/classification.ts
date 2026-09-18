@@ -77,8 +77,24 @@ const NON_OPERATIONAL_RULES: {
 }[] = [
   { keywords: ["modal", "setoran modal", "injeksi modal"], classification: "CAPITAL_INJECTION", direction: "MONEY_IN", businessRelevance: "BUSINESS" },
   { keywords: ["pinjaman", "kredit bank", "loan"], classification: "LOAN_RECEIVED", direction: "MONEY_IN", businessRelevance: "BUSINESS" },
+  {
+    keywords: [
+      "prive",
+      "private",
+      "tarik tunai pribadi",
+      "pengambilan tunai pribadi",
+      "pengambilan pribadi",
+      "ambil uang pribadi",
+      "tarik pemilik",
+      "penarikan pemilik",
+      "untuk pribadi",
+      "uang pribadi",
+    ],
+    classification: "OWNER_WITHDRAWAL",
+    direction: "MONEY_OUT",
+    businessRelevance: "NON_BUSINESS",
+  },
   { keywords: ["transfer antar rekening", "transfer bca", "pindah rekening", "tarik tunai"], classification: "INTERNAL_TRANSFER", direction: "MONEY_OUT", businessRelevance: "NON_BUSINESS" },
-  { keywords: ["tarik pemilik", "penarikan pemilik", "untuk pribadi", "uang pribadi"], classification: "OWNER_WITHDRAWAL", direction: "MONEY_OUT", businessRelevance: "NON_BUSINESS" },
   { keywords: ["bayar utang", "cicilan pinjaman", "angsuran"], classification: "LOAN_PAYMENT", direction: "MONEY_OUT", businessRelevance: "BUSINESS" },
   { keywords: ["beli laptop", "beli mesin", "beli peralatan", "beli komputer", "beli aset"], classification: "ASSET_PURCHASE", direction: "MONEY_OUT", businessRelevance: "BUSINESS" },
 ]

@@ -28,7 +28,7 @@ import { activeCompany } from "@/lib/companies"
 import { scopedStorageKey } from "@/lib/store"
 import { clearMirroredState, mirrorState, restoreState } from "@/lib/local-db"
 
-type Mode = "money_in" | "money_out" | "receivable" | "transfer"
+type Mode = "money_in" | "money_out" | "receivable" | "owner_withdrawal" | "transfer"
 
 const RichTextField = lazy(() => import("@/components/ui/rich-text-field").then((module) => ({ default: module.RichTextField })))
 
@@ -183,7 +183,15 @@ export function TransactionFormPage() {
   // Load the transaction being edited — adapted during render (no effect needed)
   if (editing && editing.id !== loadedId) {
     setLoadedId(editing.id)
-    setMode(editing.classification === "INTERNAL_TRANSFER" ? "transfer" : editing.direction === "MONEY_IN" ? "money_in" : "money_out")
+    setMode(
+      editing.classification === "INTERNAL_TRANSFER"
+        ? "transfer"
+        : editing.classification === "OWNER_WITHDRAWAL"
+          ? "owner_withdrawal"
+          : editing.direction === "MONEY_IN"
+            ? "money_in"
+            : "money_out",
+    )
     if (editing.classification === "RECEIVABLE_CREATED") setMode("receivable")
     setAmount(editing.amount > 0 ? formatNumberInput(editing.amount) : "")
     setDescription(editing.description)
@@ -220,6 +228,9 @@ export function TransactionFormPage() {
   const suggestion = useMemo(() => {
     if (mode === "transfer") {
       return { categoryId: null, classification: "INTERNAL_TRANSFER" as const, confidence: 1, source: "USER" as const, businessRelevance: "NON_BUSINESS" as const }
+    }
+    if (mode === "owner_withdrawal") {
+      return { categoryId: null, classification: "OWNER_WITHDRAWAL" as const, confidence: 1, source: "USER" as const, businessRelevance: "NON_BUSINESS" as const }
     }
     if (isReceivableCreation) return { categoryId: null, classification: "RECEIVABLE_CREATED" as const, confidence: 1, source: "USER" as const, businessRelevance: "NON_BUSINESS" as const }
     if (isReceivablePayment) return { categoryId: null, classification: "RECEIVABLE_PAYMENT" as const, confidence: 1, source: "USER" as const, businessRelevance: "NON_BUSINESS" as const }
@@ -396,7 +407,7 @@ export function TransactionFormPage() {
       )}
 
       {/* Transaction type (§12) */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <button
           type="button"
           onClick={() => {
@@ -449,6 +460,22 @@ export function TransactionFormPage() {
         <button
           type="button"
           onClick={() => {
+            setMode("owner_withdrawal")
+            setClassificationOverride(null)
+            setCategoryId(null)
+          }}
+          className={cn(
+            "rounded-[10px] border py-3 text-sm font-semibold transition-colors",
+            mode === "owner_withdrawal"
+              ? "border-[#df1769] bg-[#df1769] text-white shadow-sm"
+              : "border-border bg-white text-[var(--body-text)]",
+          )}
+        >
+          Prive
+        </button>
+        <button
+          type="button"
+          onClick={() => {
             setMode("transfer")
             setClassificationOverride(null)
             setCategoryId(null)
@@ -467,6 +494,12 @@ export function TransactionFormPage() {
       {isReceivablePayment && repaymentSource && (
         <div className="mb-4 rounded-[10px] border border-[#df1769]/25 bg-[#fff1f7] p-3 text-sm text-[#8c1249]">
           Mencatat pelunasan dari <strong>{repaymentSource.supplierCustomer || repaymentSource.description}</strong>. Sisa piutang {formatRupiah(repaymentRemaining ?? repaymentSource.amount)}. Ini bukan omzet.
+        </div>
+      )}
+
+      {mode === "owner_withdrawal" && (
+        <div className="mb-4 rounded-[10px] border border-[#df1769]/25 bg-[#fff1f7] p-3 text-sm text-[#8c1249]">
+          Pengambilan uang perusahaan untuk keperluan pribadi. Saldo kas berkurang, tetapi transaksi ini bukan biaya bisnis dan tidak mengurangi pajak.
         </div>
       )}
 
@@ -519,7 +552,7 @@ export function TransactionFormPage() {
               onChange={(value) => {
                 setDescription(value)
                 const detected = detectDirection(value)
-                if (detected) {
+                if (detected && mode !== "owner_withdrawal") {
                   setMode(detected === "MONEY_IN" ? "money_in" : "money_out")
                 }
                 setClassificationOverride(null)
@@ -599,6 +632,8 @@ export function TransactionFormPage() {
                         const next = event.target.value as TransactionClassification
                         setClassificationOverride(next)
                         if (next === "INTERNAL_TRANSFER") setMode("transfer")
+                        else if (next === "OWNER_WITHDRAWAL") setMode("owner_withdrawal")
+                        else if (mode === "owner_withdrawal") setMode("money_out")
                       }}
                       className="field-shell !min-h-[46px] w-full !py-0 text-sm"
                     >

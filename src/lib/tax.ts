@@ -301,7 +301,7 @@ export const TAX_TREATMENTS: Partial<Record<Transaction["classification"], strin
   REVENUE: "Termasuk omzet — diperhitungkan dalam estimasi pajak.",
   OPERATING_EXPENSE: "Biaya operasional bisnis — mengurangi estimasi laba.",
   CAPITAL_INJECTION: "Bukan omzet — tidak diperhitungkan sebagai pendapatan pajak.",
-  OWNER_WITHDRAWAL: "Bukan biaya bisnis — tidak mengurangi pajak.",
+  OWNER_WITHDRAWAL: "Prive mengurangi kas perusahaan, tetapi bukan biaya bisnis dan tidak mengurangi pajak.",
   ASSET_PURCHASE: "Pembelian aset — perlakuan penyusutan tidak dihitung otomatis.",
   LOAN_RECEIVED: "Bukan omzet — pokok pinjaman tidak dikenakan pajak.",
   LOAN_PAYMENT: "Cicilan pokok; bunga belum dipisahkan otomatis.",
