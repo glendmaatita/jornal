@@ -42,7 +42,7 @@ const start = async () => {
     {
       stdout: "ignore",
       stderr: "inherit",
-      env: { ...process.env, JORNAL_INVOICE_REMINDERS_ENABLED: "true" },
+      env: { ...process.env, JORNAL_CRON_ENABLED: "false", JORNAL_INVOICE_REMINDERS_ENABLED: "true" },
     },
   );
   for (let attempt = 0; attempt < 100; attempt += 1) {

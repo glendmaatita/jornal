@@ -29,7 +29,7 @@ integrationTest("migrates a populated single-company database without changing l
   const port = 30_000 + Math.floor(Math.random() * 2_000)
   const origin = `http://127.0.0.1:${port}`
   const start = async (migrations: string, hookDirectory = hooks) => {
-    server = Bun.spawn([pocketBaseBin!, "serve", "--dir", data, "--migrationsDir", migrations, "--hooksDir", hookDirectory, `--http=127.0.0.1:${port}`], { stdout: "ignore", stderr: "pipe" })
+    server = Bun.spawn([pocketBaseBin!, "serve", "--dir", data, "--migrationsDir", migrations, "--hooksDir", hookDirectory, `--http=127.0.0.1:${port}`], { stdout: "ignore", stderr: "pipe", env: { ...process.env, JORNAL_CRON_ENABLED: "false" } })
     for (let attempt = 0; attempt < 50; attempt += 1) {
       if ((await fetch(`${origin}/api/health`).catch(() => null))?.ok) return
       await Bun.sleep(50)

@@ -1,4 +1,6 @@
-cronAdd("jornal-invoice-reminders", "*/15 * * * *", () => require(`${__hooks}/invoice_jobs.js`).runInvoiceReminders())
+if ($os.getenv("JORNAL_CRON_ENABLED") !== "false") {
+  cronAdd("jornal-invoice-reminders", "*/15 * * * *", () => require(`${__hooks}/invoice_jobs.js`).runInvoiceReminders())
+}
 
 routerAdd("POST", "/api/jornal/admin/invoices/run-jobs", (event) => event.json(200, { ok: true, ...require(`${__hooks}/invoice_jobs.js`).runInvoiceReminders(), ranAt: new Date().toISOString() }), $apis.requireSuperuserAuth())
 

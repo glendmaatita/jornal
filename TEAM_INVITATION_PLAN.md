@@ -253,6 +253,7 @@ Tambahkan flags backend (default false sampai rollout):
 - `JORNAL_TEAM_INVITATIONS_ENABLED`: mengaktifkan create/resend/claim invitation. Jika dimatikan, membership existing tetap berfungsi; invite route menunjukkan fitur sementara tidak tersedia.
 - `JORNAL_TEAM_INVITATION_EMAIL_ENABLED`: hanya pengiriman email. Saat false, jangan claim/send job; queue tetap tertunda dan tidak menghabiskan attempt. Create/resend publik mengembalikan 503 jika email dimatikan/tidak terkonfigurasi; pending undangan yang sudah dibuat masih dapat diklaim bila invitation flag aktif.
 - `JORNAL_PUBLIC_URL`: wajib absolute HTTPS di production; base tautan email tetap allowlisted.
+- `JORNAL_CRON_ENABLED`: scheduler internal aktif kecuali nilainya persis `false`. Integration test mematikannya dan menjalankan endpoint admin secara eksplisit agar cron tidak berlomba dengan assertion; production tidak perlu mengatur variabel ini.
 
 Worker `team_invitation_jobs.pb.js` dijadwalkan tiap menit:
 

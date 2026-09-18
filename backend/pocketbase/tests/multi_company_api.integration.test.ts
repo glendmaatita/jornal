@@ -31,7 +31,7 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   server = Bun.spawn([
     pocketBaseBin!, "serve", "--dir", dataDirectory, "--migrationsDir", migrations,
     "--hooksDir", hooks, `--http=127.0.0.1:${port}`,
-  ], { stdout: "inherit", stderr: "inherit" })
+  ], { stdout: "inherit", stderr: "inherit", env: { ...process.env, JORNAL_CRON_ENABLED: "false" } })
   for (let attempt = 0; attempt < 50; attempt += 1) {
     if ((await fetch(`${origin}/api/health`).catch(() => null))?.ok) break
     await Bun.sleep(50)

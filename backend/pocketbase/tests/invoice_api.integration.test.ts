@@ -17,6 +17,12 @@ afterAll(async () => {
 integrationTest(
   "invoice commands are scoped, idempotent, and create cash exactly once",
   async () => {
+    const isoDateAtOffset = (days: number) =>
+      new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+    const today = isoDateAtOffset(0);
+    const yesterday = isoDateAtOffset(-1);
+    const twoDaysAgo = isoDateAtOffset(-2);
+    const nextWeek = isoDateAtOffset(7);
     dataDirectory = await mkdtemp(
       join(tmpdir(), "jornal-invoice-integration-"),
     );
@@ -66,6 +72,7 @@ integrationTest(
         stderr: "inherit",
         env: {
           ...process.env,
+          JORNAL_CRON_ENABLED: "false",
           JORNAL_AI_CAPTURE_ENABLED: "true",
           JORNAL_PUSH_ENABLED: "true",
           JORNAL_PUSH_VAPID_PUBLIC_KEY: "test-public",
@@ -174,8 +181,8 @@ integrationTest(
       ...base,
       commandKey: "draft-1",
       customerId,
-      issueDate: "2026-09-17",
-      dueDate: "2026-09-24",
+      issueDate: today,
+      dueDate: nextWeek,
       timezone: "Asia/Jakarta",
       items: [
         {
@@ -227,7 +234,7 @@ integrationTest(
       ...base,
       commandKey: "pay-1",
       expectedRevision: unpaid.revision,
-      paidOn: "2026-09-17",
+      paidOn: today,
       transactionId: "invoice-cash-1",
       accountId: "bank-a",
       mode: "CREATE",
@@ -334,7 +341,7 @@ integrationTest(
       direction: "MONEY_IN",
       amount: 200_000,
       currency: "IDR",
-      transactionDate: "2026-09-17",
+      transactionDate: today,
       description: "Transfer pelanggan",
       classification: "REVENUE",
       businessRelevance: "BUSINESS",
@@ -382,6 +389,10 @@ integrationTest(
         }),
       },
     );
+    if (linked.response.status !== 200)
+      throw new Error(
+        `link payment failed ${linked.response.status}: ${JSON.stringify(linked.data)}`,
+      );
     expect(linked.response.status).toBe(200);
     expect((linked.data.payment as Record<string, unknown>).origin).toBe(
       "LINKED",
@@ -526,7 +537,7 @@ integrationTest(
           transactionId: "document-cash-1",
           direction: "MONEY_OUT",
           amount: 55_000,
-          transactionDate: "2026-09-17",
+          transactionDate: today,
           description: "Belanja dari struk",
         }),
       },
@@ -551,7 +562,7 @@ integrationTest(
           transactionId: "document-cash-1",
           direction: "MONEY_OUT",
           amount: 55_000,
-          transactionDate: "2026-09-17",
+          transactionDate: today,
           description: "Belanja dari struk",
         }),
       },
@@ -616,8 +627,8 @@ integrationTest(
         ...base,
         commandKey: "draft-overdue",
         customerId: reminderCustomerId,
-        issueDate: "2026-09-15",
-        dueDate: "2026-09-16",
+        issueDate: twoDaysAgo,
+        dueDate: yesterday,
         timezone: "Asia/Jakarta",
         items: [
           {
@@ -774,7 +785,7 @@ integrationTest(
           expectedInvoiceRevision: issuedOverdue.revision,
           transactionId: "overdue-document-cash",
           amount: 75_000,
-          transactionDate: "2026-09-17",
+          transactionDate: today,
           description: "Bukti pembayaran invoice",
         }),
       },
@@ -824,7 +835,7 @@ integrationTest(
           ...base,
           commandKey: "pay-overdue",
           expectedRevision: correctedInvoice.revision,
-          paidOn: "2026-09-17",
+          paidOn: today,
           transactionId: "overdue-cash-1",
           mode: "CREATE",
         }),

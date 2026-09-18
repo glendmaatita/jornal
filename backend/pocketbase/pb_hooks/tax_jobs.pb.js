@@ -1,10 +1,12 @@
-cronAdd("jornal-tax-reminders", "*/5 * * * *", () => {
-  const jobs = require(`${__hooks}/tax_jobs.js`)
-  jobs.taxRecoverExpiredLeases()
-  jobs.taxGenerateUpcomingObligations()
-  jobs.taxGenerateNotificationQueue()
-  jobs.taxDeliverNotifications()
-})
+if ($os.getenv("JORNAL_CRON_ENABLED") !== "false") {
+  cronAdd("jornal-tax-reminders", "*/5 * * * *", () => {
+    const jobs = require(`${__hooks}/tax_jobs.js`)
+    jobs.taxRecoverExpiredLeases()
+    jobs.taxGenerateUpcomingObligations()
+    jobs.taxGenerateNotificationQueue()
+    jobs.taxDeliverNotifications()
+  })
+}
 
 routerAdd("POST", "/api/jornal/admin/tax/run-jobs", (event) => {
   try {

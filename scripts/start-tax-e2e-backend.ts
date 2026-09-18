@@ -40,7 +40,7 @@ run(["superuser", "upsert", "e2e-admin@jornal.test", "StrongPass123!", "--dir", 
 
 const child = Bun.spawn([binary, "serve", "--dir", dataDirectory, "--migrationsDir", migrations, "--hooksDir", hooks, "--http=127.0.0.1:8090"], {
   stdout: "inherit", stderr: "inherit", env: {
-    ...process.env, JORNAL_TAX_EMAIL_ENABLED: "false", JORNAL_TEAM_INVITATIONS_ENABLED: "true",
+    ...process.env, JORNAL_CRON_ENABLED: "false", JORNAL_TAX_EMAIL_ENABLED: "false", JORNAL_TEAM_INVITATIONS_ENABLED: "true",
     JORNAL_TEAM_INVITATION_EMAIL_ENABLED: "true", JORNAL_PUBLIC_URL: "http://127.0.0.1:4173",
   },
 })

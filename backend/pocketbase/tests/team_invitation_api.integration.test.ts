@@ -63,7 +63,7 @@ integrationTest("team invitations are Google-bound, idempotent, shared, revocabl
     "--hooksDir", hooks, `--http=127.0.0.1:${port}`,
   ], {
     stdout: "ignore", stderr: "pipe",
-    env: { ...process.env, JORNAL_TEAM_INVITATIONS_ENABLED: "true", JORNAL_TEAM_INVITATION_EMAIL_ENABLED: "true", JORNAL_PUBLIC_URL: origin },
+    env: { ...process.env, JORNAL_CRON_ENABLED: "false", JORNAL_TEAM_INVITATIONS_ENABLED: "true", JORNAL_TEAM_INVITATION_EMAIL_ENABLED: "true", JORNAL_PUBLIC_URL: origin },
   })
   for (let attempt = 0; attempt < 80; attempt += 1) {
     if ((await fetch(`${origin}/api/health`).catch(() => null))?.ok) break

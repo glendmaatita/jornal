@@ -1,7 +1,9 @@
-cronAdd("jornal-team-invitations", "* * * * *", () => {
-  const jobs = require(`${__hooks}/team_invitation_jobs.js`)
-  jobs.teamRecoverLeases(); jobs.teamExpireInvitations(); jobs.teamDeliver()
-})
+if ($os.getenv("JORNAL_CRON_ENABLED") !== "false") {
+  cronAdd("jornal-team-invitations", "* * * * *", () => {
+    const jobs = require(`${__hooks}/team_invitation_jobs.js`)
+    jobs.teamRecoverLeases(); jobs.teamExpireInvitations(); jobs.teamDeliver()
+  })
+}
 
 routerAdd("POST", "/api/jornal/admin/team/run-jobs", (event) => {
   const jobs = require(`${__hooks}/team_invitation_jobs.js`)

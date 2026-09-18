@@ -1,4 +1,6 @@
-cronAdd("jornal-push-queue", "*/5 * * * *", () => require(`${__hooks}/notification_jobs.js`).generate())
+if ($os.getenv("JORNAL_CRON_ENABLED") !== "false") {
+  cronAdd("jornal-push-queue", "*/5 * * * *", () => require(`${__hooks}/notification_jobs.js`).generate())
+}
 
 routerAdd("POST", "/api/jornal/internal/push/claim", (event) => { const headers = event.requestInfo().headers || {}; const expected = $os.getenv("JORNAL_PUSH_WORKER_SECRET") || ""; if (!expected || String(headers.x_jornal_push_secret || "") !== expected) throw new ApiError(401, "Unauthorized"); const jobs = require(`${__hooks}/notification_jobs.js`); jobs.generate(); return event.json(200, { items: jobs.claim(Number((event.requestInfo().body || {}).limit || 25)) }) })
 routerAdd("POST", "/api/jornal/internal/push/{id}/validate", (event) => { const headers = event.requestInfo().headers || {}; const expected = $os.getenv("JORNAL_PUSH_WORKER_SECRET") || ""; if (!expected || String(headers.x_jornal_push_secret || "") !== expected) throw new ApiError(401, "Unauthorized"); const body = event.requestInfo().body || {}; return event.json(200, { valid: require(`${__hooks}/notification_jobs.js`).validate(event.request.pathValue("id"), String(body.leaseId || "")) }) })
