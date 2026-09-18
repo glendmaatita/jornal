@@ -3,8 +3,31 @@ import type { SessionBootstrap, TeamInvitation, TeamPage } from "./team-types"
 
 const api = (path: string) => `/api/jornal${path}`
 const commandKey = () => crypto.randomUUID()
+let bootstrappedUserId = ""
+let bootstrappedSession: SessionBootstrap | null = null
+let bootstrapInFlight: { userId: string; promise: Promise<SessionBootstrap> } | null = null
 
 export async function bootstrapSession(invitationPublicId?: string): Promise<SessionBootstrap> {
+  const userId = pb.authStore.record?.id ?? ""
+  if (!invitationPublicId && userId && bootstrappedUserId === userId && bootstrappedSession) {
+    return bootstrappedSession
+  }
+  if (!invitationPublicId && bootstrapInFlight?.userId === userId) return bootstrapInFlight.promise
+  const run = bootstrapSessionFromServer(invitationPublicId)
+  if (!invitationPublicId) bootstrapInFlight = { userId, promise: run }
+  try {
+    const result = await run
+    if (userId) {
+      bootstrappedUserId = userId
+      bootstrappedSession = result
+    }
+    return result
+  } finally {
+    if (bootstrapInFlight?.promise === run) bootstrapInFlight = null
+  }
+}
+
+async function bootstrapSessionFromServer(invitationPublicId?: string): Promise<SessionBootstrap> {
   let cursor: string | null = null
   let first = true
   const accepted = new Set<string>()

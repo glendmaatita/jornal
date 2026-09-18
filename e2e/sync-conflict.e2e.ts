@@ -116,4 +116,12 @@ test("resolves sequential account conflicts from both buttons without exposing i
 
   const afterLocal = await request.get(`${backend}/api/collections/jornal_records/records?filter=${encodeURIComponent(`company_id = '${company.id}' && entity = 'accounts' && app_id = '${accountId}'`)}&check=local`, { headers: { Authorization: auth.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": company.id, "Cache-Control": "no-cache" } })
   expect(Number(((await afterLocal.json() as { items: Array<{ payload: { openingBalance: number } }> }).items[0].payload.openingBalance))).toBe(12_345_678)
+
+  // A protected-route click must reuse the successful session bootstrap.
+  // A transient bootstrap outage used to redirect an already-loaded user to
+  // the generic "Data belum bisa dimuat" screen when tapping the add button.
+  await page.route("**/api/jornal/session/bootstrap", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "temporary outage" }) }))
+  await page.getByRole("link", { name: "Tambah transaksi" }).click()
+  await expect(page.getByText("Transaksi baru", { exact: false })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Data belum bisa dimuat" })).toHaveCount(0)
 })

@@ -114,7 +114,16 @@ const appLayoutRoute = createRoute({
     }
     const tenantId = pb.authStore.record?.id ?? "local"
     store.setTenantScope(tenantId)
-    try { await team.bootstrapSession() } catch { throw redirect({ to: "/data-unavailable", replace: true }) }
+    try {
+      await team.bootstrapSession()
+    } catch {
+      // Bootstrap claims invitations and is required for a first-time user,
+      // but an existing offline-first session must not be expelled from the
+      // app when this request briefly fails during client-side navigation.
+      if (companyStore.loadCachedCompanies().length === 0) {
+        throw redirect({ to: "/data-unavailable", replace: true })
+      }
+    }
     let companies
     try {
       companies = await companyStore.loadCompanies()
