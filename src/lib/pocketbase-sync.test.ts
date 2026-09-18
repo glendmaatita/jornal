@@ -11,6 +11,8 @@ import {
   resolveSyncConflict,
   schedulePocketBaseSync,
   setPocketBaseUrl,
+  syncConflictDisplayPayload,
+  syncConflictLabel,
   syncToPocketBase,
 } from "./pocketbase-sync"
 import { KEYS, RESET_PENDING_KEY, scopedStorageKey, saveProfile, emptyProfile, createTransaction, updateTransaction } from "./store"
@@ -309,6 +311,46 @@ describe("sync conflict resolution", () => {
 
     expect(loadSyncConflicts()).toHaveLength(0)
     expect(calls.some((call) => call.method === "PATCH")).toBe(true)
+  })
+
+  test("resolves a legacy account conflict from its captured array without exposing its id", async () => {
+    setEnv("http://pb.test")
+    const accountId = "1571c895-2853-4d7a-88a2-69a03081fc88"
+    const localAccount = { id: accountId, name: "BCA", type: "BANK", openingBalance: 38_033_923, includedInCash: true, createdAt: "2026-09-17T00:00:00.000Z", updatedAt: "2026-09-18T00:00:00.000Z" }
+    const remoteAccount = { ...localAccount, openingBalance: 0, updatedAt: "2026-09-18T00:01:00.000Z" }
+    const conflict = {
+      id: "conflict-account",
+      message: "Conflict",
+      entity: "accounts",
+      appId: accountId,
+      localPayload: [localAccount],
+      remotePayload: remoteAccount,
+      remoteRevision: 7,
+      occurredAt: "2026-09-18T00:02:00.000Z",
+    }
+    localStorageShim.setItem(scopedStorageKey(KEYS.accounts), JSON.stringify([remoteAccount]))
+    localStorageShim.setItem(scopedStorageKey(KEYS.syncConflicts), JSON.stringify([conflict]))
+    respond = (_url, method) => method === "GET"
+      ? { status: 200, body: { items: [{ ...remoteRecord, id: "remote-account", entity: "accounts", app_id: accountId, payload: remoteAccount }], totalPages: 1 } }
+      : { status: 200, body: { ...remoteRecord, id: "remote-account", entity: "accounts", app_id: accountId, payload: localAccount, revision: 8 } }
+
+    expect(syncConflictLabel(conflict)).toBe("akun keuangan “BCA”")
+    expect(syncConflictLabel(conflict)).not.toContain(accountId)
+    expect(JSON.stringify(syncConflictDisplayPayload(conflict, "local"))).not.toContain(accountId)
+    expect(await resolveSyncConflict(conflict.id, "local")).toBe(true)
+    const saved = JSON.parse(localStorageShim.getItem(scopedStorageKey(KEYS.accounts)) || "[]") as Array<{ openingBalance: number }>
+    expect(saved[0].openingBalance).toBe(38_033_923)
+    expect(loadSyncConflicts()).toHaveLength(0)
+    expect(calls.some((call) => call.method === "PATCH")).toBe(true)
+  })
+
+  test("keeps the conflict and reports an actionable error when the server is unavailable", async () => {
+    setEnv("http://pb.test")
+    seedLegacyConflict()
+    respond = () => ({ status: 503, body: { message: "offline" } })
+
+    await expect(resolveSyncConflict("conflict-profile", "remote")).rejects.toThrow("Periksa koneksi")
+    expect(loadSyncConflicts()).toHaveLength(1)
   })
 })
 

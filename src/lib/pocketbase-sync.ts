@@ -1,7 +1,7 @@
 import type { Account, AppSettings, BusinessProfile, CompanyScope, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
 import { getCompanyScope, KEYS, RESET_PENDING_KEY, scopedStorageKey, storageKeyForScope } from "./store"
 import { pb } from "./pb"
-import { acknowledgeOutbox, acknowledgeOutboxSnapshots, clearMirroredState, listOutbox, mirrorState, persistState, restoreState } from "./local-db"
+import { acknowledgeOutboxSnapshots, clearMirroredState, listOutbox, mirrorState, persistState, restoreState } from "./local-db"
 
 type EntityName =
   | "profile"
@@ -70,6 +70,57 @@ export interface SyncConflict {
   remotePayload?: unknown
   remoteRevision?: number
   occurredAt: string
+}
+
+const CONFLICT_ENTITY_LABELS: Record<string, string> = {
+  profile: "profil usaha",
+  settings: "pengaturan",
+  accounts: "akun keuangan",
+  transactions: "transaksi",
+  reserves: "dana cadangan",
+  corrections: "pola klasifikasi",
+  recurringRules: "transaksi berulang",
+  profileHistory: "riwayat profil",
+  accountHistory: "riwayat akun",
+  transactionHistory: "riwayat transaksi",
+  reserveHistory: "riwayat dana cadangan",
+}
+
+function conflictPayloadItem(payload: unknown, appId?: string) {
+  if (!appId || !Array.isArray(payload)) return payload
+  return payload.find((item) => item && typeof item === "object" && (item as { id?: string }).id === appId)
+}
+
+/** Human-readable conflict name. Internal record IDs must never be user-facing. */
+export function syncConflictLabel(conflict: SyncConflict) {
+  const label = CONFLICT_ENTITY_LABELS[conflict.entity ?? ""] ?? "data"
+  const payload = conflictPayloadItem(conflict.localPayload, conflict.appId)
+    ?? conflictPayloadItem(conflict.remotePayload, conflict.appId)
+  if (!payload || typeof payload !== "object") return label
+  const value = payload as { name?: unknown; businessName?: unknown; description?: unknown }
+  const detail = [value.name, value.businessName, value.description]
+    .find((candidate) => typeof candidate === "string" && candidate.trim())
+  return detail ? `${label} “${String(detail).trim()}”` : label
+}
+
+const INTERNAL_CONFLICT_FIELDS = new Set([
+  "id", "businessId", "companyId", "tenantId", "dataEpoch", "membershipRevision",
+  "revision", "createdAt", "updatedAt", "attachmentDataUrl", "attachmentRemoteUrl",
+])
+
+function redactConflictPayload(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactConflictPayload)
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !INTERNAL_CONFLICT_FIELDS.has(key))
+      .map(([key, item]) => [key, redactConflictPayload(item)]),
+  )
+}
+
+export function syncConflictDisplayPayload(conflict: SyncConflict, source: "local" | "remote") {
+  const payload = source === "local" ? conflict.localPayload : conflict.remotePayload
+  return redactConflictPayload(conflictPayloadItem(payload, conflict.appId))
 }
 interface ScopeRuntime {
   syncQueued: boolean
@@ -146,6 +197,7 @@ export async function resolveSyncConflict(id: string, choice: "local" | "remote"
   const currentLocalValue = Array.isArray(current) && conflict.appId
     ? current.find((item) => item && typeof item === "object" && (item as { id?: string }).id === conflict.appId)
     : current
+  const capturedLocalValue = conflictPayloadItem(conflict.localPayload, conflict.appId)
   let remotePayload = conflict.remotePayload
   let remoteRevision = conflict.remoteRevision
   if (conflict.appId) {
@@ -157,11 +209,11 @@ export async function resolveSyncConflict(id: string, choice: "local" | "remote"
       }
     } catch {
       // Keep the conflict until the current server revision can be verified.
-      return false
+      throw new Error("Server belum dapat dihubungi. Periksa koneksi lalu coba lagi.")
     }
   }
-  const selected = choice === "remote" ? remotePayload : currentLocalValue ?? conflict.localPayload
-  if (selected === undefined) return false
+  const selected = choice === "remote" ? remotePayload : capturedLocalValue ?? currentLocalValue
+  if (selected === undefined) throw new Error("Data konflik tidak lengkap. Muat ulang aplikasi lalu coba lagi.")
   const remoteUpdatedAt = remotePayload && typeof remotePayload === "object"
     ? Date.parse(String((remotePayload as { updatedAt?: unknown }).updatedAt ?? ""))
     : Number.NaN
@@ -176,27 +228,46 @@ export async function resolveSyncConflict(id: string, choice: "local" | "remote"
       const next = found
         ? current.map((item) => item && typeof item === "object" && (item as { id?: string }).id === selectedId ? value : item)
         : [...current, value]
-      writeLocalJson(key, next, scope)
-      if (choice === "local") await persistState(storageKey, next)
-      else await mirrorState(storageKey, next)
+      window.localStorage.setItem(storageKey, JSON.stringify(next))
+      await persistState(storageKey, next)
     } else {
-      writeLocalJson(key, value, scope)
-      if (choice === "local") await persistState(storageKey, value)
-      else await mirrorState(storageKey, value)
+      window.localStorage.setItem(storageKey, JSON.stringify(value))
+      await persistState(storageKey, value)
     }
-    if (conflict.appId && Number.isFinite(remoteRevision)) saveBaseRevision(scope, entity, conflict.appId, Number(remoteRevision))
-    if (choice === "remote") await acknowledgeOutbox([storageKey])
-    const remaining = loadSyncConflicts(scope).filter((item) => item.id !== id)
-    window.localStorage.setItem(storageKeyForScope(scope, KEYS.syncConflicts), JSON.stringify(remaining))
-    if (choice === "local") schedulePocketBaseSync(scope)
-    else {
-      const prefix = storageKeyForScope(scope, "")
-      const stillPending = (await listOutbox()).some((row) => row.key.startsWith(prefix))
-      if (stillPending) schedulePocketBaseSync(scope)
-      else setSyncStatus("synced", scope)
-    }
-    return true
-  } catch { return false }
+  } catch {
+    throw new Error("Pilihan belum dapat disimpan di perangkat. Pastikan ruang penyimpanan browser tersedia lalu coba lagi.")
+  }
+  if (conflict.appId && Number.isFinite(remoteRevision)) saveBaseRevision(scope, entity, conflict.appId, Number(remoteRevision))
+
+  // Do not announce success until the selected value is accepted by the
+  // server. This prevents the same conflict from disappearing and instantly
+  // reappearing while a background retry is still running.
+  try {
+    await flushPendingScope(scope)
+  } catch {
+    throw new Error("Pilihan belum tersimpan di server. Data perangkat tetap aman; coba lagi setelah koneksi stabil.")
+  }
+
+  const remaining = loadSyncConflicts(scope).filter((item) => item.id !== id)
+  const conflictStorageKey = storageKeyForScope(scope, KEYS.syncConflicts)
+  try {
+    window.localStorage.setItem(conflictStorageKey, JSON.stringify(remaining))
+    await mirrorState(conflictStorageKey, remaining)
+  } catch {
+    throw new Error("Pilihan sudah dikirim, tetapi status konflik belum dapat disimpan di perangkat. Kosongkan ruang penyimpanan lalu coba lagi.")
+  }
+  setSyncStatus("synced", scope)
+  return true
+}
+
+async function flushPendingScope(scope: CompanyScope) {
+  const prefix = storageKeyForScope(scope, "")
+  for (let pass = 0; pass < 3; pass += 1) {
+    await syncToPocketBase(scope)
+    const pending = (await listOutbox()).some((row) => row.key.startsWith(prefix))
+    if (!pending) return
+  }
+  throw new Error("Pending changes remain after conflict resolution")
 }
 
 function recordSyncConflict(error: unknown, details?: Partial<SyncConflict>, scope = companyScope()) {
@@ -294,7 +365,7 @@ function hasCachedCompanyState(scope: CompanyScope) {
     .some((key) => window.localStorage.getItem(storageKeyForScope(scope, key)) !== null)
 }
 
-function mergeLocalArray(remotePayloads: unknown[], key: string, scope?: CompanyScope, deletedAppIds: Set<string> = new Set()): unknown[] {
+function mergeLocalArray(remotePayloads: unknown[], key: string, scope?: CompanyScope, deletedAppIds: Set<string> = new Set(), preserveLocal = false): unknown[] {
   const local = localJson<unknown[]>(key, [], scope)
   const identity = (value: unknown) => {
     if (!value || typeof value !== "object") return String(value)
@@ -303,9 +374,22 @@ function mergeLocalArray(remotePayloads: unknown[], key: string, scope?: Company
     return candidate.id ?? JSON.stringify(value)
   }
   const merged = new Map(local.map((value) => [identity(value), value]))
-  for (const deletedId of deletedAppIds) merged.delete(deletedId)
-  for (const value of remotePayloads) merged.set(identity(value), value)
+  if (!preserveLocal) for (const deletedId of deletedAppIds) merged.delete(deletedId)
+  for (const value of remotePayloads) {
+    const id = identity(value)
+    if (!preserveLocal || !merged.has(id)) merged.set(id, value)
+  }
   return [...merged.values()]
+}
+
+function stablePayload(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stablePayload).join(",")}]`
+  return `{${Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stablePayload(item)}`)
+    .join(",")}}`
 }
 
 function isDataUrl(value: string | null | undefined): value is string {
@@ -411,6 +495,7 @@ async function requestJson<T>(path: string, init?: RequestInit, scope = companyS
       ...init,
       headers,
       signal: controller.signal,
+      cache: "no-store",
     })
   } catch (error) {
     clearTimeout(timeout)
@@ -515,6 +600,10 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
     const error = new Error(`Conflict: ${entity}/${appId} berubah di perangkat lain`)
     recordSyncConflict(error, { entity, appId, localPayload: sanitizedPayload, remotePayload: found.payload, remoteRevision: Number(found.revision || 0) }, requestedScope)
     throw error
+  }
+  if (found && stablePayload(found.payload) === stablePayload(sanitizedPayload)) {
+    saveBaseRevision(requestedScope, entity, appId, Number(found.revision || 0))
+    return
   }
   if (found && found.payload && payload && typeof found.payload === "object" && typeof payload === "object") {
     const remoteUpdatedAt = (found.payload as { updatedAt?: unknown }).updatedAt
@@ -754,7 +843,20 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
     const key = entityKey(entity)
     const entityIsDirty = queuedKeys.has(storageKeyForScope(runScope, key))
     if (!entityIsDirty) for (const record of remote) saveBaseRevision(runScope, entity, record.app_id, Number(record.revision || 0))
-    else for (const record of remote) if (baseRevision(runScope, entity, record.app_id) === undefined) recordSyncConflict(new Error(`Perubahan lokal ${entity}/${record.app_id} perlu ditinjau setelah migrasi cache`), { entity, appId: record.app_id, localPayload: localJson(key, null, runScope), remotePayload: record.payload, remoteRevision: Number(record.revision || 0) }, runScope)
+    else {
+      const localState = localJson<unknown>(key, null, runScope)
+      for (const record of remote) {
+        const knownRevision = baseRevision(runScope, entity, record.app_id)
+        if (knownRevision === Number(record.revision || 0)) continue
+        recordSyncConflict(new Error(`Perubahan lokal ${entity}/${record.app_id} perlu ditinjau setelah migrasi cache`), {
+          entity,
+          appId: record.app_id,
+          localPayload: conflictPayloadItem(localState, record.app_id),
+          remotePayload: record.payload,
+          remoteRevision: Number(record.revision || 0),
+        }, runScope)
+      }
+    }
     if (entity === "profile" || entity === "settings") {
       const current = remote.find((record) => !record.deleted_at)
       const payload = current?.payload ?? null
@@ -785,6 +887,7 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
         key,
         runScope,
         new Set(remote.filter((record) => Boolean(record.deleted_at)).map((record) => record.app_id)),
+        entityIsDirty,
       ),
       runScope,
     )

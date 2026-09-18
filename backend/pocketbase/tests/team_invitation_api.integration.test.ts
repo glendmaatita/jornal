@@ -151,12 +151,15 @@ integrationTest("team invitations are Google-bound, idempotent, shared, revocabl
   expect(runJobs.data.claimed).toBe(1)
   for (let attempt = 0; attempt < 20 && messages.length === 0; attempt += 1) await Bun.sleep(25)
   expect(messages).toHaveLength(1)
-  expect(messages[0]).toContain("member+team@example.com")
-  expect(messages[0]).toContain(String(invitation.data.publicId))
-  expect(messages[0]).toContain("&lt;Owner &amp; Co&gt;")
-  expect(messages[0]).toContain("&lt;T=")
-  expect(messages[0]).toContain("oko &amp; Co&gt;")
-  expect(messages[0]).not.toContain("321000")
+  // Quoted-printable encoders may insert a soft line break at any byte
+  // boundary. Normalize those transport-only breaks before asserting the
+  // semantic email content so this test is deterministic across runtimes.
+  const deliveredMessage = messages[0].replace(/=\r\n/g, "")
+  expect(deliveredMessage).toContain("member+team@example.com")
+  expect(deliveredMessage).toContain(String(invitation.data.publicId))
+  expect(deliveredMessage).toContain("&lt;Owner &amp; Co&gt;")
+  expect(deliveredMessage).toContain("&lt;Toko &amp; Co&gt;")
+  expect(deliveredMessage).not.toContain("321000")
 
   const racingInvites = await Promise.all([
     send(`/api/jornal/companies/${companyId}/invitations`, { method: "POST", headers: headers(owner.token), body: JSON.stringify({ email: "race@example.com", commandKey: "race-invite-a" }) }),
