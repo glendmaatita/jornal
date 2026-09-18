@@ -285,9 +285,13 @@ describe("sync conflict resolution", () => {
       remotePayload: remoteProfile,
       occurredAt: "2026-09-18T00:02:00.000Z",
     }]))
-    respond = (_url, method) => method === "GET"
-      ? { status: 200, body: { items: [remoteRecord], totalPages: 1 } }
-      : { status: 200, body: { ...remoteRecord, revision: 8 } }
+    let liveRecord = remoteRecord
+    respond = (_url, method) => {
+      if (method === "GET") return { status: 200, body: { items: [liveRecord], totalPages: 1 } }
+      const payload = calls.at(-1)?.body as { payload?: typeof remoteProfile; revision?: number }
+      liveRecord = { ...liveRecord, payload: payload.payload ?? liveRecord.payload, revision: Number(payload.revision ?? liveRecord.revision + 1) }
+      return { status: 200, body: liveRecord }
+    }
   }
 
   test("using the server records its live revision and does not recreate the conflict", async () => {
@@ -330,9 +334,13 @@ describe("sync conflict resolution", () => {
     }
     localStorageShim.setItem(scopedStorageKey(KEYS.accounts), JSON.stringify([remoteAccount]))
     localStorageShim.setItem(scopedStorageKey(KEYS.syncConflicts), JSON.stringify([conflict]))
-    respond = (_url, method) => method === "GET"
-      ? { status: 200, body: { items: [{ ...remoteRecord, id: "remote-account", entity: "accounts", app_id: accountId, payload: remoteAccount }], totalPages: 1 } }
-      : { status: 200, body: { ...remoteRecord, id: "remote-account", entity: "accounts", app_id: accountId, payload: localAccount, revision: 8 } }
+    let liveAccount = { ...remoteRecord, id: "remote-account", entity: "accounts", app_id: accountId, payload: remoteAccount }
+    respond = (_url, method) => {
+      if (method === "GET") return { status: 200, body: { items: [liveAccount], totalPages: 1 } }
+      const payload = calls.at(-1)?.body as { payload?: unknown; revision?: number }
+      liveAccount = { ...liveAccount, payload: payload.payload as typeof remoteAccount, revision: Number(payload.revision ?? 8) }
+      return { status: 200, body: liveAccount }
+    }
 
     expect(syncConflictLabel(conflict)).toBe("akun keuangan “BCA”")
     expect(syncConflictLabel(conflict)).not.toContain(accountId)
@@ -342,6 +350,60 @@ describe("sync conflict resolution", () => {
     expect(saved[0].openingBalance).toBe(38_033_923)
     expect(loadSyncConflicts()).toHaveLength(0)
     expect(calls.some((call) => call.method === "PATCH")).toBe(true)
+  })
+
+  test("resolves multiple history conflicts one record at a time", async () => {
+    setEnv("http://pb.test")
+    const firstLocal = {
+      id: "account-1", effectiveAt: "2026-09-17T00:00:00.000Z", deletedAt: null,
+      value: { id: "account-1", name: "BCA", openingBalance: 38_033_923 },
+    }
+    const secondLocal = {
+      id: "account-1", effectiveAt: "2026-09-18T00:00:00.000Z", deletedAt: null,
+      value: { id: "account-1", name: "BCA", openingBalance: 12_000_000 },
+    }
+    const firstRemote = { ...firstLocal, value: { ...firstLocal.value, openingBalance: 0 } }
+    const secondRemote = { ...secondLocal, value: { ...secondLocal.value, openingBalance: 10_000_000 } }
+    const firstAppId = `${firstLocal.id}:${firstLocal.effectiveAt}:live`
+    const secondAppId = `${secondLocal.id}:${secondLocal.effectiveAt}:live`
+    const remote = new Map([
+      [firstAppId, { id: "remote-history-1", appId: firstAppId, payload: firstRemote, revision: 7 }],
+      [secondAppId, { id: "remote-history-2", appId: secondAppId, payload: secondRemote, revision: 7 }],
+    ])
+    const conflicts = [
+      { id: "history-conflict-1", message: "Conflict", entity: "accountHistory", appId: firstAppId, localPayload: [firstLocal, secondLocal], remotePayload: firstRemote, remoteRevision: 7, occurredAt: new Date().toISOString() },
+      { id: "history-conflict-2", message: "Conflict", entity: "accountHistory", appId: secondAppId, localPayload: [firstLocal, secondLocal], remotePayload: secondRemote, remoteRevision: 7, occurredAt: new Date().toISOString() },
+    ]
+    localStorageShim.setItem(scopedStorageKey(KEYS.accountHistory), JSON.stringify([firstLocal, secondLocal]))
+    localStorageShim.setItem(scopedStorageKey(KEYS.syncConflicts), JSON.stringify(conflicts))
+    respond = (url, method) => {
+      if (method === "GET") {
+        const filter = new URL(url).searchParams.get("filter") ?? ""
+        const entry = [...remote.values()].find((item) => filter.includes(`app_id = "${item.appId}"`))
+        return { status: 200, body: { items: entry ? [{ ...remoteRecord, id: entry.id, entity: "accountHistory", app_id: entry.appId, payload: entry.payload, revision: entry.revision }] : [], totalPages: 1 } }
+      }
+      if (method === "PATCH") {
+        const target = [...remote.values()].find((item) => url.endsWith(`/records/${item.id}`))!
+        const call = calls.at(-1)?.body as { payload?: unknown }
+        if (typeof call.payload === "string") target.payload = JSON.parse(call.payload) as typeof target.payload
+        else if (call.payload && typeof call.payload === "object") target.payload = call.payload as typeof target.payload
+        target.revision += 1
+        return { status: 200, body: { id: target.id, app_id: target.appId, payload: target.payload, revision: target.revision } }
+      }
+      return { status: 200, body: {} }
+    }
+
+    expect(syncConflictLabel(conflicts[0])).toBe("riwayat akun “BCA”")
+    expect(await resolveSyncConflict("history-conflict-1", "local")).toBe(true)
+    expect(loadSyncConflicts().map((item) => item.id)).toEqual(["history-conflict-2"])
+    expect(calls.some((call) => decodeURIComponent(call.url).includes(secondAppId))).toBe(false)
+
+    expect(await resolveSyncConflict("history-conflict-2", "remote")).toBe(true)
+    expect(loadSyncConflicts()).toHaveLength(0)
+    const saved = JSON.parse(localStorageShim.getItem(scopedStorageKey(KEYS.accountHistory)) || "[]") as typeof firstLocal[]
+    expect(saved[0].value.openingBalance).toBe(38_033_923)
+    expect(saved[1].value.openingBalance).toBe(10_000_000)
+    expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(1)
   })
 
   test("keeps the conflict and reports an actionable error when the server is unavailable", async () => {

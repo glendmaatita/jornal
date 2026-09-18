@@ -86,19 +86,25 @@ const CONFLICT_ENTITY_LABELS: Record<string, string> = {
   reserveHistory: "riwayat dana cadangan",
 }
 
-function conflictPayloadItem(payload: unknown, appId?: string) {
+function conflictPayloadItem(payload: unknown, appId?: string, entity?: string) {
   if (!appId || !Array.isArray(payload)) return payload
-  return payload.find((item) => item && typeof item === "object" && (item as { id?: string }).id === appId)
+  return payload.find((item) => item && typeof item === "object" && (
+    (item as { id?: string }).id === appId
+    || (entity ? entityAppId(entity as EntityName, item) === appId : false)
+  ))
 }
 
 /** Human-readable conflict name. Internal record IDs must never be user-facing. */
 export function syncConflictLabel(conflict: SyncConflict) {
   const label = CONFLICT_ENTITY_LABELS[conflict.entity ?? ""] ?? "data"
-  const payload = conflictPayloadItem(conflict.localPayload, conflict.appId)
-    ?? conflictPayloadItem(conflict.remotePayload, conflict.appId)
+  const payload = conflictPayloadItem(conflict.localPayload, conflict.appId, conflict.entity)
+    ?? conflictPayloadItem(conflict.remotePayload, conflict.appId, conflict.entity)
   if (!payload || typeof payload !== "object") return label
-  const value = payload as { name?: unknown; businessName?: unknown; description?: unknown }
-  const detail = [value.name, value.businessName, value.description]
+  const value = payload as { name?: unknown; businessName?: unknown; description?: unknown; value?: unknown }
+  const nested = value.value && typeof value.value === "object"
+    ? value.value as { name?: unknown; businessName?: unknown; description?: unknown }
+    : undefined
+  const detail = [value.name, value.businessName, value.description, nested?.name, nested?.businessName, nested?.description]
     .find((candidate) => typeof candidate === "string" && candidate.trim())
   return detail ? `${label} “${String(detail).trim()}”` : label
 }
@@ -120,7 +126,7 @@ function redactConflictPayload(value: unknown): unknown {
 
 export function syncConflictDisplayPayload(conflict: SyncConflict, source: "local" | "remote") {
   const payload = source === "local" ? conflict.localPayload : conflict.remotePayload
-  return redactConflictPayload(conflictPayloadItem(payload, conflict.appId))
+  return redactConflictPayload(conflictPayloadItem(payload, conflict.appId, conflict.entity))
 }
 interface ScopeRuntime {
   syncQueued: boolean
@@ -188,28 +194,29 @@ export function loadSyncConflicts(scope = companyScope()): SyncConflict[] {
 
 export async function resolveSyncConflict(id: string, choice: "local" | "remote") {
   const scope = companyScope()
-  const conflict = loadSyncConflicts(scope).find((item) => item.id === id)
+  const conflicts = loadSyncConflicts(scope)
+  const conflict = conflicts.find((item) => item.id === id)
   if (!conflict || !conflict.entity) return false
   const entity = conflict.entity as EntityName
   const key = entityKey(entity)
   const storageKey = storageKeyForScope(scope, key)
   const current = localJson<unknown>(key, null, scope)
   const currentLocalValue = Array.isArray(current) && conflict.appId
-    ? current.find((item) => item && typeof item === "object" && (item as { id?: string }).id === conflict.appId)
+    ? conflictPayloadItem(current, conflict.appId, entity)
     : current
-  const capturedLocalValue = conflictPayloadItem(conflict.localPayload, conflict.appId)
+  const capturedLocalValue = conflictPayloadItem(conflict.localPayload, conflict.appId, entity)
   let remotePayload = conflict.remotePayload
   let remoteRevision = conflict.remoteRevision
   if (conflict.appId) {
     try {
       const live = (await listRecords(entity, conflict.appId, scope)).find((record) => record.app_id === conflict.appId)
-      if (live) {
-        remotePayload = live.payload
-        remoteRevision = Number(live.revision || 0)
-      }
-    } catch {
+      if (!live) throw new Error("Data konflik di server sudah berubah. Muat ulang aplikasi lalu coba lagi.")
+      remotePayload = live.payload
+      remoteRevision = Number(live.revision || 0)
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Data konflik")) throw error
       // Keep the conflict until the current server revision can be verified.
-      throw new Error("Server belum dapat dihubungi. Periksa koneksi lalu coba lagi.")
+      throw new Error("Server belum dapat dihubungi. Periksa koneksi lalu coba lagi.", { cause: error })
     }
   }
   const selected = choice === "remote" ? remotePayload : capturedLocalValue ?? currentLocalValue
@@ -223,10 +230,10 @@ export async function resolveSyncConflict(id: string, choice: "local" | "remote"
     : selected
   try {
     if (Array.isArray(current) && value && typeof value === "object" && "id" in value) {
-      const selectedId = (value as { id?: string }).id
-      const found = current.some((item) => item && typeof item === "object" && (item as { id?: string }).id === selectedId)
+      const selectedId = conflict.appId ?? entityAppId(entity, value)
+      const found = current.some((item) => entityAppId(entity, item) === selectedId)
       const next = found
-        ? current.map((item) => item && typeof item === "object" && (item as { id?: string }).id === selectedId ? value : item)
+        ? current.map((item) => entityAppId(entity, item) === selectedId ? value : item)
         : [...current, value]
       window.localStorage.setItem(storageKey, JSON.stringify(next))
       await persistState(storageKey, next)
@@ -239,16 +246,21 @@ export async function resolveSyncConflict(id: string, choice: "local" | "remote"
   }
   if (conflict.appId && Number.isFinite(remoteRevision)) saveBaseRevision(scope, entity, conflict.appId, Number(remoteRevision))
 
-  // Do not announce success until the selected value is accepted by the
-  // server. This prevents the same conflict from disappearing and instantly
-  // reappearing while a background retry is still running.
+  const remaining = conflicts.filter((item) => item.id !== id)
+  // Array states share one outbox row. Syncing that entire row while another
+  // item is still conflicted makes the first choice fail on the second item.
+  // Submit only the chosen local record now; flush the shared outbox after the
+  // final conflict has been resolved and every record has a known base.
   try {
-    await flushPendingScope(scope)
-  } catch {
-    throw new Error("Pilihan belum tersimpan di server. Data perangkat tetap aman; coba lagi setelah koneksi stabil.")
+    if (choice === "local" && conflict.appId) await upsertRecord(entity, conflict.appId, value, scope)
+    if (remaining.length === 0) await flushPendingScope(scope)
+  } catch (error) {
+    const changedAgain = String(error).includes("Conflict") || String(error).includes("PocketBase 409")
+    throw new Error(changedAgain
+      ? "Data di server berubah lagi. Muat ulang aplikasi lalu pilih versi yang ingin dipakai."
+      : "Server belum menerima pilihan ini. Data perangkat tetap aman; coba lagi atau muat ulang aplikasi.", { cause: error })
   }
 
-  const remaining = loadSyncConflicts(scope).filter((item) => item.id !== id)
   const conflictStorageKey = storageKeyForScope(scope, KEYS.syncConflicts)
   try {
     window.localStorage.setItem(conflictStorageKey, JSON.stringify(remaining))
@@ -256,7 +268,7 @@ export async function resolveSyncConflict(id: string, choice: "local" | "remote"
   } catch {
     throw new Error("Pilihan sudah dikirim, tetapi status konflik belum dapat disimpan di perangkat. Kosongkan ruang penyimpanan lalu coba lagi.")
   }
-  setSyncStatus("synced", scope)
+  setSyncStatus(remaining.length > 0 ? "failed" : "synced", scope)
   return true
 }
 
@@ -851,7 +863,7 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
         recordSyncConflict(new Error(`Perubahan lokal ${entity}/${record.app_id} perlu ditinjau setelah migrasi cache`), {
           entity,
           appId: record.app_id,
-          localPayload: conflictPayloadItem(localState, record.app_id),
+          localPayload: conflictPayloadItem(localState, record.app_id, entity),
           remotePayload: record.payload,
           remoteRevision: Number(record.revision || 0),
         }, runScope)

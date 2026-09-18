@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test"
 
 const backend = "http://127.0.0.1:8090"
 
-test("resolves account conflicts from both buttons without exposing internal ids", async ({ page, request }) => {
+test("resolves sequential account conflicts from both buttons without exposing internal ids", async ({ page, request }) => {
   const adminAuth = await request.post(`${backend}/api/collections/_superusers/auth-with-password`, {
     data: { identity: "e2e-admin@jornal.test", password: "StrongPass123!" },
   })
@@ -18,6 +18,8 @@ test("resolves account conflicts from both buttons without exposing internal ids
   const impersonated = await request.post(`${backend}/api/collections/users/impersonate/${user.id}`, { headers: { Authorization: admin.token } })
   const auth = await impersonated.json() as { token: string }
   const accountId = crypto.randomUUID()
+  const secondAccountId = crypto.randomUUID()
+  const createdAt = new Date().toISOString()
   const setup = await request.post(`${backend}/api/jornal/companies/setup`, {
     headers: { Authorization: auth.token },
     data: {
@@ -32,7 +34,10 @@ test("resolves account conflicts from both buttons without exposing internal ids
         lastCheckInDelta: null, onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
         createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
       },
-      accounts: [{ id: accountId, name: "BCA", type: "BANK", openingBalance: 0, includedInCash: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }],
+      accounts: [
+        { id: accountId, name: "BCA", type: "BANK", openingBalance: 0, includedInCash: true, createdAt, updatedAt: createdAt },
+        { id: secondAccountId, name: "Mandiri", type: "BANK", openingBalance: 5_000_000, includedInCash: true, createdAt, updatedAt: createdAt },
+      ],
     },
   })
   expect(setup.ok()).toBeTruthy()
@@ -43,16 +48,23 @@ test("resolves account conflicts from both buttons without exposing internal ids
   })
   expect(records.ok()).toBeTruthy()
   const remoteRecord = (await records.json() as { items: Array<{ revision: number; payload: Record<string, unknown> }> }).items[0]
+  const secondRecords = await request.get(`${backend}/api/collections/jornal_records/records?filter=${encodeURIComponent(`company_id = '${company.id}' && entity = 'accounts' && app_id = '${secondAccountId}'`)}`, {
+    headers: { Authorization: auth.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": company.id },
+  })
+  expect(secondRecords.ok()).toBeTruthy()
+  const secondRemoteRecord = (await secondRecords.json() as { items: Array<{ revision: number; payload: Record<string, unknown> }> }).items[0]
   const remoteAccount = remoteRecord.payload
+  const secondRemoteAccount = secondRemoteRecord.payload
   const localAccount = { ...remoteAccount, openingBalance: 12_345_678, updatedAt: new Date(Date.now() + 1_000).toISOString() }
-  const conflict = (id: string) => ({
+  const secondLocalAccount = { ...secondRemoteAccount, openingBalance: 9_000_000, updatedAt: new Date(Date.now() + 1_000).toISOString() }
+  const conflict = (id: string, targetId = accountId, local = localAccount, remote = remoteAccount, revision = remoteRecord.revision) => ({
     id,
     message: "Conflict",
     entity: "accounts",
-    appId: accountId,
-    localPayload: [localAccount],
-    remotePayload: remoteAccount,
-    remoteRevision: remoteRecord.revision,
+    appId: targetId,
+    localPayload: [local],
+    remotePayload: remote,
+    remoteRevision: revision,
     occurredAt: new Date().toISOString(),
   })
 
@@ -79,13 +91,22 @@ test("resolves account conflicts from both buttons without exposing internal ids
   const afterRemote = await request.get(`${backend}/api/collections/jornal_records/records?filter=${encodeURIComponent(`company_id = '${company.id}' && entity = 'accounts' && app_id = '${accountId}'`)}&check=remote`, { headers: { Authorization: auth.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": company.id, "Cache-Control": "no-cache" } })
   expect(Number(((await afterRemote.json() as { items: Array<{ payload: { openingBalance: number } }> }).items[0].payload.openingBalance))).toBe(0)
 
-  await page.evaluate(({ storagePrefix, local, nextConflict }) => {
-    localStorage.setItem(`${storagePrefix}jornal.accounts.v1`, JSON.stringify([local]))
-    localStorage.setItem(`${storagePrefix}jornal.sync-conflicts.v1`, JSON.stringify([nextConflict]))
-  }, { storagePrefix: prefix, local: localAccount, nextConflict: conflict("local-choice") })
+  const nextConflicts = [
+    conflict("local-choice"),
+    conflict("second-server-choice", secondAccountId, secondLocalAccount, secondRemoteAccount, secondRemoteRecord.revision),
+  ]
+  await page.evaluate(({ storagePrefix, locals, conflicts }) => {
+    localStorage.setItem(`${storagePrefix}jornal.accounts.v1`, JSON.stringify(locals))
+    localStorage.setItem(`${storagePrefix}jornal.sync-conflicts.v1`, JSON.stringify(conflicts))
+  }, { storagePrefix: prefix, locals: [localAccount, secondLocalAccount], conflicts: nextConflicts })
   await page.reload()
   await expect(banner.getByRole("button", { name: "Pakai perangkat" })).toBeVisible()
   await banner.getByRole("button", { name: "Pakai perangkat" }).click()
+  await expect.poll(() => page.evaluate((storagePrefix) => {
+    return JSON.parse(localStorage.getItem(`${storagePrefix}jornal.sync-conflicts.v1`) || "[]").length
+  }, prefix)).toBe(1)
+  await expect(banner.getByText("akun keuangan “Mandiri”", { exact: false })).toBeVisible()
+  await banner.getByRole("button", { name: "Pakai server" }).click()
   await expect.poll(() => page.evaluate((storagePrefix) => localStorage.getItem(`${storagePrefix}jornal.sync-conflicts.v1`), prefix)).toBe("[]")
   await expect(banner).toHaveCount(0)
   expect(await page.evaluate((storagePrefix) => {
