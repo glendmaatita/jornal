@@ -5,6 +5,7 @@ import { ArrowLeft, Hourglass, Mail, MailPlus, RefreshCw, Trash2, UserMinus, Use
 
 import { PageLoading } from "@/components/loading-screen"
 import { Button } from "@/components/ui/button"
+import { useAppDialog } from "@/components/ui/app-dialog-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { TextField } from "@/components/ui/text-field"
 import { activeCompany, refreshCompanyMemberships } from "@/lib/companies"
@@ -23,6 +24,7 @@ function message(error: unknown) {
 }
 
 export function CompanyTeamPage() {
+  const dialog = useAppDialog()
   const company = activeCompany()
   const user = currentUser()
   const queryClient = useQueryClient()
@@ -58,7 +60,7 @@ export function CompanyTeamPage() {
         <div className="divide-y divide-border/60">
           {activeMembers.map((member: TeamMember) => <div key={member.userId} className="flex items-center gap-3 py-3">
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{member.name}</p><p className="truncate text-xs text-muted-foreground">{member.email}{member.userId === user?.id ? " · Anda" : ""}</p></div>
-            {member.userId === user?.id ? <Button variant="outline" disabled={activeMembers.length <= 1 || Boolean(pending)} onClick={() => { if (window.confirm(`Keluar dari ${company.name}? Akses pada perangkat ini akan dihentikan.`)) void run(`leave:${member.userId}`, () => leaveCompany(company.id, member.revision), "Anda telah keluar dari company.").then(async (left) => { if (!left) return; await refreshCompanyMemberships().catch(() => undefined); window.location.assign("/companies") }) }}>Keluar</Button> : <button type="button" disabled={activeMembers.length <= 1 || Boolean(pending)} aria-label={`Hapus ${member.name}`} className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40" onClick={() => { if (window.confirm(`Hapus akses ${member.name} dari ${company.name}?`)) void run(`remove:${member.userId}`, () => removeTeamMember(company.id, member.userId, member.revision), "Akses anggota telah dihapus.") }}><UserMinus className="size-4" /></button>}
+            {member.userId === user?.id ? <Button variant="outline" disabled={activeMembers.length <= 1 || Boolean(pending)} onClick={() => void dialog.confirm({ title: `Keluar dari ${company.name}?`, description: "Akses company pada perangkat ini akan dihentikan. Data company tetap tersedia untuk anggota lain.", confirmLabel: "Keluar", tone: "destructive" }).then((confirmed) => { if (confirmed) return run(`leave:${member.userId}`, () => leaveCompany(company.id, member.revision), "Anda telah keluar dari company.").then(async (left) => { if (!left) return; await refreshCompanyMemberships().catch(() => undefined); window.location.assign("/companies") }) })}>Keluar</Button> : <button type="button" disabled={activeMembers.length <= 1 || Boolean(pending)} aria-label={`Hapus ${member.name}`} className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40" onClick={() => void dialog.confirm({ title: `Hapus akses ${member.name}?`, description: `${member.name} tidak akan dapat mengakses ${company.name} lagi.`, confirmLabel: "Hapus akses", tone: "destructive" }).then((confirmed) => { if (confirmed) return run(`remove:${member.userId}`, () => removeTeamMember(company.id, member.userId, member.revision), "Akses anggota telah dihapus.") })}><UserMinus className="size-4" /></button>}
           </div>)}
         </div>
       </CardContent></Card>
@@ -69,7 +71,7 @@ export function CompanyTeamPage() {
         {pendingInvitations.map((invitation: TeamInvitation) => <div key={invitation.id} className="rounded-xl border border-border p-3">
           <p className="break-all text-sm font-semibold">{invitation.email}</p>
           <p className="mt-1 text-xs text-muted-foreground">Berlaku sampai {new Date(invitation.expiresAt).toLocaleString("id-ID")}</p>
-          <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" disabled={Boolean(pending)} onClick={() => void run(`resend:${invitation.id}`, () => resendInvitation(company.id, invitation), "Undangan dikirim ulang.")}><RefreshCw className="size-4" />Kirim ulang</Button><Button variant="outline" disabled={Boolean(pending)} onClick={() => { if (window.confirm(`Batalkan undangan untuk ${invitation.email}?`)) void run(`revoke:${invitation.id}`, () => revokeInvitation(company.id, invitation), "Undangan dibatalkan.") }}><Trash2 className="size-4" />Batalkan</Button></div>
+          <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" disabled={Boolean(pending)} onClick={() => void run(`resend:${invitation.id}`, () => resendInvitation(company.id, invitation), "Undangan dikirim ulang.")}><RefreshCw className="size-4" />Kirim ulang</Button><Button variant="outline" disabled={Boolean(pending)} onClick={() => void dialog.confirm({ title: "Batalkan undangan?", description: `Undangan untuk ${invitation.email} tidak akan dapat digunakan lagi.`, confirmLabel: "Batalkan undangan", tone: "destructive" }).then((confirmed) => { if (confirmed) return run(`revoke:${invitation.id}`, () => revokeInvitation(company.id, invitation), "Undangan dibatalkan.") })}><Trash2 className="size-4" />Batalkan</Button></div>
         </div>)}
         {history.length > 0 && <details><summary className="cursor-pointer text-sm font-semibold">Riwayat undangan ({history.length})</summary><div className="mt-2 space-y-2">{history.map((item) => <p key={item.id} className="text-xs text-muted-foreground">{item.email} · {item.status}</p>)}</div></details>}
       </CardContent></Card>

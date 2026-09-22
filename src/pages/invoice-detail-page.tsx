@@ -21,6 +21,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-context";
 import { DateField } from "@/components/ui/date-field";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
 import { InvoicePaperFit } from "@/components/invoice/invoice-paper-fit";
@@ -53,6 +54,7 @@ export function InvoiceDetailPage({
   invoiceId: string;
   previewOnly?: boolean;
 }) {
+  const dialog = useAppDialog();
   const navigate = useNavigate();
   const client = useQueryClient();
   const detail = useQuery({
@@ -162,14 +164,19 @@ export function InvoiceDetailPage({
                 <Button
                   variant="outline"
                   disabled={busy}
-                  onClick={() => {
-                    if (!window.confirm("Hapus draft invoice ini?")) return;
+                  onClick={() => void (async () => {
+                    if (!await dialog.confirm({
+                      title: "Hapus draft invoice?",
+                      description: "Draft ini akan dihapus dan tidak dapat dipulihkan.",
+                      confirmLabel: "Hapus draft",
+                      tone: "destructive",
+                    })) return;
                     setBusy(true);
                     void deleteInvoiceDraft(invoice)
                       .then(() => navigate({ to: "/invoices" }))
                       .catch((cause) => setError(String(cause)))
                       .finally(() => setBusy(false));
-                  }}
+                  })()}
                 >
                   <Trash2 aria-hidden="true" />
                   Hapus Draft

@@ -30,6 +30,7 @@ import { faSliders } from "@fortawesome/free-solid-svg-icons/faSliders";
 import { faWallet } from "@fortawesome/free-solid-svg-icons/faWallet";
 
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-context";
 import { CompanyLogoEditor } from "@/components/company-logo";
 import { PageLoading } from "@/components/loading-screen";
 import { Card, CardContent } from "@/components/ui/card";
@@ -96,6 +97,7 @@ const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
 ];
 
 export function SettingsPage() {
+  const dialog = useAppDialog();
   const queryClient = useQueryClient();
   const { data: profile } = useProfile();
   const { data: accounts = [] } = useAccounts();
@@ -152,12 +154,11 @@ export function SettingsPage() {
     }
     try {
       const parsed = JSON.parse(await file.text()) as unknown;
-      if (
-        !window.confirm(
-          "Pulihkan backup ini? Data pada perangkat akan digabungkan dengan isi backup.",
-        )
-      )
-        return;
+      if (!await dialog.confirm({
+        title: "Pulihkan backup?",
+        description: "Data pada perangkat akan digabungkan dengan isi backup. Periksa bahwa file berasal dari sumber yang Anda percaya.",
+        confirmLabel: "Pulihkan backup",
+      })) return;
       const result = importLocalData(parsed);
       setDataMessage(`${result.imported} bagian data dipulihkan.`);
       invalidate();
@@ -867,12 +868,17 @@ export function SettingsPage() {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm("Hapus semua pola yang dipelajari?")) {
+                onClick={() => void (async () => {
+                  if (await dialog.confirm({
+                    title: "Hapus semua pola?",
+                    description: "Semua koreksi klasifikasi yang telah dipelajari akan dihapus. Transaksi tidak terpengaruh.",
+                    confirmLabel: "Hapus pola",
+                    tone: "destructive",
+                  })) {
                     clearCorrections();
                     invalidate();
                   }
-                }}
+                })()}
                 className="text-xs font-medium text-muted-foreground underline hover:text-foreground"
               >
                 Hapus semua pola
@@ -938,14 +944,14 @@ export function SettingsPage() {
           )}
           <button
             type="button"
-            onClick={() => {
-              if (
-                company &&
-                window.confirm(
-                  `Reset semua data company ${company.name}? Company lain tidak akan terpengaruh.`,
-                )
-              ) {
-                void resetCompany(company)
+            onClick={() => void (async () => {
+              if (!company || !await dialog.confirm({
+                title: `Reset data ${company.name}?`,
+                description: "Semua transaksi, rekening, invoice, pelanggan, dokumen, dan pengaturan company ini akan dihapus. Company lain tidak akan terpengaruh.",
+                confirmLabel: "Reset data",
+                tone: "destructive",
+              })) return;
+              void resetCompany(company)
                   .then(async (updated) => {
                     setCompanyScope(updated.id, updated.dataEpoch, updated.tenantId, updated.membershipRevision);
                     await resetAllData({ remoteAlreadyReset: true });
@@ -958,8 +964,7 @@ export function SettingsPage() {
                         : "Company gagal direset",
                     ),
                   );
-              }
-            }}
+            })()}
             className="w-full rounded-xl border border-destructive/40 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"
           >
             Reset data company ini

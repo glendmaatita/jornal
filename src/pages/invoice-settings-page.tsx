@@ -25,6 +25,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog-context";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageLoading } from "@/components/loading-screen";
 import { SelectField } from "@/components/ui/select-field";
@@ -43,6 +44,7 @@ import type { InvoiceSettings, InvoiceUnit } from "@/lib/invoice-types";
 import { useAccounts } from "@/lib/queries";
 
 export function InvoiceSettingsPage() {
+  const dialog = useAppDialog();
   const client = useQueryClient();
   const { data: accounts = [] } = useAccounts();
   const [settings, setSettings] = useState<InvoiceSettings | null>(null);
@@ -146,16 +148,17 @@ export function InvoiceSettingsPage() {
         .join(", ");
       const replaceLogo = Boolean(
         backup.manifest.activeLogoAssetId &&
-        window.confirm(
-          `Dry-run valid (${summary}). Ganti juga logo aktif company dengan logo dari backup?`,
-        ),
+        await dialog.confirm({
+          title: "Gunakan logo dari backup?",
+          description: `Pemeriksaan backup valid (${summary}). Logo aktif company dapat diganti dengan logo yang tersimpan dalam backup.`,
+          confirmLabel: "Ganti logo",
+        }),
       );
-      if (
-        !window.confirm(
-          "Pulihkan backup ini secara atomik? Reminder lama tidak akan dipulihkan atau dikirim ulang.",
-        )
-      )
-        return;
+      if (!await dialog.confirm({
+        title: "Pulihkan backup invoice?",
+        description: "Backup akan dipulihkan secara atomik. Reminder lama tidak akan dipulihkan atau dikirim ulang.",
+        confirmLabel: "Pulihkan backup",
+      })) return;
       const result = await restoreInvoiceBackup(backup, {
         replaceLogo,
         reason: "Restore dari Pengaturan Invoice",

@@ -5,6 +5,7 @@ import { ArrowLeft, Copy, Pencil, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useAppDialog } from "@/components/ui/app-dialog-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { categoryName } from "@/lib/categories"
 import { formatRupiah, formatDateLong } from "@/lib/format"
@@ -15,6 +16,7 @@ import { CLASSIFICATION_LABELS, type Transaction } from "@/lib/types"
 import { getCompanyFileAccess } from "@/lib/pocketbase-sync"
 
 export function TransactionDetailPage({ transactionId }: { transactionId: string }) {
+  const dialog = useAppDialog()
   const writable = isCompanyWritable()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -149,9 +151,12 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
             <Button
               variant="outline"
               className="text-destructive hover:bg-destructive/10"
-              onClick={() => {
-                if (window.confirm("Hapus transaksi ini? Tidak bisa dibatalkan.")) remove.mutate()
-              }}
+              onClick={() => void dialog.confirm({
+                title: "Hapus transaksi?",
+                description: "Transaksi ini akan dihapus dan tidak dapat dipulihkan.",
+                confirmLabel: "Hapus transaksi",
+                tone: "destructive",
+              }).then((confirmed) => { if (confirmed) remove.mutate() })}
               disabled={remove.isPending}
             >
               <Trash2 aria-hidden="true" />

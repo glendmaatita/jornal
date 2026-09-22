@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router"
 import { Archive, ArrowRight, Building2, Check, Pencil, Plus, RotateCcw, Search } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { useAppDialog } from "@/components/ui/app-dialog-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { TextField } from "@/components/ui/text-field"
 import { activeCompany, loadCompanies, multiCompanyCreationEnabled, pendingChangesForCompany, persistCompanyDrafts, rememberCompanyCreationReturn, selectCompany, updateCompany } from "@/lib/companies"
@@ -11,6 +12,7 @@ import type { Company } from "@/lib/types"
 import { CompanyLogo, CompanyLogoEditor } from "@/components/company-logo"
 
 export function CompaniesPage() {
+  const dialog = useAppDialog()
   const queryClient = useQueryClient()
   const { data: companies = [], isLoading, error } = useQuery({ queryKey: ["jornal", "companies"], queryFn: loadCompanies })
   const current = activeCompany()
@@ -39,6 +41,22 @@ export function CompaniesPage() {
     await queryClient.invalidateQueries({ queryKey: ["jornal", "companies"] })
   }
 
+  const switchCompany = (company: Company) => {
+    const source = activeCompany()
+    void (source ? persistCompanyDrafts(source) : Promise.resolve()).then(() => {
+      selectCompany(company.id)
+      const detailPath = /^\/transactions\/[^/]+(?:\/edit)?$/.test(window.location.pathname)
+      const path = detailPath ? "/transactions" : window.location.pathname === "/companies" ? "/" : window.location.pathname
+      const search = new URLSearchParams(window.location.search)
+      search.set("company", company.id)
+      window.location.assign(`${path}?${search.toString()}`)
+    }).catch(() => void dialog.alert({
+      title: "Company belum dapat dibuka",
+      description: "Draft belum tersimpan dengan aman. Coba lagi setelah sinkronisasi selesai.",
+      tone: "destructive",
+    }))
+  }
+
   const saveName = async (company: Company) => {
     if (!name.trim()) return
     setPending(company.id)
@@ -59,8 +77,15 @@ export function CompaniesPage() {
       if (company.status === "ACTIVE") {
         const count = await pendingChangesForCompany(company)
         if (count > 0) throw new Error(`Selesaikan ${count} perubahan tertunda sebelum mengarsipkan company.`)
-        const confirmation = window.prompt(`Ketik nama company untuk mengarsipkan: ${company.name}`)
-        if (confirmation !== company.name) throw new Error("Nama konfirmasi tidak cocok. Company tidak diarsipkan.")
+        const confirmation = await dialog.prompt({
+          title: `Arsipkan ${company.name}?`,
+          description: "Company menjadi hanya-baca dan tidak dapat dipakai untuk membuat transaksi baru sampai dipulihkan.",
+          inputLabel: "Nama company",
+          requiredValue: company.name,
+          confirmLabel: "Arsipkan company",
+          tone: "destructive",
+        })
+        if (confirmation === null) return
       }
       await updateCompany(company, { status: company.status === "ACTIVE" ? "ARCHIVED" : "ACTIVE" })
       await refresh()
@@ -106,16 +131,4 @@ export function CompaniesPage() {
       </div>
     </div>
   )
-}
-
-function switchCompany(company: Company) {
-  const source = activeCompany()
-  void (source ? persistCompanyDrafts(source) : Promise.resolve()).then(() => {
-    selectCompany(company.id)
-    const detailPath = /^\/transactions\/[^/]+(?:\/edit)?$/.test(window.location.pathname)
-    const path = detailPath ? "/transactions" : window.location.pathname === "/companies" ? "/" : window.location.pathname
-    const search = new URLSearchParams(window.location.search)
-    search.set("company", company.id)
-    window.location.assign(`${path}?${search.toString()}`)
-  }).catch(() => window.alert("Draft belum tersimpan dengan aman. Coba lagi."))
 }

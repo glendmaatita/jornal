@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { RouterProvider } from "@tanstack/react-router"
 
 import { AppLoadingScreen } from "@/components/loading-screen"
+import { DialogProvider } from "@/components/ui/app-dialog"
 import { router } from "@/router"
 import "@/index.css"
 import "@fontsource/poppins/400.css"
@@ -57,9 +58,11 @@ createRoot(rootElement).render(
   <StrictMode>
     <AppErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Suspense fallback={<AppLoadingScreen />}>
-          <RouterProvider router={router} />
-        </Suspense>
+        <DialogProvider>
+          <Suspense fallback={<AppLoadingScreen />}>
+            <RouterProvider router={router} />
+          </Suspense>
+        </DialogProvider>
       </QueryClientProvider>
     </AppErrorBoundary>
   </StrictMode>,

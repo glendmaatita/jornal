@@ -136,7 +136,7 @@ export function AppShell() {
             >
               <RefreshCw className={cn("size-[18px]", refreshing && "animate-spin")} aria-hidden="true" />
             </button>
-            <Link to="/search" className={cn("grid size-9 place-items-center rounded-full transition-colors hover:bg-white", pathname === "/search" && "text-[var(--link)]")} aria-label="Cari"><Search className="size-[18px]" aria-hidden="true" /></Link>
+            <button type="button" onClick={() => void navigate({ to: "/search" })} className={cn("grid size-9 place-items-center rounded-full transition-colors hover:bg-white", pathname === "/search" && "text-[var(--link)]")} aria-label="Cari"><Search className="size-[18px]" aria-hidden="true" /></button>
             <MoreMenu
               pathname={pathname}
               privacy={privacy}

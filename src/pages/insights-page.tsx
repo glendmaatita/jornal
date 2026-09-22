@@ -13,6 +13,7 @@ import { PeriodSelector } from "@/components/period-selector"
 import { inPeriod, resolvePeriod, type PeriodPreset } from "@/lib/period"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useAppDialog } from "@/components/ui/app-dialog-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { ALL_CATEGORIES } from "@/lib/categories"
 import { classifyTransaction } from "@/lib/classification"
@@ -232,6 +233,7 @@ export function InsightsPage() {
 // ── §30 Phase 3 — recurring transactions: detection → automation (confirmation-gated) ──
 
 function RecurringAutomationCard() {
+  const dialog = useAppDialog()
   const queryClient = useQueryClient()
   const { data: transactions = [] } = useTransactions()
   const { data: rules = [] } = useRecurringRules()
@@ -241,13 +243,12 @@ function RecurringAutomationCard() {
     return detectRecurring(transactions).filter((candidate) => !automated.has(candidate.description.toLowerCase())).slice(0, 3)
   }, [transactions, rules])
 
-  const enableAutomation = (candidate: RecurringCandidate) => {
-    const confirmed = window.confirm(
-      `Aktifkan otomatis untuk "${candidate.description}"?\n\n` +
-        `Sistem akan membuat transaksi ${candidate.direction === "MONEY_IN" ? "pemasukan" : "pengeluaran"} sebesar ~${formatRupiah(candidate.amount)} ` +
-        `setiap bulan secara otomatis (transaksi pertama pada tanggal berikutnya). ` +
-        `Anda bisa menjeda atau menghapusnya kapan saja di halaman ini.`,
-    )
+  const enableAutomation = async (candidate: RecurringCandidate) => {
+    const confirmed = await dialog.confirm({
+      title: `Aktifkan “${candidate.description}”?`,
+      description: `Sistem akan membuat transaksi ${candidate.direction === "MONEY_IN" ? "pemasukan" : "pengeluaran"} sebesar sekitar ${formatRupiah(candidate.amount)} setiap bulan secara otomatis. Anda bisa menjeda atau menghapusnya kapan saja.`,
+      confirmLabel: "Aktifkan otomatis",
+    })
     if (!confirmed) return
     const today = todayIsoDate()
     const suggestion = classifyTransaction(candidate.description, candidate.direction)
@@ -285,7 +286,7 @@ function RecurringAutomationCard() {
                     ~{formatRupiah(candidate.amount)} · {candidate.occurrences}× dalam {candidate.months.length} bulan
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => enableAutomation(candidate)}>
+                <Button variant="outline" size="sm" onClick={() => void enableAutomation(candidate)}>
                   Aktifkan Otomatis
                 </Button>
               </div>

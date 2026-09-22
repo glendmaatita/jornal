@@ -1,9 +1,11 @@
 import { CompanyLogo } from "@/components/company-logo"
 import { SelectField } from "@/components/ui/select-field"
+import { useAppDialog } from "@/components/ui/app-dialog-context"
 
 import { activeCompany, loadCachedCompanies, multiCompanyCreationEnabled, persistCompanyDrafts, rememberCompanyCreationReturn, selectCompany } from "@/lib/companies"
 
 export function CompanySwitcher() {
+  const dialog = useAppDialog()
   const current = activeCompany()
   if (!current) return null
   const companies = loadCachedCompanies().filter((company) => company.status === "ACTIVE" || company.id === current.id)
@@ -23,9 +25,11 @@ export function CompanySwitcher() {
       const search = new URLSearchParams(window.location.search)
       search.set("company", next)
       window.location.assign(`${path}?${search.toString()}`)
-    }).catch(() => {
-      window.alert("Draft belum tersimpan dengan aman. Coba pindah company lagi.")
-    })
+    }).catch(() => void dialog.alert({
+      title: "Company belum dapat dipindah",
+      description: "Draft belum tersimpan dengan aman. Coba pindah company lagi.",
+      tone: "destructive",
+    }))
   }
 
   return (

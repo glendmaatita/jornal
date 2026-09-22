@@ -3,6 +3,7 @@ import { Link, useSearch } from "@tanstack/react-router"
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpLeft, Landmark, Plus, Trash2, Wallet } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { useAppDialog } from "@/components/ui/app-dialog-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { SelectField } from "@/components/ui/select-field"
 import { TextField } from "@/components/ui/text-field"
@@ -21,6 +22,7 @@ const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
 ]
 
 export function AccountsPage() {
+  const dialog = useAppDialog()
   const search = useSearch({ from: "/_app/accounts" }) as { account?: string }
   const queryClient = useQueryClient()
   const { data: accounts = [] } = useAccounts()
@@ -112,7 +114,7 @@ export function AccountsPage() {
           <CardContent className="space-y-3 p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0"><h2 className="flex min-w-0 items-center gap-2 text-lg tracking-tight"><ArrowLeftRight className="size-4 shrink-0 text-primary" aria-hidden="true" /><span className="truncate">Mutasi {selected.name}</span></h2><p className="text-xs text-muted-foreground">Saldo awal {formatRupiah(selected.openingBalance)}</p></div>
-              {writable && <Button variant="ghost" size="sm" aria-label={`Hapus ${selected.name}`} onClick={() => { if (window.confirm(`Hapus rekening ${selected.name}?`)) { deleteAccount(selected.id); invalidate() } }}><Trash2 className="size-4" aria-hidden="true" /></Button>}
+              {writable && <Button variant="ghost" size="sm" aria-label={`Hapus ${selected.name}`} onClick={() => void dialog.confirm({ title: `Hapus rekening ${selected.name}?`, description: "Rekening akan dihapus dari daftar. Pastikan mutasi yang terkait sudah diperiksa.", confirmLabel: "Hapus rekening", tone: "destructive" }).then((confirmed) => { if (confirmed) { deleteAccount(selected.id); invalidate() } })}><Trash2 className="size-4" aria-hidden="true" /></Button>}
             </div>
             {mutations.length === 0 ? <p className="rounded-xl bg-secondary/50 p-4 text-sm text-muted-foreground">Belum ada mutasi untuk rekening ini.</p> : (
               <div className="divide-y divide-border/50">
