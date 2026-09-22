@@ -237,6 +237,8 @@ export function InvoiceDetailPage({
                     value={effectiveAccountId}
                     onChange={setAccountId}
                     placeholder="Tanpa rekening"
+                    searchable
+                    searchPlaceholder="Cari rekening…"
                     options={accounts.map((account) => ({
                       value: account.id,
                       label: account.name,
@@ -250,6 +252,8 @@ export function InvoiceDetailPage({
                   value={candidateId}
                   onChange={setCandidateId}
                   placeholder="Pilih transaksi"
+                  searchable
+                  searchPlaceholder="Cari transaksi…"
                   options={(candidates.data?.items ?? []).map((item) => ({
                     value: item.transaction.id,
                     label: `${item.transaction.transactionDate} · ${item.transaction.description}`,

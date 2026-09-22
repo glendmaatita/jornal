@@ -36,6 +36,8 @@ export function CompanySwitcher() {
         size="compact"
         value={current.id}
         onChange={switchCompany}
+        searchable
+        searchPlaceholder="Cari company…"
         options={options}
         className="w-40 max-w-full"
         shellClassName="!min-h-8 !rounded-full !px-3 !py-0 text-xs font-semibold"

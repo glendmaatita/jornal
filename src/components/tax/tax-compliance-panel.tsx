@@ -228,7 +228,7 @@ function TaxSetup({
           <div className="rounded-xl border border-border p-3">
             <p className="text-sm font-semibold">Company ini memakai wajib pajak yang sudah ada?</p>
             <div className="mt-2 flex items-center gap-2">
-              <SelectField aria-label="Wajib pajak yang sudah ada" className="flex-1" value={existingSubjectId} onChange={setExistingSubjectId} options={existingSubjects.map((item) => ({ value: item.id, label: item.label }))} />
+              <SelectField aria-label="Wajib pajak yang sudah ada" className="flex-1" value={existingSubjectId} onChange={setExistingSubjectId} searchable searchPlaceholder="Cari wajib pajak…" options={existingSubjects.map((item) => ({ value: item.id, label: item.label }))} />
               <Button disabled={busy || !existingSubjectId} variant="outline" onClick={() => run(() => linkCompanyToTaxSubject(existingSubjectId, { commandKey: commandKey("link"), companyId, effectiveFrom }), "Company terhubung ke wajib pajak.")}>Hubungkan</Button>
             </div>
           </div>

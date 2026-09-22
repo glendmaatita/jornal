@@ -416,13 +416,59 @@ input[type="checkbox"]:disabled {
 /* ── Custom listbox (SelectField) ── */
 .listbox-popover {
   z-index: 60;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--white-color);
   box-shadow: 0 12px 32px rgb(27 29 77 / 0.16);
   padding: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.listbox-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  margin-bottom: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--white-color);
+}
+
+.listbox-search:focus-within {
+  border-color: #16579d;
+  box-shadow: 0 0 0 2px rgb(22 87 157 / 0.1);
+}
+
+.listbox-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 14px;
+}
+
+.listbox-search input::placeholder {
+  color: var(--placeholder);
+}
+
+.listbox-search input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+.listbox-options {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
 

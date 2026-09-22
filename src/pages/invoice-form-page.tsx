@@ -227,6 +227,8 @@ export function InvoiceFormPage({
               setForm((current) => ({ ...current, customerId }))
             }
             placeholder="Pilih pelanggan"
+            searchable
+            searchPlaceholder="Cari pelanggan…"
             options={customers.map((customer) => ({
               value: customer.id,
               label: customer.name,
@@ -315,6 +317,8 @@ export function InvoiceFormPage({
                 className="min-w-0"
                 value={item.unitLabel}
                 onChange={(unitLabel) => setItem(index, { unitLabel })}
+                searchable
+                searchPlaceholder="Cari satuan…"
                 options={units.map((unit) => ({ value: unit, label: unit }))}
               />
               <TextField

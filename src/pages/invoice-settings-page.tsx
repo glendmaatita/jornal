@@ -308,6 +308,8 @@ export function InvoiceSettingsPage() {
               setSettings({ ...settings, defaultUnitId: value || null })
             }
             placeholder="pcs"
+            searchable
+            searchPlaceholder="Cari satuan…"
             options={units
               .filter((item) => item.status === "ACTIVE")
               .map((item) => ({ value: item.id, label: item.label }))}
@@ -320,6 +322,8 @@ export function InvoiceSettingsPage() {
               setSettings({ ...settings, defaultAccountId: value || null })
             }
             placeholder="Pilih saat pelunasan"
+            searchable
+            searchPlaceholder="Cari rekening…"
             options={accounts.map((item) => ({ value: item.id, label: item.name }))}
           />
         </CardContent>

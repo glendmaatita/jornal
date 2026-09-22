@@ -538,6 +538,8 @@ export function TransactionFormPage() {
                 value={accountId ?? ""}
                 onChange={(value) => setAccountId(value || null)}
                 placeholder="Pilih akun"
+                searchable
+                searchPlaceholder="Cari akun…"
                 options={accounts.map((account) => ({ value: account.id, label: account.name }))}
               />
               <SelectField
@@ -545,6 +547,8 @@ export function TransactionFormPage() {
                 value={transferAccountId ?? ""}
                 onChange={(value) => setTransferAccountId(value || null)}
                 placeholder="Pilih akun"
+                searchable
+                searchPlaceholder="Cari akun…"
                 options={accounts.filter((account) => account.id !== accountId).map((account) => ({ value: account.id, label: account.name }))}
               />
               {showErrors && transferError && <p className="field-error">{transferError}</p>}
@@ -656,6 +660,8 @@ export function TransactionFormPage() {
                 value={accountId ?? ""}
                 onChange={(value) => setAccountId(value || null)}
                 placeholder="Tanpa akun"
+                searchable
+                searchPlaceholder="Cari akun…"
                 options={accounts.map((account) => ({ value: account.id, label: account.name }))}
               />
               <TextField
