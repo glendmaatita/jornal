@@ -4,6 +4,7 @@ import { AlertTriangle, CircleCheck, Clock, Cloud, GitMerge, HardDrive, RefreshC
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { listOutbox } from "@/lib/local-db"
+import { formatDateTime } from "@/lib/format"
 import {
   getLastSyncAt,
   getSyncStatus,
@@ -60,7 +61,7 @@ export function SyncCenterPage() {
           </p>
           <dl className="grid gap-2 text-sm">
             <div className="flex items-center gap-2"><Server className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><dt className="text-muted-foreground">Status server</dt><dd className="ml-auto font-medium">{getSyncStatus()}</dd></div>
-            <div className="flex items-center gap-2"><Clock className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><dt className="text-muted-foreground">Terakhir sukses</dt><dd className="ml-auto font-medium">{getLastSyncAt() ? new Date(getLastSyncAt()!).toLocaleString("id-ID") : "Belum ada"}</dd></div>
+            <div className="flex items-center gap-2"><Clock className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><dt className="text-muted-foreground">Terakhir sukses</dt><dd className="ml-auto font-medium">{getLastSyncAt() ? formatDateTime(getLastSyncAt()!) : "Belum ada"}</dd></div>
             <div className="flex items-center gap-2"><UploadCloud className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><dt className="text-muted-foreground">Menunggu dikirim</dt><dd className="ml-auto font-medium">{pending} perubahan</dd></div>
             <div className="flex items-center gap-2"><HardDrive className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><dt className="text-muted-foreground">Penyimpanan</dt><dd className="ml-auto font-medium">{((storage.usage || 0) / 1024 / 1024).toFixed(1)} MB dari {((storage.quota || 0) / 1024 / 1024).toFixed(0)} MB</dd></div>
           </dl>

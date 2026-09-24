@@ -327,6 +327,7 @@ export function InvoiceFormPage({
               suggestions={productSuggestions.data?.items ?? []}
               loading={productSuggestions.isFetching}
               onSelect={(product) => setItem(index, {
+                productKey: product.productKey,
                 description: product.description,
                 unitId: product.unitId,
                 unitLabel: product.unitLabel,

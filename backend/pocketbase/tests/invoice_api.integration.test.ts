@@ -287,6 +287,7 @@ integrationTest(
     expect(productSuggestions.response.status).toBe(200);
     expect(productSuggestions.data.items).toEqual([
       {
+        productKey: "barang",
         description: "Barang",
         unitId: null,
         unitLabel: "Lusin",
@@ -318,6 +319,14 @@ integrationTest(
           commandKey: "revise-unpaid-1",
           expectedRevision: unpaid.revision,
           shippingMethod: "Kurir revisi",
+          items: [{
+            productKey: "barang",
+            description: "Produk Premium",
+            quantityScaled: 1_000,
+            unitLabel: "box",
+            unitPrice: 200_000,
+            sortOrder: 0,
+          }],
         }),
       },
     );
@@ -326,6 +335,25 @@ integrationTest(
     expect(revisedUnpaid.status).toBe("UNPAID");
     expect(revisedUnpaid.invoiceNumber).toBe(unpaid.invoiceNumber);
     expect(revisedUnpaid.shippingMethod).toBe("Kurir revisi");
+    const updatedProductSuggestions = await send(
+      `/api/jornal/invoicing/products?companyId=${companyId}&dataEpoch=1&search=produk&limit=20`,
+      { headers: headers(owner.token) },
+    );
+    expect(updatedProductSuggestions.response.status).toBe(200);
+    expect(updatedProductSuggestions.data.items).toEqual([{
+      productKey: "barang",
+      description: "Produk Premium",
+      unitId: null,
+      unitLabel: "box",
+      unitPrice: 200_000,
+      lastUsedAt: expect.any(String),
+    }]);
+    const staleProductSuggestions = await send(
+      `/api/jornal/invoicing/products?companyId=${companyId}&dataEpoch=1&search=barang&limit=20`,
+      { headers: headers(owner.token) },
+    );
+    expect(staleProductSuggestions.response.status).toBe(200);
+    expect(staleProductSuggestions.data.items).toEqual([]);
     const settingsAfterNumbering = changedNumbering.data.settings as Record<string, unknown>;
     const contactSettings = await send("/api/jornal/invoicing/settings", {
       method: "PUT",

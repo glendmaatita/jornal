@@ -187,7 +187,7 @@ function calculateItems(rawItems) {
     const unitPrice = int(item && item.unitPrice, "Harga satuan", 0, 1_000_000_000)
     const unitLabel = requireText(item && item.unitLabel, "Satuan", 20, true)
     const sortOrder = int(item && (item.sortOrder === undefined ? index : item.sortOrder), "Urutan item", 0, 99)
-    return { id: requireText(item && item.id, "ID item", 100, false) || $security.randomString(20), description, quantityScaled, unitId: requireText(item && item.unitId, "ID satuan", 100, false) || null, unitLabel, unitPrice, sortOrder, lineTotal: roundHalfUp(multiply(quantityScaled, unitPrice), QUANTITY_SCALE) }
+    return { id: requireText(item && item.id, "ID item", 100, false) || $security.randomString(20), productKey: requireText(item && item.productKey, "ID produk", 500, false) || null, description, quantityScaled, unitId: requireText(item && item.unitId, "ID satuan", 100, false) || null, unitLabel, unitPrice, sortOrder, lineTotal: roundHalfUp(multiply(quantityScaled, unitPrice), QUANTITY_SCALE) }
   }).sort((a, b) => a.sortOrder - b.sortOrder)
 }
 function calculateInvoice(body) {

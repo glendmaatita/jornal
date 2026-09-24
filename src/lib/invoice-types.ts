@@ -38,6 +38,8 @@ export interface InvoiceUnit {
 
 export interface InvoiceItemInput {
   id?: string
+  /** Stable identity of an item selected from the product history. */
+  productKey?: string | null
   description: string
   /** Integer thousandths. For example, 2.5 units is 2500. */
   quantityScaled: number
@@ -53,6 +55,7 @@ export interface InvoiceItem extends InvoiceItemInput {
 }
 
 export interface InvoiceProductSuggestion {
+  productKey: string
   description: string
   unitId: string | null
   unitLabel: string

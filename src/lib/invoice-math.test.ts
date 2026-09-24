@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { InvoiceValidationError, calculateInvoiceTotals, divideRoundHalfUp } from "./invoice-math"
 
-const item = (overrides: Partial<{ quantityScaled: number; unitPrice: number; unitLabel: string; description: string; sortOrder: number }> = {}) => ({
+const item = (overrides: Partial<{ productKey: string; quantityScaled: number; unitPrice: number; unitLabel: string; description: string; sortOrder: number }> = {}) => ({
   description: "Jasa desain",
   quantityScaled: 1_000,
   unitLabel: "pcs",
@@ -15,6 +15,11 @@ describe("invoice math", () => {
     const result = calculateInvoiceTotals([item({ quantityScaled: 2_000, unitLabel: "Lusin" })], 0, 0, 0)
     expect(result.items[0].lineTotal).toBe(200_000)
     expect(result.totals.grandTotal).toBe(200_000)
+  })
+
+  test("preserves the selected product identity when its details change", () => {
+    const result = calculateInvoiceTotals([item({ productKey: "barang", description: "Produk Premium", unitLabel: "box", unitPrice: 200_000 })], 0, 0, 0)
+    expect(result.items[0]).toMatchObject({ productKey: "barang", description: "Produk Premium", unitLabel: "box", unitPrice: 200_000 })
   })
 
   test("rounds item and tax values half-up with integer arithmetic", () => {

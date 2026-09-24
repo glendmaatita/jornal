@@ -136,12 +136,14 @@ routerAdd("GET", "/api/jornal/invoicing/products", (event) => {
   const invoices = h.findAllRecords($app, "invoices", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && status != 'DRAFT' && deleted_at = ''", "-updated,-created", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch })
   const seen = new Set(); const items = []
   for (const invoice of invoices) {
-    const lastUsedAt = invoice.getString("issued_at") || invoice.getString("updated")
+    const lastUsedAt = invoice.getString("updated") || invoice.getString("issued_at")
     for (const item of h.json(invoice, "items", [])) {
       const description = String(item && item.description || "").trim(); const normalized = h.normalize(description)
-      if (!description || !normalized.includes(needle) || seen.has(normalized)) continue
-      seen.add(normalized)
-      items.push({ description, unitId: item.unitId ? String(item.unitId) : null, unitLabel: String(item.unitLabel || ""), unitPrice: Number(item.unitPrice || 0), lastUsedAt })
+      const productKey = String(item && item.productKey || normalized).trim()
+      if (!description || !productKey || seen.has(productKey)) continue
+      seen.add(productKey)
+      if (!normalized.includes(needle)) continue
+      items.push({ productKey, description, unitId: item.unitId ? String(item.unitId) : null, unitLabel: String(item.unitLabel || ""), unitPrice: Number(item.unitPrice || 0), lastUsedAt })
     }
   }
   items.sort((a, b) => Number(h.normalize(b.description).startsWith(needle)) - Number(h.normalize(a.description).startsWith(needle)) || b.lastUsedAt.localeCompare(a.lastUsedAt) || a.description.localeCompare(b.description))
@@ -241,7 +243,9 @@ routerAdd("POST", "/api/jornal/invoicing/invoices/{id}/issue", (event) => {
     invoice.set("sender_snapshot", { name: settings.getString("sender_name"), phone: settings.getString("sender_phone") || null, email: settings.getString("sender_email") || null, logoAssetId: company.getString("logo_asset_id") || null })
     const paymentInstructions = h.activePaymentInstructions(tx, settings, tenantId, companyId, epoch)
     invoice.set("payment_instructions_snapshot", paymentInstructions)
-    invoice.set("content_hash", $security.sha256(h.stableStringify({ number, customer: h.customerResponse(customer), items: h.json(invoice, "items", []), total: invoice.getInt("grand_total"), paymentInstructions })))
+    const issuedItems = h.json(invoice, "items", []).map((item) => ({ ...item, productKey: String(item.productKey || h.normalize(item.description)) }))
+    invoice.set("items", issuedItems)
+    invoice.set("content_hash", $security.sha256(h.stableStringify({ number, customer: h.customerResponse(customer), items: issuedItems, total: invoice.getInt("grand_total"), paymentInstructions })))
     invoice.set("issued_at", new Date().toISOString()); invoice.set("revision", invoice.getInt("revision") + 1); tx.save(invoice)
     response = { invoice: h.invoiceResponse(invoice) }
     h.audit(tx, tenantId, companyId, epoch, tenantId, "invoice-issued", "invoice", invoice.id, commandKey, "", null, response.invoice)

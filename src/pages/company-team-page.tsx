@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { TextField } from "@/components/ui/text-field"
 import { activeCompany, refreshCompanyMemberships } from "@/lib/companies"
 import { currentUser } from "@/lib/pb"
+import { formatDateTime } from "@/lib/format"
 import { inviteTeamMember, leaveCompany, removeTeamMember, resendInvitation, revokeInvitation } from "@/lib/team-client"
 import { teamQueryKey, useTeam } from "@/lib/team-queries"
 import type { TeamInvitation, TeamMember } from "@/lib/team-types"
@@ -70,7 +71,7 @@ export function CompanyTeamPage() {
         {pendingInvitations.length === 0 && <p className="text-sm text-muted-foreground">Tidak ada undangan aktif.</p>}
         {pendingInvitations.map((invitation: TeamInvitation) => <div key={invitation.id} className="rounded-xl border border-border p-3">
           <p className="break-all text-sm font-semibold">{invitation.email}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Berlaku sampai {new Date(invitation.expiresAt).toLocaleString("id-ID")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Berlaku sampai {formatDateTime(invitation.expiresAt)}</p>
           <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" disabled={Boolean(pending)} onClick={() => void run(`resend:${invitation.id}`, () => resendInvitation(company.id, invitation), "Undangan dikirim ulang.")}><RefreshCw className="size-4" />Kirim ulang</Button><Button variant="outline" disabled={Boolean(pending)} onClick={() => void dialog.confirm({ title: "Batalkan undangan?", description: `Undangan untuk ${invitation.email} tidak akan dapat digunakan lagi.`, confirmLabel: "Batalkan undangan", tone: "destructive" }).then((confirmed) => { if (confirmed) return run(`revoke:${invitation.id}`, () => revokeInvitation(company.id, invitation), "Undangan dibatalkan.") })}><Trash2 className="size-4" />Batalkan</Button></div>
         </div>)}
         {history.length > 0 && <details><summary className="cursor-pointer text-sm font-semibold">Riwayat undangan ({history.length})</summary><div className="mt-2 space-y-2">{history.map((item) => <p key={item.id} className="text-xs text-muted-foreground">{item.email} · {item.status}</p>)}</div></details>}

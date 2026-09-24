@@ -77,6 +77,23 @@ export function formatDateShort(isoDate: string): string {
   return `${day} ${monthNamesShort[month - 1]} ${year}`
 }
 
+/** ISO timestamp -> "24 September 2026, 12.30 WIB". */
+export function formatDateTime(value: string | number | Date): string {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  const parts = new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? ""
+  return `${part("day")} ${part("month")} ${part("year")}, ${part("hour")}.${part("minute")} WIB`
+}
+
 /**
  * Keeps newly-issued official numbers unchanged and upgrades legacy numeric
  * numbers for display without rewriting an already-issued invoice record.
@@ -98,6 +115,14 @@ export function formatInvoiceNumber(
 export function formatMonthYear(isoDate: string): string {
   const [year, month] = isoDate.split("-").map(Number)
   return `${monthNames[month - 1]} ${year}`
+}
+
+/** "YYYY-MM" -> "September 2026"; annual/unknown period values stay intact. */
+export function formatPeriodLabel(period: string): string {
+  if (!/^\d{4}-\d{2}$/.test(period)) return period
+  const month = Number(period.slice(5, 7))
+  if (month < 1 || month > 12) return period
+  return formatMonthYear(`${period}-01`)
 }
 
 /** "YYYY-MM-DD" → "2 Sep" */

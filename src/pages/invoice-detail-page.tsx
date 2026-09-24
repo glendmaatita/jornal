@@ -45,7 +45,7 @@ import {
   invoicePng,
   printInvoice,
 } from "@/lib/invoice-export";
-import { formatInvoiceNumber, todayIsoDate } from "@/lib/format";
+import { formatDateLong, formatDateShort, formatInvoiceNumber, todayIsoDate } from "@/lib/format";
 import { useAccounts } from "@/lib/queries";
 import { activeCompany, loadCompanyLogo } from "@/lib/companies";
 import { isAccountEnabled } from "@/lib/types";
@@ -276,7 +276,7 @@ export function InvoiceDetailPage({
                   searchPlaceholder="Cari transaksi…"
                   options={(candidates.data?.items ?? []).map((item) => ({
                     value: item.transaction.id,
-                    label: `${item.transaction.transactionDate} · ${item.transaction.description}`,
+                    label: `${formatDateShort(item.transaction.transactionDate)} · ${item.transaction.description}`,
                   }))}
                 />
               )}
@@ -315,7 +315,7 @@ export function InvoiceDetailPage({
             <section className="grid gap-3 rounded-xl border bg-white p-4">
               <p className="flex items-center gap-2 font-semibold text-emerald-700">
                 <CircleCheck className="size-4" aria-hidden="true" />
-                Pembayaran tercatat pada {payment.paidOn}
+                Pembayaran tercatat pada {formatDateLong(payment.paidOn)}
               </p>
               <TextField
                 label="Alasan koreksi pembayaran"

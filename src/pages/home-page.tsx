@@ -20,7 +20,7 @@ import { inPeriod, resolvePeriod, type PeriodPreset } from "@/lib/period"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent } from "@/components/ui/card"
-import { formatRupiah, formatSignedRupiah, todayIsoDate } from "@/lib/format"
+import { formatDateShort, formatPeriodLabel, formatRupiah, formatSignedRupiah, todayIsoDate } from "@/lib/format"
 import { getInvoiceSummary } from "@/lib/invoice-client"
 import { useProfile, useReserves, useSafeToSpendResult, useTransactions } from "@/lib/queries"
 import { receivablesFromTransactions } from "@/lib/receivables"
@@ -123,7 +123,7 @@ export function HomePage() {
           </Card>
         </Link>
       )}
-      {nextTax && <Link to="/tax" className="block" aria-label="Lihat agenda pajak berikutnya"><Card><CardContent className="flex items-center justify-between gap-3 p-4"><div className="flex min-w-0 items-start gap-3"><span className="rounded-xl bg-amber-50 p-2 text-amber-700"><CalendarClock className="size-5" /></span><div className="min-w-0"><p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Pajak berikutnya · {nextTax.action}</p><p className="truncate font-semibold">{nextTax.label} · {nextTax.period}</p><p className="text-xs text-muted-foreground">{nextTax.due.slice(0, 10)} · {nextTax.amount === null ? "nominal belum tersedia/tidak berlaku" : formatRupiah(nextTax.amount)}</p></div></div><ArrowRight className="size-4 shrink-0 text-muted-foreground" /></CardContent></Card></Link>}
+      {nextTax && <Link to="/tax" className="block" aria-label="Lihat agenda pajak berikutnya"><Card><CardContent className="flex items-center justify-between gap-3 p-4"><div className="flex min-w-0 items-start gap-3"><span className="rounded-xl bg-amber-50 p-2 text-amber-700"><CalendarClock className="size-5" /></span><div className="min-w-0"><p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Pajak berikutnya · {nextTax.action}</p><p className="truncate font-semibold">{nextTax.label} · {formatPeriodLabel(nextTax.period)}</p><p className="text-xs text-muted-foreground">{formatDateShort(nextTax.due.slice(0, 10))} · {nextTax.amount === null ? "nominal belum tersedia/tidak berlaku" : formatRupiah(nextTax.amount)}</p></div></div><ArrowRight className="size-4 shrink-0 text-muted-foreground" /></CardContent></Card></Link>}
 
       {outstandingReceivables > 0 && (
         <Link to="/receivables" className="flex items-center justify-between rounded-xl border border-[#df1769]/20 bg-[#fff1f7] px-4 py-3 text-sm">

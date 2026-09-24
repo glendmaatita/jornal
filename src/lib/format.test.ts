@@ -8,8 +8,10 @@ import {
   parseAmountInput,
   formatDateLong,
   formatDateShort,
+  formatDateTime,
   formatInvoiceNumber,
   formatMonthYear,
+  formatPeriodLabel,
   formatShortDateLabel,
   formatGroupLabel,
   todayIsoDate,
@@ -56,7 +58,11 @@ expect(formatRupiah(0)).toContain("0")
   test("date formatters", () => {
     expect(formatDateLong("2026-09-02")).toBe("2 September 2026")
     expect(formatDateShort("2026-09-02")).toBe("2 Sep 2026")
+    expect(formatDateTime("2026-09-24T05:30:00.000Z")).toBe("24 September 2026, 12.30 WIB")
     expect(formatMonthYear("2026-09-02")).toBe("September 2026")
+    expect(formatPeriodLabel("2026-09")).toBe("September 2026")
+    expect(formatPeriodLabel("2026")).toBe("2026")
+    expect(formatPeriodLabel("2026-13")).toBe("2026-13")
     expect(formatShortDateLabel("2026-09-02")).toBe("2 Sep")
   })
 
