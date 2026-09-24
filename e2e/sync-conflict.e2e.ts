@@ -95,7 +95,13 @@ test("resolves sequential account conflicts from both buttons without exposing i
     conflict("local-choice"),
     conflict("second-server-choice", secondAccountId, secondLocalAccount, secondRemoteAccount, secondRemoteRecord.revision),
   ]
-  await page.evaluate(({ storagePrefix, locals, conflicts }) => {
+  // Seed on the next document before the app initializes. Vite can trigger a
+  // dependency-optimization reload in CI, so mutating the current execution
+  // context here is inherently racy.
+  await page.addInitScript(({ storagePrefix, locals, conflicts }) => {
+    const marker = `${storagePrefix}e2e-second-conflict-seeded`
+    if (sessionStorage.getItem(marker) === "1") return
+    sessionStorage.setItem(marker, "1")
     localStorage.setItem(`${storagePrefix}jornal.accounts.v1`, JSON.stringify(locals))
     localStorage.setItem(`${storagePrefix}jornal.sync-conflicts.v1`, JSON.stringify(conflicts))
   }, { storagePrefix: prefix, locals: [localAccount, secondLocalAccount], conflicts: nextConflicts })
@@ -121,7 +127,8 @@ test("resolves sequential account conflicts from both buttons without exposing i
   // A transient bootstrap outage used to redirect an already-loaded user to
   // the generic "Data belum bisa dimuat" screen when tapping the add button.
   await page.route("**/api/jornal/session/bootstrap", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "temporary outage" }) }))
-  await page.getByRole("link", { name: "Tambah transaksi" }).click()
+  await page.getByRole("button", { name: "Buat baru" }).click()
+  await page.getByRole("dialog", { name: "Buat baru" }).getByRole("link", { name: /Aliran uang/ }).click()
   await expect(page.getByText("Transaksi baru", { exact: false })).toBeVisible()
   await expect(page.getByRole("heading", { name: "Data belum bisa dimuat" })).toHaveCount(0)
 })
