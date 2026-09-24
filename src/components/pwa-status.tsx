@@ -6,14 +6,13 @@ import { Button } from "@/components/ui/button"
 import { AppLoadingScreen } from "@/components/loading-screen"
 import { CLIENT_UPDATE_REQUIRED_EVENT, getSyncStatus, loadSyncConflicts, resolveSyncConflict, subscribeSyncStatus, schedulePocketBaseSync, syncConflictLabel } from "@/lib/pocketbase-sync"
 import { STORAGE_WARNING_EVENT } from "@/lib/store"
-import { activeCompany, persistCompanyDrafts } from "@/lib/companies"
+import { hardReloadApp } from "@/lib/hard-reload"
 
 export function PwaStatus() {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const {
     offlineReady: [offlineReady, setOfflineReady],
     needRefresh: [needRefresh, setNeedRefresh],
-    updateServiceWorker,
   } = useRegisterSW()
 
   useEffect(() => {
@@ -65,9 +64,7 @@ export function PwaStatus() {
     setIsUpdating(true)
     setUpdateFailed(false)
     try {
-      const company = activeCompany()
-      if (company) await persistCompanyDrafts(company)
-      await updateServiceWorker(true)
+      await hardReloadApp()
     } catch {
       setIsUpdating(false)
       setUpdateFailed(true)
@@ -77,9 +74,7 @@ export function PwaStatus() {
 
   const reloadClient = async () => {
     setIsUpdating(true)
-    const company = activeCompany()
-    if (company) await persistCompanyDrafts(company).catch(() => undefined)
-    window.location.reload()
+    await hardReloadApp()
   }
 
   if (isUpdating) {

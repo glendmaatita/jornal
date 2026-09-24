@@ -3,6 +3,10 @@ import { extname, resolve } from "node:path"
 const port = Number(process.env.PORT ?? 3000)
 const distDirectory = resolve(import.meta.dir, "dist")
 const indexFile = Bun.file(resolve(distDirectory, "index.html"))
+const indexHtml = await indexFile.text()
+const appVersion = indexHtml.match(/<script[^>]+type=["']module["'][^>]+src=["']([^"']+)["']/)?.[1]
+  ?? indexHtml.match(/<script[^>]+src=["']([^"']+)["'][^>]+type=["']module["']/)?.[1]
+  ?? String(Bun.hash(indexHtml))
 
 // Vite emits names such as `index-C8abc123.js` (hash preceded by `-`), while
 // some older builds use a dot. Match both forms so immutable caching is used
@@ -68,13 +72,18 @@ async function responseFor(filePath: string, request: Request) {
   const extension = extname(filePath)
   const isServiceWorker = filePath.endsWith("/sw.js") || filePath.endsWith("/registerSW.js")
   const cacheControl = isServiceWorker
-    ? "no-cache"
+    ? "no-store, no-cache, must-revalidate, max-age=0"
     : immutableAssetPattern.test(filePath)
       ? "public, max-age=31536000, immutable"
       : "public, max-age=0, must-revalidate"
 
   const headers = new Headers({
       "Cache-Control": cacheControl,
+      ...(isServiceWorker ? {
+        "CDN-Cache-Control": "no-store",
+        "Cloudflare-CDN-Cache-Control": "no-store",
+        "Expires": "0",
+      } : {}),
       ...(contentTypes[extension] ? { "Content-Type": contentTypes[extension] } : {}),
       ...securityHeaders,
     })
@@ -104,6 +113,21 @@ const server = Bun.serve({
     if (url.pathname === "/healthz") {
       return Response.json({ status: "ok" }, {
         headers: { ...securityHeaders, "Cache-Control": "no-store" },
+      })
+    }
+
+    // This endpoint deliberately lives below /api, which the service worker
+    // never handles. An older app can therefore discover the currently
+    // deployed build even while its cached index.html is still active.
+    if (url.pathname === "/api/app-version" && request.method === "GET") {
+      return Response.json({ version: appVersion }, {
+        headers: {
+          ...securityHeaders,
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          "CDN-Cache-Control": "no-store",
+          "Cloudflare-CDN-Cache-Control": "no-store",
+          "Expires": "0",
+        },
       })
     }
 
