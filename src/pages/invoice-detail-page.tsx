@@ -40,6 +40,7 @@ import {
 } from "@/lib/invoice-client";
 import {
   downloadInvoiceFile,
+  invoicePdf,
   invoicePng,
   printInvoice,
 } from "@/lib/invoice-export";
@@ -341,7 +342,19 @@ export function InvoiceDetailPage({
                   invoice.id,
                   displayedInvoiceNumber,
                   "pdf",
-                ).catch(() => printInvoice())
+                )
+                  .catch(() =>
+                    documentRef.current?.querySelector("[data-invoice-document]")
+                      ? invoicePdf(
+                          documentRef.current.querySelector("[data-invoice-document]") as HTMLElement,
+                          `invoice-${displayedInvoiceNumber || invoice.id}.pdf`,
+                        )
+                      : Promise.reject(new Error("Preview invoice belum siap.")),
+                  )
+                  .catch((cause) => {
+                    setError(cause instanceof Error ? cause.message : "PDF gagal dibuat.")
+                    printInvoice()
+                  })
               }
             >
               <FileDown aria-hidden="true" />

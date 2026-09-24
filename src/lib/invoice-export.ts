@@ -9,12 +9,54 @@ export async function downloadInvoiceFile(invoiceId: string, invoiceNumber: stri
   const response = await fetch(`/api/invoice-files/${encodeURIComponent(invoiceId)}?company=${encodeURIComponent(company.id)}&epoch=${company.dataEpoch}&format=${format}`, { headers: { Authorization: pb.authStore.token } }); if (!response.ok) { const body = await response.json().catch(() => ({})) as { error?: string }; throw new Error(body.error || "Ekspor invoice gagal") }; await shareOrDownload(await response.blob(), safeFilename(`invoice-${invoiceNumber || invoiceId}.${format}`))
 }
 
-export async function invoicePng(element: HTMLElement, filename: string) {
+async function renderInvoiceCanvas(element: HTMLElement) {
+  const { default: html2canvas } = await import("html2canvas")
+  const host = document.createElement("div")
   const clone = element.cloneNode(true) as HTMLElement
-  const serialized = new XMLSerializer().serializeToString(clone)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1754" viewBox="0 0 794 1123"><foreignObject width="794" height="1123"><div xmlns="http://www.w3.org/1999/xhtml">${serialized}</div></foreignObject></svg>`
-  const image = new Image(); const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }))
-  try { await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error("Dokumen gagal diraster")); image.src = url }); const canvas = document.createElement("canvas"); canvas.width = 1240; canvas.height = 1754; const context = canvas.getContext("2d"); if (!context) throw new Error("Canvas tidak tersedia"); context.fillStyle = "white"; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(image, 0, 0, canvas.width, canvas.height); const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("PNG gagal dibuat")), "image/png")); await shareOrDownload(blob, safeFilename(filename)) } finally { URL.revokeObjectURL(url) }
+  host.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;background:#fff;pointer-events:none;z-index:-2147483647"
+  clone.style.transform = "none"
+  host.append(clone)
+  document.body.append(host)
+  try {
+    await document.fonts?.ready
+    await Promise.all([...clone.querySelectorAll("img")].map((image) => image.decode().catch(() => undefined)))
+    const width = clone.scrollWidth || 794
+    const height = clone.scrollHeight || 1123
+    return await html2canvas(clone, {
+      allowTaint: false,
+      backgroundColor: "#ffffff",
+      height,
+      logging: false,
+      scale: 1240 / width,
+      useCORS: true,
+      width,
+      windowHeight: height,
+      windowWidth: width,
+    })
+  } finally {
+    host.remove()
+  }
+}
+
+function canvasBlob(canvas: HTMLCanvasElement, type: string, quality?: number) {
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob(
+    (value) => value ? resolve(value) : reject(new Error("File invoice gagal dibuat.")),
+    type,
+    quality,
+  ))
+}
+
+export async function invoicePng(element: HTMLElement, filename: string) {
+  const canvas = await renderInvoiceCanvas(element)
+  await shareOrDownload(await canvasBlob(canvas, "image/png"), safeFilename(filename))
+}
+
+export async function invoicePdf(element: HTMLElement, filename: string) {
+  const canvas = await renderInvoiceCanvas(element)
+  const { jsPDF } = await import("jspdf")
+  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true })
+  pdf.addImage(canvas, "JPEG", 0, 0, 210, 297, undefined, "FAST")
+  await shareOrDownload(pdf.output("blob"), safeFilename(filename))
 }
 
 export async function shareOrDownload(blob: Blob, filename: string) {
