@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageLoading } from "@/components/loading-screen";
+import { InvoiceProductField } from "@/components/invoice/invoice-product-field";
 import { DateField } from "@/components/ui/date-field";
 import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
@@ -31,6 +32,7 @@ import {
   getInvoiceSettings,
   issueInvoice,
   listCustomers,
+  listInvoiceProducts,
   updateInvoice,
   type InvoiceDraftInput,
 } from "@/lib/invoice-client";
@@ -107,6 +109,8 @@ export function InvoiceFormPage({
   const [units, setUnits] = useState<string[]>(["pcs", "Lusin", "Kodi"]);
   const [dueDays, setDueDays] = useState(1);
   const [form, setForm] = useState<InvoiceDraftInput>(initial.form);
+  const [productSearch, setProductSearch] = useState("");
+  const [debouncedProductSearch, setDebouncedProductSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -158,6 +162,16 @@ export function InvoiceFormPage({
   useEffect(() => {
     if (!invoiceId) sessionStorage.setItem(storageKey, JSON.stringify(form));
   }, [form, invoiceId, storageKey]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedProductSearch(productSearch.trim()), 180);
+    return () => window.clearTimeout(timer);
+  }, [productSearch]);
+  const productSuggestions = useQuery({
+    queryKey: ["invoice", "products", companyId, debouncedProductSearch.toLocaleLowerCase("id-ID")],
+    queryFn: () => listInvoiceProducts(debouncedProductSearch),
+    enabled: debouncedProductSearch.length > 0,
+    staleTime: 60_000,
+  });
   const totals = useMemo(() => {
     try {
       return calculateInvoiceTotals(
@@ -306,11 +320,18 @@ export function InvoiceFormPage({
                 </Button>
               )}
             </div>
-            <TextField
-              label="Deskripsi"
-              icon={Package}
+            <InvoiceProductField
               value={item.description}
               onChange={(description) => setItem(index, { description })}
+              onSearch={setProductSearch}
+              suggestions={productSuggestions.data?.items ?? []}
+              loading={productSuggestions.isFetching}
+              onSelect={(product) => setItem(index, {
+                description: product.description,
+                unitId: product.unitId,
+                unitLabel: product.unitLabel,
+                unitPrice: product.unitPrice,
+              })}
             />
             <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3">
               <TextField

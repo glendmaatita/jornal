@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { BarChart3, Home as HomeIcon, Plus, ReceiptText, RefreshCw, Search, Wallet } from "lucide-react"
+import { ArrowLeftRight, BarChart3, FilePlus2, Home as HomeIcon, Plus, ReceiptText, RefreshCw, Search, UserPlus, Wallet, X } from "lucide-react"
 
 import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
@@ -171,36 +172,83 @@ export function AppShell() {
 }
 
 function BottomNav({ pathname, readOnly }: { pathname: string; readOnly: boolean }) {
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const firstActionRef = useRef<HTMLAnchorElement>(null)
   const isActive = (to: string, exact: boolean) => (exact ? pathname === to : pathname.startsWith(to))
 
+  useEffect(() => {
+    if (!quickAddOpen) return
+    const frame = window.requestAnimationFrame(() => firstActionRef.current?.focus())
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setQuickAddOpen(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("keydown", onKeyDown)
+    }
+  }, [quickAddOpen])
+
   return (
-    <footer className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-[600px] rounded-t-[10px] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_24px_rgb(27_29_77/0.08)]">
-      <nav className="grid h-[68px] grid-cols-5 items-start pt-[10px] px-1">
-        {tabs.slice(0, 2).map((tab) => (
-          <TabLink key={tab.to} tab={tab} active={isActive(tab.to, tab.exact)} />
-        ))}
+    <>
+      <footer className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-[600px] rounded-t-[10px] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_24px_rgb(27_29_77/0.08)]">
+        <nav className="grid h-[68px] grid-cols-5 items-start pt-[10px] px-1">
+          {tabs.slice(0, 2).map((tab) => (
+            <TabLink key={tab.to} tab={tab} active={isActive(tab.to, tab.exact)} />
+          ))}
 
-        <div className="relative flex justify-center">
-          {readOnly ? (
-            <span className="absolute -top-7 grid size-[52px] place-items-center rounded-full bg-slate-300 text-white" aria-label="Company diarsipkan">
-              <Plus className="size-6" aria-hidden="true" />
-            </span>
-          ) : (
-            <Link
-              to="/add"
-              className="absolute -top-7 grid size-[52px] place-items-center rounded-full bg-[#16579d] text-white shadow-lg shadow-[#16579d]/25 transition-transform active:scale-95"
-              aria-label="Tambah transaksi"
-            >
-              <Plus className="size-6" aria-hidden="true" />
-            </Link>
-          )}
-        </div>
+          <div className="relative flex justify-center">
+            {readOnly ? (
+              <span className="absolute -top-7 grid size-[52px] place-items-center rounded-full bg-slate-300 text-white" aria-label="Company diarsipkan">
+                <Plus className="size-6" aria-hidden="true" />
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setQuickAddOpen(true)}
+                className="absolute -top-7 grid size-[52px] place-items-center rounded-full bg-[#16579d] text-white shadow-lg shadow-[#16579d]/25 transition-transform active:scale-95"
+                aria-label="Buat baru"
+                aria-haspopup="dialog"
+                aria-expanded={quickAddOpen}
+              >
+                <Plus className="size-6" aria-hidden="true" />
+              </button>
+            )}
+          </div>
 
-        {tabs.slice(2).map((tab) => (
-          <TabLink key={tab.to} tab={tab} active={isActive(tab.to, tab.exact)} />
-        ))}
-      </nav>
-    </footer>
+          {tabs.slice(2).map((tab) => (
+            <TabLink key={tab.to} tab={tab} active={isActive(tab.to, tab.exact)} />
+          ))}
+        </nav>
+      </footer>
+
+      {quickAddOpen && createPortal(
+        <div className="fixed inset-0 z-50" role="presentation">
+          <button type="button" className="absolute inset-0 bg-black/30" aria-label="Tutup pilihan buat baru" onClick={() => setQuickAddOpen(false)} />
+          <section role="dialog" aria-modal="true" aria-labelledby="quick-add-title" className="absolute inset-x-4 bottom-[calc(80px+env(safe-area-inset-bottom))] mx-auto max-w-sm rounded-2xl border border-[#e4e8ed] bg-white p-3 shadow-[0_16px_48px_rgb(27_29_77/0.22)]">
+            <div className="mb-1 flex items-center justify-between px-2">
+              <h2 id="quick-add-title" className="text-sm font-bold">Buat baru</h2>
+              <button type="button" onClick={() => setQuickAddOpen(false)} aria-label="Tutup" className="grid size-8 place-items-center rounded-full hover:bg-[var(--background)]"><X className="size-4" aria-hidden="true" /></button>
+            </div>
+            <nav className="grid gap-1" aria-label="Pilihan buat baru">
+              <Link ref={firstActionRef} to="/add" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-[var(--background)]">
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#eaf2ff] text-[#16579d]"><ArrowLeftRight className="size-4" aria-hidden="true" /></span>
+                <span><span className="block text-sm font-semibold">Aliran uang</span><span className="block text-xs text-muted-foreground">Uang masuk, keluar, transfer, atau piutang</span></span>
+              </Link>
+              <Link to="/invoices/new" search={{}} onClick={() => setQuickAddOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-[var(--background)]">
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#eaf2ff] text-[#16579d]"><FilePlus2 className="size-4" aria-hidden="true" /></span>
+                <span><span className="block text-sm font-semibold">Invoice</span><span className="block text-xs text-muted-foreground">Buat tagihan baru</span></span>
+              </Link>
+              <Link to="/customers/new" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-[var(--background)]">
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#eaf2ff] text-[#16579d]"><UserPlus className="size-4" aria-hidden="true" /></span>
+                <span><span className="block text-sm font-semibold">Pelanggan</span><span className="block text-xs text-muted-foreground">Tambah data pelanggan</span></span>
+              </Link>
+            </nav>
+          </section>
+        </div>,
+        document.body,
+      )}
+    </>
   )
 }
 

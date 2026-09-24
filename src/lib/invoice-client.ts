@@ -10,6 +10,7 @@ import type {
   Invoice,
   InvoiceCustomer,
   InvoiceItemInput,
+  InvoiceProductSuggestion,
   InvoiceSettings,
   InvoiceUnit,
 } from "./invoice-types";
@@ -218,6 +219,13 @@ export function listInvoices(
   return cached(`invoices.${JSON.stringify(options)}`, () =>
     send<Page<Invoice>>(
       `/api/jornal/invoicing/invoices?${query({ ...scope(), ...options })}`,
+    ),
+  );
+}
+export function listInvoiceProducts(search: string) {
+  return cached(`products.${search.trim().toLocaleLowerCase("id-ID")}`, () =>
+    send<{ items: InvoiceProductSuggestion[] }>(
+      `/api/jornal/invoicing/products?${query({ ...scope(), search, limit: 20 })}`,
     ),
   );
 }

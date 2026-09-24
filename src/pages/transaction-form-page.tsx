@@ -5,6 +5,7 @@ import { ArrowDownLeft, ArrowLeft, ArrowLeftRight, ArrowUpRight, Camera, Chevron
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { accountOptionLabel } from "@/lib/account-display"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
 import { SelectField } from "@/components/ui/select-field"
@@ -451,7 +452,7 @@ export function TransactionFormPage() {
           )}
         >
           <ArrowUpRight className="size-4" aria-hidden="true" />
-          Uang Keluar
+          Keluar
         </button>
         <button
           type="button"
@@ -548,7 +549,7 @@ export function TransactionFormPage() {
                 placeholder="Pilih akun"
                 searchable
                 searchPlaceholder="Cari akun…"
-                options={selectableAccounts.map((account) => ({ value: account.id, label: account.name }))}
+                options={selectableAccounts.map((account) => ({ value: account.id, label: accountOptionLabel(account) }))}
               />
               <SelectField
                 label="Ke akun"
@@ -557,7 +558,7 @@ export function TransactionFormPage() {
                 placeholder="Pilih akun"
                 searchable
                 searchPlaceholder="Cari akun…"
-                options={selectableAccounts.filter((account) => account.id !== accountId).map((account) => ({ value: account.id, label: account.name }))}
+                options={selectableAccounts.filter((account) => account.id !== accountId).map((account) => ({ value: account.id, label: accountOptionLabel(account) }))}
               />
               {showErrors && transferError && <p className="field-error">{transferError}</p>}
             </div>
@@ -670,7 +671,7 @@ export function TransactionFormPage() {
                 placeholder="Tanpa akun"
                 searchable
                 searchPlaceholder="Cari akun…"
-                options={selectableAccounts.map((account) => ({ value: account.id, label: account.name }))}
+                options={selectableAccounts.map((account) => ({ value: account.id, label: accountOptionLabel(account) }))}
               />
               <TextField
                 label="Metode pembayaran"

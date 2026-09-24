@@ -280,6 +280,20 @@ integrationTest(
       { accountId: "bank-a", name: "BCA", accountNumber: "1234567890", accountHolder: "Toko Invoice" },
       { accountId: "bank-b", name: "Mandiri", accountNumber: "9876543210", accountHolder: "Toko Invoice" },
     ]);
+    const productSuggestions = await send(
+      `/api/jornal/invoicing/products?companyId=${companyId}&dataEpoch=1&search=bar&limit=20`,
+      { headers: headers(owner.token) },
+    );
+    expect(productSuggestions.response.status).toBe(200);
+    expect(productSuggestions.data.items).toEqual([
+      {
+        description: "Barang",
+        unitId: null,
+        unitLabel: "Lusin",
+        unitPrice: 100_000,
+        lastUsedAt: expect.any(String),
+      },
+    ]);
     const issuedSettings = updatedSettings.data.settings as Record<string, unknown>;
     const changedNumbering = await send("/api/jornal/invoicing/settings", {
       method: "PUT",

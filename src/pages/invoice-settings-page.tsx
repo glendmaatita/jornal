@@ -25,6 +25,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { accountOptionLabel } from "@/lib/account-display";
 import { useAppDialog } from "@/components/ui/app-dialog-context";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageLoading } from "@/components/loading-screen";
@@ -370,7 +371,7 @@ export function InvoiceSettingsPage() {
             searchPlaceholder="Cari rekening…"
             options={accounts
               .filter((item) => isAccountEnabled(item) || item.id === settings.defaultAccountId)
-              .map((item) => ({ value: item.id, label: item.name }))}
+              .map((item) => ({ value: item.id, label: accountOptionLabel(item) }))}
           />
         </CardContent>
       </Card>

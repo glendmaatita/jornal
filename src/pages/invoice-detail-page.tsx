@@ -21,6 +21,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { accountOptionLabel } from "@/lib/account-display";
 import { useAppDialog } from "@/components/ui/app-dialog-context";
 import { DateField } from "@/components/ui/date-field";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
@@ -260,7 +261,7 @@ export function InvoiceDetailPage({
                     searchPlaceholder="Cari rekening…"
                     options={enabledAccounts.map((account) => ({
                         value: account.id,
-                        label: account.name,
+                        label: accountOptionLabel(account),
                       }))}
                   />
                 </>

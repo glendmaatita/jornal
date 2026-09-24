@@ -52,6 +52,14 @@ export interface InvoiceItem extends InvoiceItemInput {
   lineTotal: number
 }
 
+export interface InvoiceProductSuggestion {
+  description: string
+  unitId: string | null
+  unitLabel: string
+  unitPrice: number
+  lastUsedAt: string
+}
+
 export interface InvoiceTotals {
   subtotal: number
   baseAmount: number

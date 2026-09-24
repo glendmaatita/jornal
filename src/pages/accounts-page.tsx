@@ -124,6 +124,12 @@ export function AccountsPage() {
     setDraft(EMPTY_DRAFT)
   }
 
+  const beginEditing = (account: Account) => {
+    setEditingId(account.id)
+    setDraft(draftFrom(account))
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
   const saveAccount = () => {
     if (!formComplete) return
     const account = upsertAccount({
@@ -197,23 +203,23 @@ export function AccountsPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {visibleAccounts.map((account) => (
-            <Link
+            <div
               key={account.id}
-              to="/accounts"
-              search={{ account: account.id }}
               className={selected?.id === account.id
-                ? "relative block min-w-0 rounded-[10px] after:pointer-events-none after:absolute after:inset-0 after:rounded-[10px] after:border-2 after:border-primary"
-                : "block min-w-0 rounded-[10px]"}
+                ? "relative min-w-0 rounded-[10px] after:pointer-events-none after:absolute after:inset-0 after:z-20 after:rounded-[10px] after:border-2 after:border-primary"
+                : "relative min-w-0 rounded-[10px]"}
             >
-              <Card className="h-full transition-colors hover:border-primary/50"><CardContent className="flex items-start justify-between gap-3 p-5">
-                <span className="min-w-0">
+              <Card className="h-full transition-colors hover:border-primary/50"><CardContent className="relative flex items-start justify-between gap-3 p-5">
+                <Link to="/accounts" search={{ account: account.id }} className="absolute inset-0 rounded-[10px]" aria-label={`Lihat mutasi ${account.name}`} />
+                <span className="pointer-events-none min-w-0">
                   <span className="flex items-center gap-2"><span className="block truncate font-semibold">{account.name}</span>{!isAccountEnabled(account) && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Nonaktif</span>}</span>
                   <span className="block text-xs text-muted-foreground">{account.bankName || ACCOUNT_TYPES.find((item) => item.value === account.type)?.label}{account.accountNumber ? ` · ${account.accountNumber}` : ""}</span>
                   {account.accountHolder && <span className="block truncate text-xs text-muted-foreground">a.n. {account.accountHolder}</span>}
                 </span>
-                <span className="shrink-0 text-right"><span className="block text-sm font-semibold tabular-nums">{formatRupiah(currentAccountBalance(account, transactions))}</span><span className="text-xs text-muted-foreground">saldo saat ini</span></span>
+                <span className={`pointer-events-none shrink-0 text-right ${writable ? "pr-8" : ""}`}><span className="block text-sm font-semibold tabular-nums">{formatRupiah(currentAccountBalance(account, transactions))}</span><span className="text-xs text-muted-foreground">saldo saat ini</span></span>
+                {writable && <Button variant="ghost" size="icon" className="absolute right-2 top-2 z-30 size-8 bg-white/90" aria-label={`Edit ${account.name}`} title={`Edit ${account.name}`} onClick={() => beginEditing(account)}><Pencil aria-hidden="true" /></Button>}
               </CardContent></Card>
-            </Link>
+            </div>
           ))}
         </div>
       )}
@@ -224,7 +230,7 @@ export function AccountsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0"><h2 className="flex min-w-0 items-center gap-2 text-lg tracking-tight"><ArrowLeftRight className="size-4 shrink-0 text-primary" aria-hidden="true" /><span className="truncate">Mutasi {selected.name}</span></h2><p className="text-xs text-muted-foreground">Saldo awal {formatRupiah(selected.openingBalance)}</p></div>
               {writable && <div className="flex gap-1">
-                <Button variant="ghost" size="sm" onClick={() => { setEditingId(selected.id); setDraft(draftFrom(selected)); window.scrollTo({ top: 0, behavior: "smooth" }) }}><Pencil className="size-4" aria-hidden="true" />Edit</Button>
+                <Button variant="ghost" size="sm" onClick={() => beginEditing(selected)}><Pencil className="size-4" aria-hidden="true" />Edit</Button>
                 <Button variant="ghost" size="sm" onClick={() => toggleAccount(selected)}>{isAccountEnabled(selected) ? <Power className="size-4" aria-hidden="true" /> : <CheckCircle2 className="size-4" aria-hidden="true" />}{isAccountEnabled(selected) ? "Nonaktifkan" : "Aktifkan"}</Button>
                 <Button variant="ghost" size="sm" aria-label={`Hapus ${selected.name}`} onClick={() => void dialog.confirm({ title: `Hapus rekening ${selected.name}?`, description: "Rekening akan dihapus permanen bila belum dipakai transaksi. Untuk menyimpan histori, pilih Nonaktifkan.", confirmLabel: "Hapus rekening", tone: "destructive" }).then((confirmed) => { if (confirmed) { deleteAccount(selected.id); invalidate() } })}><Trash2 className="size-4" aria-hidden="true" /></Button>
               </div>}

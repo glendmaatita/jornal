@@ -129,6 +129,25 @@ routerAdd("GET", "/api/jornal/invoicing/invoices", (event) => {
   return event.json(200, { items: filtered.slice((page - 1) * perPage, page * perPage).map(h.invoiceResponse), page, perPage, totalItems: filtered.length, totalPages: Math.max(1, Math.ceil(filtered.length / perPage)) })
 }, $apis.requireAuth())
 
+routerAdd("GET", "/api/jornal/invoicing/products", (event) => {
+  const h = require(`${__hooks}/invoice_helpers.js`); const query = event.requestInfo().query || {}; const scope = h.requestScope(event, query, false)
+  const needle = h.normalize(query.search); const limit = Math.max(1, Math.min(50, Number(query.limit || 20)))
+  if (!needle) return event.json(200, { items: [] })
+  const invoices = h.findAllRecords($app, "invoices", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && status != 'DRAFT' && deleted_at = ''", "-updated,-created", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch })
+  const seen = new Set(); const items = []
+  for (const invoice of invoices) {
+    const lastUsedAt = invoice.getString("issued_at") || invoice.getString("updated")
+    for (const item of h.json(invoice, "items", [])) {
+      const description = String(item && item.description || "").trim(); const normalized = h.normalize(description)
+      if (!description || !normalized.includes(needle) || seen.has(normalized)) continue
+      seen.add(normalized)
+      items.push({ description, unitId: item.unitId ? String(item.unitId) : null, unitLabel: String(item.unitLabel || ""), unitPrice: Number(item.unitPrice || 0), lastUsedAt })
+    }
+  }
+  items.sort((a, b) => Number(h.normalize(b.description).startsWith(needle)) - Number(h.normalize(a.description).startsWith(needle)) || b.lastUsedAt.localeCompare(a.lastUsedAt) || a.description.localeCompare(b.description))
+  return event.json(200, { items: items.slice(0, limit) })
+}, $apis.requireAuth())
+
 routerAdd("GET", "/api/jornal/invoicing/invoices/{id}", (event) => {
   const h = require(`${__hooks}/invoice_helpers.js`); const query = event.requestInfo().query || {}; const scope = h.requestScope(event, query, false); const invoice = h.ownedRecord($app, "invoices", event.request.pathValue("id"), scope.tenantId, scope.companyId, scope.epoch, "Invoice")
   let payment = null; try { payment = $app.findFirstRecordByFilter("invoice_payments", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && invoice_id = {:invoice} && status = 'ACTIVE'", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, invoice: invoice.id }) } catch { /* no payment */ }
