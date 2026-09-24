@@ -312,6 +312,36 @@ integrationTest(
     expect(revisedUnpaid.status).toBe("UNPAID");
     expect(revisedUnpaid.invoiceNumber).toBe(unpaid.invoiceNumber);
     expect(revisedUnpaid.shippingMethod).toBe("Kurir revisi");
+    const settingsAfterNumbering = changedNumbering.data.settings as Record<string, unknown>;
+    const contactSettings = await send("/api/jornal/invoicing/settings", {
+      method: "PUT",
+      headers: headers(owner.token),
+      body: JSON.stringify({
+        ...settingsAfterNumbering,
+        ...base,
+        commandKey: "settings-contact-fallback",
+        expectedRevision: settingsAfterNumbering.revision,
+        senderPhone: "+62 857-6401-1028",
+        senderEmail: "marketing@dropify.id",
+      }),
+    });
+    expect(contactSettings.response.status).toBe(200);
+    const detailWithContactFallback = await send(
+      `/api/jornal/invoicing/invoices/${invoice.id}?companyId=${companyId}&dataEpoch=1`,
+      { headers: headers(owner.token) },
+    );
+    expect((detailWithContactFallback.data.invoice as Record<string, unknown>).senderSnapshot).toMatchObject({
+      phone: "+62 857-6401-1028",
+      email: "marketing@dropify.id",
+    });
+    const documentWithContactFallback = await send(
+      `/api/jornal/invoicing/invoices/${invoice.id}/document?companyId=${companyId}&dataEpoch=1`,
+      { headers: headers(owner.token) },
+    );
+    expect((documentWithContactFallback.data.invoice as Record<string, unknown>).senderSnapshot).toMatchObject({
+      phone: "+62 857-6401-1028",
+      email: "marketing@dropify.id",
+    });
     const disabledAccountPayment = await send(
       `/api/jornal/invoicing/invoices/${invoice.id}/mark-paid`,
       {

@@ -116,15 +116,17 @@ export function PwaStatus() {
   }
 
   const activeConflict = conflicts[0]
+  const compactUpdate = needRefresh && !clientUpdateRequired && !storageWarning && !syncFailed && !hasConflict
+  const hasFooterAction = needRefresh || clientUpdateRequired || storageWarning || (syncFailed && isOnline) || hasConflict
 
   return (
     <aside
-      className="fixed inset-x-3 bottom-[calc(80px+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-lg flex-col gap-3 overflow-hidden rounded-2xl border border-white/10 bg-primary px-4 py-3 text-primary-foreground shadow-2xl sm:inset-x-4"
+      className={`fixed inset-x-3 bottom-[calc(80px+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-primary text-primary-foreground shadow-2xl sm:inset-x-4 ${compactUpdate ? "gap-0 px-3 py-2.5" : "gap-3 px-4 py-3"}`}
       aria-live="polite"
       aria-busy={Boolean(resolvingConflict)}
     >
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/10">
+      <div className={`flex min-w-0 gap-3 ${compactUpdate ? "items-center" : "items-start"}`}>
+        <span className={`grid shrink-0 place-items-center rounded-full bg-white/10 ${compactUpdate ? "size-8" : "size-9"}`}>
           {needRefresh || syncFailed ? <RefreshCw /> : isOnline ? <Download /> : <CloudOff />}
         </span>
         <p className="min-w-0 flex-1 break-words text-sm leading-snug">
@@ -144,12 +146,17 @@ export function PwaStatus() {
               ? "Jornal siap dipakai offline."
               : "Anda sedang offline — data tetap tersimpan di perangkat ini."}
         </p>
-        <Button size="icon" variant="ghost" className="-mr-2 -mt-1 size-10 shrink-0 hover:bg-white/10" onClick={dismiss} aria-label="Tutup pemberitahuan">
+        {compactUpdate && (
+          <Button size="sm" variant="secondary" className="shrink-0" onClick={() => void installUpdate()}>
+            {updateFailed ? "Coba lagi" : "Update"}
+          </Button>
+        )}
+        <Button size="icon" variant="ghost" className={`shrink-0 hover:bg-white/10 ${compactUpdate ? "size-8" : "-mr-2 -mt-1 size-10"}`} onClick={dismiss} aria-label="Tutup pemberitahuan">
           <X aria-hidden="true" />
         </Button>
       </div>
       {conflictError && <p role="alert" className="rounded-lg bg-red-950/35 px-3 py-2 text-xs leading-relaxed">{conflictError}</p>}
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      {!compactUpdate && hasFooterAction && <div className="flex flex-wrap items-center justify-end gap-2">
         {needRefresh && (
           <Button size="sm" variant="secondary" onClick={() => void installUpdate()}>
             {updateFailed ? "Coba lagi" : "Update"}
@@ -176,8 +183,7 @@ export function PwaStatus() {
             </Button>
           </div>
         )}
-        {!needRefresh && !clientUpdateRequired && !storageWarning && !syncFailed && !hasConflict && <span />}
-      </div>
+      </div>}
     </aside>
   )
 }

@@ -121,6 +121,29 @@ function invoiceResponse(record) {
     revision: record.getInt("revision"), createdAt: record.getString("created"), updatedAt: record.getString("updated"),
   }
 }
+
+function invoiceResponseWithContactFallback(app, record) {
+  const result = invoiceResponse(record)
+  const existing = result.senderSnapshot && typeof result.senderSnapshot === "object" ? result.senderSnapshot : {}
+  if (existing.phone && existing.email) return result
+  let settings
+  try {
+    settings = app.findFirstRecordByFilter(
+      "invoice_settings",
+      "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch}",
+      { tenant: record.getString("tenant_id"), company: record.getString("company_id"), epoch: record.getInt("data_epoch") },
+    )
+  } catch {
+    return result
+  }
+  result.senderSnapshot = {
+    ...existing,
+    name: existing.name || settings.getString("sender_name") || null,
+    phone: existing.phone || settings.getString("sender_phone") || null,
+    email: existing.email || settings.getString("sender_email") || null,
+  }
+  return result
+}
 function invoiceNumberForDisplay(record) {
   const raw = record.getString("invoice_number")
   if (!raw || /^\d{4}\/\d{2}\/INV\/.+$/i.test(raw)) return raw
@@ -230,4 +253,4 @@ function ensureSettings(tx, tenantId, companyId, epoch, senderName) {
   return settings
 }
 
-module.exports = { DEFAULT_UNITS, activePaymentInstructions, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceNumberForDisplay, invoiceResponse, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentInstructionsInput, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }
+module.exports = { DEFAULT_UNITS, activePaymentInstructions, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceNumberForDisplay, invoiceResponse, invoiceResponseWithContactFallback, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentInstructionsInput, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }

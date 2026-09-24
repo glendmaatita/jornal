@@ -62,3 +62,16 @@ test("invoice document uses the dense A4 layout for seven to ten items", () => {
   const html = renderToStaticMarkup(<InvoiceDocument invoice={{ ...invoice, items }} />);
   expect(html).toContain("invoice-paper-compact invoice-paper-dense");
 });
+
+test("invoice document renders payment confirmation phone and email", () => {
+  const html = renderToStaticMarkup(<InvoiceDocument invoice={{
+    ...invoice,
+    senderSnapshot: {
+      name: "Dropify",
+      phone: "+62 857-6401-1028",
+      email: "marketing@dropify.id",
+    },
+  }} />);
+  expect(html).toContain("+62 857-6401-1028");
+  expect(html).toContain("marketing@dropify.id");
+});
