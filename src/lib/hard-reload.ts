@@ -17,36 +17,18 @@ function waitForWorkerInstall(worker: ServiceWorker, ms: number) {
   }), ms)
 }
 
-async function deployedVersion() {
-  const url = new URL("/api/app-version", window.location.origin)
-  url.searchParams.set("_", String(Date.now()))
-  const response = await waitFor(fetch(url, {
-    cache: "no-store",
-    headers: { "Cache-Control": "no-cache" },
-  }), 5000)
-  if (!response?.ok) return null
-  const payload = await response.json() as { version?: unknown }
-  return typeof payload.version === "string" && payload.version ? payload.version : null
-}
-
-function workerHasVersion(worker: ServiceWorker | null, version: string) {
-  if (!worker) return false
-  try { return new URL(worker.scriptURL).searchParams.get("v") === version } catch { return false }
-}
-
-async function installDeployedServiceWorker() {
-  const version = await deployedVersion()
-  if (!version) return false
-
-  const scriptUrl = new URL("/sw.js", window.location.origin)
-  scriptUrl.searchParams.set("v", version)
-  const registration = await waitFor(navigator.serviceWorker.register(scriptUrl, {
+async function updateRegisteredServiceWorker() {
+  const registration = await waitFor(navigator.serviceWorker.register("/sw.js", {
     scope: "/",
     updateViaCache: "none",
   }), 8000)
   if (!registration) return false
 
-  const installing = registration.installing
+  let installing = registration.installing
+  if (!registration.waiting && !installing) {
+    await waitFor(registration.update(), 8000)
+    installing = registration.installing
+  }
   if (installing) await waitForWorkerInstall(installing, 8000)
 
   const waiting = registration.waiting
@@ -59,9 +41,7 @@ async function installDeployedServiceWorker() {
     await waitFor(activated, 5000)
   }
 
-  return workerHasVersion(registration.active, version)
-    || workerHasVersion(registration.waiting, version)
-    || (workerHasVersion(installing, version) && installing?.state !== "redundant")
+  return Boolean(registration.active)
 }
 
 async function forceNetworkReload() {
@@ -91,7 +71,7 @@ export async function hardReloadApp() {
 
   if ("serviceWorker" in navigator) {
     try {
-      if (await installDeployedServiceWorker()) {
+      if (await updateRegisteredServiceWorker()) {
         window.location.reload()
         return
       }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { faArrowRight } from "@fortawesome/free-solid-svg-icons/faArrowRight"
@@ -20,6 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent } from "@/components/ui/card"
 import { formatRupiah, formatSignedRupiah, todayIsoDate } from "@/lib/format"
+import { getInvoiceSummary } from "@/lib/invoice-client"
 import { useProfile, useReserves, useSafeToSpendResult, useTransactions } from "@/lib/queries"
 import { receivablesFromTransactions } from "@/lib/receivables"
 import { transactionRevenueAmount } from "@/lib/transaction-revenue"
@@ -35,6 +37,7 @@ export function HomePage() {
   const { data: profile } = useProfile()
   const { data: safeToSpend } = useSafeToSpendResult()
   const { data: taxAgenda } = useTaxAgenda()
+  const invoiceSummary = useQuery({ queryKey: ["invoice", "summary"], queryFn: getInvoiceSummary })
 
   const period = useMemo(() => resolvePeriod(preset, custom), [preset, custom])
   const periodTransactions = useMemo(
@@ -191,7 +194,7 @@ export function HomePage() {
               <p className={cnNet(netCashFlow, "mt-1 text-sm font-semibold tabular-nums")}>{formatSignedRupiah(netCashFlow)}</p>
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-border/60 pt-3.5 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-border/60 pt-3.5 sm:grid-cols-3">
             <div>
               <p className="text-xs text-muted-foreground">Omzet</p>
               <p className="mt-0.5 font-semibold tabular-nums">{formatRupiah(revenue)}</p>
@@ -202,6 +205,14 @@ export function HomePage() {
               <p className="mt-0.5 font-semibold tabular-nums">{formatRupiah(businessExpense)}</p>
               <p className="text-[11px] text-muted-foreground">Biaya usaha tercatat di sini</p>
             </div>
+            <Link to="/invoices" className="group rounded-lg transition-colors hover:bg-secondary/50 sm:-my-1 sm:p-1" aria-label="Lihat invoice belum dibayar">
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CalendarClock className="size-3.5 text-amber-600" aria-hidden="true" />
+                Invoice belum dibayar
+              </p>
+              <p className="mt-0.5 font-semibold tabular-nums">{formatRupiah(invoiceSummary.data?.unpaidTotal ?? 0)}</p>
+              <p className="text-[11px] text-muted-foreground">{invoiceSummary.data?.unpaidCount ?? 0} invoice · semua periode</p>
+            </Link>
           </div>
         </CardContent>
       </Card>
