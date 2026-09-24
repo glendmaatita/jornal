@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import {
   BellRing,
   Building2,
   CalendarClock,
   Clock,
-  CreditCard,
   DatabaseBackup,
   Download,
   FileCog,
@@ -20,8 +20,8 @@ import {
   Ruler,
   Save,
   SlidersHorizontal,
+  Trash2,
   Upload,
-  User,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,27 @@ import {
 } from "@/lib/invoice-client";
 import type { InvoiceSettings, InvoiceUnit } from "@/lib/invoice-types";
 import { useAccounts } from "@/lib/queries";
+import { isAccountEnabled, type Account } from "@/lib/types";
+
+function paymentInstructionFor(account: Account) {
+  return {
+    accountId: account.id,
+    name: account.bankName?.trim() || account.name.trim(),
+    accountNumber: account.accountNumber?.trim() || "",
+    accountHolder: account.accountHolder?.trim() || "",
+  };
+}
+
+function instructionMatchesAccount(
+  instruction: InvoiceSettings["paymentInstructions"][number],
+  account: Account,
+) {
+  if (instruction.accountId) return instruction.accountId === account.id;
+  const current = paymentInstructionFor(account);
+  return instruction.name === current.name
+    && instruction.accountNumber === current.accountNumber
+    && instruction.accountHolder === current.accountHolder;
+}
 
 export function InvoiceSettingsPage() {
   const dialog = useAppDialog();
@@ -52,6 +73,7 @@ export function InvoiceSettingsPage() {
   const [unit, setUnit] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [savedFingerprint, setSavedFingerprint] = useState("");
   const restoreInput = useRef<HTMLInputElement>(null);
   const load = async () => {
     const result = await getInvoiceSettings();
@@ -70,15 +92,15 @@ export function InvoiceSettingsPage() {
     try {
       const result = await updateInvoiceSettings({
         ...settings,
-        paymentInstructions: settings.paymentInstructions.filter(
-          (item) =>
-            item &&
-            [item.name, item.accountNumber, item.accountHolder].some((value) =>
-              value.trim(),
-            ),
-        ),
+        paymentInstructions: settings.paymentInstructions.map((instruction) => {
+          const account = paymentAccounts.find((item) =>
+            instructionMatchesAccount(instruction, item),
+          );
+          return account ? paymentInstructionFor(account) : instruction;
+        }),
       });
       setSettings(result.settings);
+      setSavedFingerprint(JSON.stringify(result.settings));
       setMessage("Pengaturan invoice tersimpan.");
       await client.invalidateQueries({ queryKey: ["invoice"] });
     } catch (cause) {
@@ -87,18 +109,37 @@ export function InvoiceSettingsPage() {
       setBusy(false);
     }
   };
-  const updateInstruction = (
-    index: number,
-    field: "name" | "accountNumber" | "accountHolder",
-    value: string,
-  ) => {
-    const next = [...settings.paymentInstructions];
-    next[index] = {
-      ...(next[index] || { name: "", accountNumber: "", accountHolder: "" }),
-      [field]: value,
-    };
-    setSettings({ ...settings, paymentInstructions: next });
+  const paymentAccounts = accounts.filter((account) =>
+    isAccountEnabled(account)
+    && Boolean(account.accountNumber?.trim())
+    && Boolean(account.accountHolder?.trim()),
+  );
+  const togglePaymentAccount = (account: Account) => {
+    const selected = settings.paymentInstructions.some((instruction) =>
+      instructionMatchesAccount(instruction, account),
+    );
+    if (!selected && settings.paymentInstructions.length >= 3) {
+      setMessage("Maksimal 3 rekening pembayaran dapat dipilih.");
+      return;
+    }
+    const remaining = settings.paymentInstructions.filter((instruction) =>
+      !instructionMatchesAccount(instruction, account),
+    );
+    setSettings({
+      ...settings,
+      paymentInstructions: selected
+        ? remaining
+        : [...remaining, paymentInstructionFor(account)],
+    });
+    setMessage("");
   };
+  const settingsSaved = Boolean(savedFingerprint)
+    && savedFingerprint === JSON.stringify(settings);
+  const legacyPaymentInstructions = settings.paymentInstructions.filter(
+    (instruction) => !paymentAccounts.some((account) =>
+      instructionMatchesAccount(instruction, account),
+    ),
+  );
   const downloadBackup = async () => {
     setBusy(true);
     try {
@@ -327,7 +368,9 @@ export function InvoiceSettingsPage() {
             placeholder="Pilih saat pelunasan"
             searchable
             searchPlaceholder="Cari rekening…"
-            options={accounts.map((item) => ({ value: item.id, label: item.name }))}
+            options={accounts
+              .filter((item) => isAccountEnabled(item) || item.id === settings.defaultAccountId)
+              .map((item) => ({ value: item.id, label: item.name }))}
           />
         </CardContent>
       </Card>
@@ -339,36 +382,83 @@ export function InvoiceSettingsPage() {
               Instruksi pembayaran
             </h2>
             <p className="text-xs text-muted-foreground">
-              Maksimal tiga rekening atau e-wallet. Biarkan kosong untuk
-              pembayaran tunai.
+              Pilih hingga 3 rekening aktif. Semua pilihan akan ditampilkan
+              sebagai rekening tujuan pada bagian PEMBAYARAN di invoice.
             </p>
           </div>
-          {[0, 1, 2].map((index) => (
-            <div key={index} className="grid gap-2 rounded-xl border p-3">
-              <TextField
-                label={`Metode ${index + 1}`}
-                icon={Landmark}
-                value={settings.paymentInstructions[index]?.name || ""}
-                onChange={(value) => updateInstruction(index, "name", value)}
-              />
-              <TextField
-                label="Nomor rekening/e-wallet"
-                icon={CreditCard}
-                value={settings.paymentInstructions[index]?.accountNumber || ""}
-                onChange={(value) =>
-                  updateInstruction(index, "accountNumber", value)
-                }
-              />
-              <TextField
-                label="Nama pemilik"
-                icon={User}
-                value={settings.paymentInstructions[index]?.accountHolder || ""}
-                onChange={(value) =>
-                  updateInstruction(index, "accountHolder", value)
-                }
-              />
+          {legacyPaymentInstructions.length > 0 && (
+            <div className="grid gap-2">
+              <p className="text-xs font-semibold text-amber-700">
+                Instruksi lama yang belum terhubung ke rekening aktif
+              </p>
+              {legacyPaymentInstructions.map((instruction, index) => (
+                <div key={`${instruction.accountNumber}-${index}`} className="flex items-start justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <span className="min-w-0 text-sm">
+                    <strong className="block truncate">{instruction.name}</strong>
+                    <span className="block tabular-nums text-muted-foreground">{instruction.accountNumber}</span>
+                    <span className="block truncate text-xs text-muted-foreground">a.n. {instruction.accountHolder}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Hapus instruksi ${instruction.name}`}
+                    onClick={() => setSettings({
+                      ...settings,
+                      paymentInstructions: settings.paymentInstructions.filter((item) => item !== instruction),
+                    })}
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          {paymentAccounts.length ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {paymentAccounts.map((account) => {
+                const selected = settings.paymentInstructions.some((instruction) =>
+                  instructionMatchesAccount(instruction, account),
+                );
+                return (
+                  <label
+                    key={account.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${selected ? "border-primary bg-primary/5" : "bg-white hover:border-primary/50"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => togglePaymentAccount(account)}
+                      className="mt-1 size-4 shrink-0 accent-[var(--primary)]"
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">
+                        {account.bankName || account.name}
+                      </span>
+                      <span className="block text-sm tabular-nums text-muted-foreground">
+                        {account.accountNumber}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        a.n. {account.accountHolder}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+              Belum ada rekening aktif dengan nomor dan nama pemilik lengkap.{" "}
+              <Link to="/accounts" className="font-semibold text-[var(--link)] underline">
+                Lengkapi data rekening
+              </Link>
+            </div>
+          )}
+          {settings.paymentInstructions.length > 0 && (
+            <p className="text-xs font-medium text-primary">
+              {settings.paymentInstructions.length} rekening dipilih untuk invoice.
+            </p>
+          )}
         </CardContent>
       </Card>
       <Card>
@@ -459,7 +549,7 @@ export function InvoiceSettingsPage() {
       </Card>
       <Button className="w-full" disabled={busy} onClick={() => void save()}>
         <Save aria-hidden="true" />
-        {busy ? "Menyimpan…" : "Simpan Pengaturan"}
+        {busy ? "Menyimpan…" : settingsSaved ? "Tersimpan" : "Simpan Pengaturan"}
       </Button>
     </div>
   );

@@ -79,7 +79,7 @@ routerAdd("GET", "/api/jornal/invoicing/settings", (event) => {
 routerAdd("PUT", "/api/jornal/invoicing/settings", (event) => {
   const h = require(`${__hooks}/invoice_helpers.js`); const body = h.jsonBody(event); const scope = h.requestScope(event, body, true); const key = h.requireCommand(body); const hash = h.commandHash("UPDATE_SETTINGS", body); let response
   $app.runInTransaction((tx) => { const replay = h.replayCommand(tx, scope.tenantId, scope.companyId, scope.epoch, key, "UPDATE_SETTINGS", hash); if (replay) { response = replay.body; return }; const company = h.ownedCompany(tx, scope.tenantId, scope.companyId, scope.epoch, true); const record = h.ensureSettings(tx, scope.tenantId, scope.companyId, scope.epoch, company.getString("name")); if (record.getInt("revision") !== Number(body.expectedRevision)) throw new ApiError(409, "Pengaturan invoice telah berubah")
-    const email = h.requireText(body.senderEmail, "Email", 255, false); if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ApiError(400, "Format email tidak valid"); const instructions = Array.isArray(body.paymentInstructions) ? body.paymentInstructions.filter((item) => item && [item.name, item.accountNumber, item.accountHolder].some((value) => String(value || "").trim())).slice(0, 3).map((item) => ({ name: h.requireText(item.name, "Nama pembayaran", 80, true), accountNumber: h.requireText(item.accountNumber, "Nomor pembayaran", 100, true), accountHolder: h.requireText(item.accountHolder, "Pemilik rekening", 100, true) })) : []
+    const email = h.requireText(body.senderEmail, "Email", 255, false); if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ApiError(400, "Format email tidak valid"); const instructions = h.paymentInstructionsInput(Array.isArray(body.paymentInstructions) ? body.paymentInstructions : []); instructions.forEach((instruction) => { if (!instruction.accountId) return; try { tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'accounts' && app_id = {:id} && deleted_at = ''", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, id: instruction.accountId }) } catch { throw new ApiError(400, "Rekening pembayaran tidak berada pada company ini") } })
     const numberingStart = Number(body.numberingStart || 1); if (!Number.isSafeInteger(numberingStart) || numberingStart < (record.getInt("numbering_start") || 1) || numberingStart > 999_999_999) throw new ApiError(400, "Nomor awal hanya boleh dinaikkan")
     const defaultUnitId = String(body.defaultUnitId || ""); if (defaultUnitId) { const unit = h.ownedRecord(tx, "invoice_units", defaultUnitId, scope.tenantId, scope.companyId, scope.epoch, "Satuan default"); if (unit.getString("status") !== "ACTIVE") throw new ApiError(400, "Satuan default sudah diarsipkan") }; const defaultAccountId = String(body.defaultAccountId || ""); if (defaultAccountId) { try { tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'accounts' && app_id = {:id} && deleted_at = ''", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, id: defaultAccountId }) } catch { throw new ApiError(400, "Rekening default tidak berada pada company ini") } }
     let sequence; try { sequence = tx.findFirstRecordByFilter("invoice_sequences", "tenant_id = {:tenant} && company_id = {:company}", { tenant: scope.tenantId, company: scope.companyId }) } catch { sequence = null }; if (sequence && numberingStart > sequence.getInt("next_value")) { sequence.set("next_value", numberingStart); tx.save(sequence) } else if (sequence && numberingStart < sequence.getInt("next_value") && numberingStart !== (record.getInt("numbering_start") || 1)) throw new ApiError(400, "Nomor awal tidak boleh lebih kecil dari nomor berikutnya")
@@ -125,7 +125,7 @@ routerAdd("GET", "/api/jornal/invoicing/invoices", (event) => {
   let filter = "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && deleted_at = ''"; const params = { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch }
   if (allowed.includes(String(query.status))) { filter += " && status = {:status}"; params.status = String(query.status) }
   if (query.customerId) { filter += " && customer_id = {:customer}"; params.customer = String(query.customerId) }
-  const all = h.findAllRecords($app, "invoices", filter, "-issue_date,-created", params); const search = String(query.search || "").trim().toLowerCase(); const filtered = search ? all.filter((record) => record.getString("invoice_number").toLowerCase().includes(search) || String((h.json(record, "customer_snapshot", {}) || {}).name || "").toLowerCase().includes(search)) : all
+  const all = h.findAllRecords($app, "invoices", filter, "-issue_date,-created", params); const search = String(query.search || "").trim().toLowerCase(); const filtered = search ? all.filter((record) => record.getString("invoice_number").toLowerCase().includes(search) || h.invoiceNumberForDisplay(record).toLowerCase().includes(search) || String((h.json(record, "customer_snapshot", {}) || {}).name || "").toLowerCase().includes(search)) : all
   return event.json(200, { items: filtered.slice((page - 1) * perPage, page * perPage).map(h.invoiceResponse), page, perPage, totalItems: filtered.length, totalPages: Math.max(1, Math.ceil(filtered.length / perPage)) })
 }, $apis.requireAuth())
 
@@ -144,8 +144,37 @@ routerAdd("GET", "/api/jornal/invoicing/invoices/{id}/document", (event) => {
 }, $apis.requireAuth())
 
 routerAdd("PATCH", "/api/jornal/invoicing/invoices/{id}", (event) => {
-  const h = require(`${__hooks}/invoice_helpers.js`); const body = h.jsonBody(event); const scope = h.requestScope(event, body, true); const key = h.requireCommand(body); const hash = h.commandHash("UPDATE_DRAFT", body); let response
-  $app.runInTransaction((tx) => { const replay = h.replayCommand(tx, scope.tenantId, scope.companyId, scope.epoch, key, "UPDATE_DRAFT", hash); if (replay) { response = replay.body; return }; const invoice = h.ownedRecord(tx, "invoices", event.request.pathValue("id"), scope.tenantId, scope.companyId, scope.epoch, "Invoice"); if (invoice.getString("status") !== "DRAFT" || invoice.getString("deleted_at")) throw new ApiError(409, "Hanya draft aktif yang dapat diedit"); if (invoice.getInt("revision") !== Number(body.expectedRevision)) throw new ApiError(409, "Draft invoice telah berubah"); const input = h.invoiceInput(body); const customer = h.ownedRecord(tx, "invoice_customers", input.customerId, scope.tenantId, scope.companyId, scope.epoch, "Pelanggan"); if (customer.getString("status") !== "ACTIVE") throw new ApiError(409, "Pelanggan diarsipkan"); const before = h.invoiceResponse(invoice); Object.entries(h.invoiceDraftData(input)).forEach(([name, value]) => invoice.set(name, value)); invoice.set("revision", invoice.getInt("revision") + 1); tx.save(invoice); response = { invoice: h.invoiceResponse(invoice) }; h.audit(tx, scope.tenantId, scope.companyId, scope.epoch, scope.tenantId, "invoice-draft-updated", "invoice", invoice.id, key, "", before, response.invoice); h.saveCommand(tx, scope.tenantId, scope.companyId, scope.epoch, key, "UPDATE_DRAFT", hash, 200, response) }); return event.json(200, response)
+  const h = require(`${__hooks}/invoice_helpers.js`); const body = h.jsonBody(event); const scope = h.requestScope(event, body, true); const key = h.requireCommand(body); const action = "UPDATE_INVOICE"; const hash = h.commandHash(action, body); let response
+  $app.runInTransaction((tx) => {
+    const replay = h.replayCommand(tx, scope.tenantId, scope.companyId, scope.epoch, key, action, hash); if (replay) { response = replay.body; return }
+    const invoice = h.ownedRecord(tx, "invoices", event.request.pathValue("id"), scope.tenantId, scope.companyId, scope.epoch, "Invoice")
+    const currentStatus = invoice.getString("status")
+    if (!["DRAFT", "UNPAID"].includes(currentStatus) || invoice.getString("deleted_at")) throw new ApiError(409, "Hanya draft atau invoice belum dibayar yang dapat direvisi")
+    if (invoice.getInt("revision") !== Number(body.expectedRevision)) throw new ApiError(409, "Invoice telah berubah")
+    const input = h.invoiceInput(body)
+    const customer = h.ownedRecord(tx, "invoice_customers", input.customerId, scope.tenantId, scope.companyId, scope.epoch, "Pelanggan")
+    if (customer.getString("status") !== "ACTIVE") throw new ApiError(409, "Pelanggan diarsipkan")
+    const before = h.invoiceResponse(invoice)
+    Object.entries(h.invoiceDraftData(input)).forEach(([name, value]) => invoice.set(name, value))
+    let auditAction = "invoice-draft-updated"
+    if (currentStatus === "UNPAID") {
+      const company = h.ownedCompany(tx, scope.tenantId, scope.companyId, scope.epoch, true)
+      const settings = h.ensureSettings(tx, scope.tenantId, scope.companyId, scope.epoch, company.getString("name"))
+      const number = invoice.getString("invoice_number")
+      const paymentInstructions = h.activePaymentInstructions(tx, settings, scope.tenantId, scope.companyId, scope.epoch)
+      invoice.set("customer_snapshot", h.customerResponse(customer))
+      invoice.set("sender_snapshot", { name: settings.getString("sender_name"), phone: settings.getString("sender_phone") || null, email: settings.getString("sender_email") || null, logoAssetId: company.getString("logo_asset_id") || null })
+      invoice.set("payment_instructions_snapshot", paymentInstructions)
+      invoice.set("content_hash", $security.sha256(h.stableStringify({ number, customer: h.customerResponse(customer), items: input.items, total: input.grandTotal, paymentInstructions })))
+      const reminders = tx.findRecordsByFilter("invoice_reminders", "invoice_id = {:invoice} && status != 'RESOLVED'", "", 0, 0, { invoice: invoice.id })
+      reminders.forEach((record) => { record.set("status", "RESOLVED"); record.set("resolved_at", new Date().toISOString()); tx.save(record) })
+      auditAction = "invoice-revised"
+    }
+    invoice.set("revision", invoice.getInt("revision") + 1); tx.save(invoice)
+    response = { invoice: h.invoiceResponse(invoice) }
+    h.audit(tx, scope.tenantId, scope.companyId, scope.epoch, scope.tenantId, auditAction, "invoice", invoice.id, key, "", before, response.invoice)
+    h.saveCommand(tx, scope.tenantId, scope.companyId, scope.epoch, key, action, hash, 200, response)
+  }); return event.json(200, response)
 }, $apis.requireAuth())
 
 routerAdd("POST", "/api/jornal/invoicing/invoices/{id}/delete-draft", (event) => {
@@ -185,12 +214,15 @@ routerAdd("POST", "/api/jornal/invoicing/invoices/{id}/issue", (event) => {
     catch { sequence = new Record(tx.findCollectionByNameOrId("invoice_sequences"), { tenant_id: tenantId, company_id: companyId, next_value: settings.getInt("numbering_start") || 1 }) }
     const value = sequence.getInt("next_value") || settings.getInt("numbering_start") || 1
     sequence.set("next_value", value + 1); tx.save(sequence)
-    const number = `${settings.getString("numbering_prefix")}${String(value).padStart(settings.getInt("numbering_padding") || 3, "0")}`
+    const [issueYear, issueMonth] = invoice.getString("issue_date").split("-")
+    const sequenceNumber = `${settings.getString("numbering_prefix")}${String(value).padStart(settings.getInt("numbering_padding") || 3, "0")}`
+    const number = `${issueYear}/${issueMonth}/INV/${sequenceNumber}`
     invoice.set("status", "UNPAID"); invoice.set("sequence", value); invoice.set("invoice_number", number)
     invoice.set("customer_snapshot", h.customerResponse(customer))
     invoice.set("sender_snapshot", { name: settings.getString("sender_name"), phone: settings.getString("sender_phone") || null, email: settings.getString("sender_email") || null, logoAssetId: company.getString("logo_asset_id") || null })
-    invoice.set("payment_instructions_snapshot", h.json(settings, "payment_instructions", []))
-    invoice.set("content_hash", $security.sha256(h.stableStringify({ number, customer: h.customerResponse(customer), items: h.json(invoice, "items", []), total: invoice.getInt("grand_total") })))
+    const paymentInstructions = h.activePaymentInstructions(tx, settings, tenantId, companyId, epoch)
+    invoice.set("payment_instructions_snapshot", paymentInstructions)
+    invoice.set("content_hash", $security.sha256(h.stableStringify({ number, customer: h.customerResponse(customer), items: h.json(invoice, "items", []), total: invoice.getInt("grand_total"), paymentInstructions })))
     invoice.set("issued_at", new Date().toISOString()); invoice.set("revision", invoice.getInt("revision") + 1); tx.save(invoice)
     response = { invoice: h.invoiceResponse(invoice) }
     h.audit(tx, tenantId, companyId, epoch, tenantId, "invoice-issued", "invoice", invoice.id, commandKey, "", null, response.invoice)
@@ -225,7 +257,7 @@ routerAdd("POST", "/api/jornal/invoicing/invoices/{id}/mark-paid", (event) => {
     if (mode === "CREATE") {
       if (tx.findRecordsByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && entity = 'transactions' && app_id = {:id}", "", 1, 0, { tenant: tenantId, company: companyId, id: transactionId }).length) throw new ApiError(409, "ID transaksi sudah digunakan")
       ledgerTransaction = { id: transactionId, businessId: tenantId, companyId, direction: "MONEY_IN", amount, currency: "IDR", transactionDate: paidOn, description: `Pelunasan invoice ${invoice.getString("invoice_number")}`, notes: h.requireText(body.notes, "Catatan", 2000, false), categoryId: null, paymentMethod: h.requireText(body.paymentMethod || "BANK_TRANSFER", "Metode pembayaran", 80, true), supplierCustomer: customer.getString("name"), tags: "invoice", accountId: body.accountId ? String(body.accountId) : null, transferAccountId: null, attachmentName: null, attachmentDataUrl: null, receivableTransactionId: null, receivableDueDate: null, taxSubjectId: null, taxObligationId: null, taxSettlementId: null, taxKind: null, taxPeriod: null, ...invoiceMetadata, classification: "REVENUE", taxClassification: "REVENUE", businessRelevance: "BUSINESS", classificationSource: "SYSTEM", classificationConfidence: 1, reviewStatus: "ACCEPTED", createdAt: now, updatedAt: now }
-      if (ledgerTransaction.accountId) { try { tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'accounts' && app_id = {:id}", { tenant: tenantId, company: companyId, epoch, id: ledgerTransaction.accountId }) } catch { throw new ApiError(400, "Rekening tidak berada pada company ini") } }
+      if (ledgerTransaction.accountId) { let accountRecord; try { accountRecord = tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'accounts' && app_id = {:id} && deleted_at = ''", { tenant: tenantId, company: companyId, epoch, id: ledgerTransaction.accountId }) } catch { throw new ApiError(400, "Rekening tidak berada pada company ini") }; if (h.json(accountRecord, "payload", {}).enabled === false) throw new ApiError(409, "Rekening sudah dinonaktifkan") }
       ledgerRecord = new Record(tx.findCollectionByNameOrId("jornal_records"), { business_id: tenantId, company_id: companyId, data_epoch: epoch, entity: "transactions", app_id: transactionId, payload: ledgerTransaction, revision: 1 }); tx.save(ledgerRecord)
     } else {
       try { ledgerRecord = tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'transactions' && app_id = {:id}", { tenant: tenantId, company: companyId, epoch, id: transactionId }) } catch { throw new ApiError(404, "Transaksi pemasukan tidak ditemukan") }

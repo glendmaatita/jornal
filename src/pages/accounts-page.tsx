@@ -1,6 +1,22 @@
 import { useMemo, useState } from "react"
 import { Link, useSearch } from "@tanstack/react-router"
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpLeft, Landmark, Plus, Trash2, Wallet } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import {
+  ArrowDownLeft,
+  ArrowLeftRight,
+  ArrowUpLeft,
+  Building2,
+  CheckCircle2,
+  Landmark,
+  Pencil,
+  Plus,
+  Power,
+  Save,
+  Trash2,
+  UserRound,
+  Wallet,
+  X,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { useAppDialog } from "@/components/ui/app-dialog-context"
@@ -11,8 +27,7 @@ import { currentAccountBalance } from "@/lib/account-balance"
 import { formatDateShort, formatRupiah, formatSignedRupiah, parseAmountInput } from "@/lib/format"
 import { queryKeys, useAccounts, useProfile, useTransactions } from "@/lib/queries"
 import { deleteAccount, isCompanyWritable, upsertAccount } from "@/lib/store"
-import { type AccountType } from "@/lib/types"
-import { useQueryClient } from "@tanstack/react-query"
+import { isAccountEnabled, type Account, type AccountType } from "@/lib/types"
 
 const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "BANK", label: "Bank" },
@@ -21,6 +36,43 @@ const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "OTHER", label: "Lainnya" },
 ]
 
+type AccountFilter = "ENABLED" | "DISABLED" | "ALL"
+type AccountDraft = {
+  name: string
+  type: AccountType
+  bankName: string
+  accountHolder: string
+  accountNumber: string
+  openingBalance: string
+  enabled: boolean
+}
+
+const EMPTY_DRAFT: AccountDraft = {
+  name: "",
+  type: "BANK",
+  bankName: "",
+  accountHolder: "",
+  accountNumber: "",
+  openingBalance: "",
+  enabled: true,
+}
+
+function draftFrom(account: Account): AccountDraft {
+  return {
+    name: account.name,
+    type: account.type,
+    bankName: account.bankName || "",
+    accountHolder: account.accountHolder || "",
+    accountNumber: account.accountNumber || "",
+    openingBalance: account.openingBalance ? String(account.openingBalance) : "",
+    enabled: isAccountEnabled(account),
+  }
+}
+
+function requiresPaymentIdentity(type: AccountType) {
+  return type === "BANK" || type === "EWALLET"
+}
+
 export function AccountsPage() {
   const dialog = useAppDialog()
   const search = useSearch({ from: "/_app/accounts" }) as { account?: string }
@@ -28,11 +80,19 @@ export function AccountsPage() {
   const { data: accounts = [] } = useAccounts()
   const { data: transactions = [] } = useTransactions()
   const { data: profile } = useProfile()
-  const [name, setName] = useState("")
-  const [type, setType] = useState<AccountType>("BANK")
-  const [openingBalance, setOpeningBalance] = useState("")
-  const selected = accounts.find((account) => account.id === search.account) ?? accounts[0] ?? null
+  const [filter, setFilter] = useState<AccountFilter>("ENABLED")
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState<AccountDraft>(EMPTY_DRAFT)
   const writable = isCompanyWritable()
+
+  const visibleAccounts = useMemo(() => accounts.filter((account) => {
+    if (filter === "ALL") return true
+    return filter === "ENABLED" ? isAccountEnabled(account) : !isAccountEnabled(account)
+  }), [accounts, filter])
+  const requested = accounts.find((account) => account.id === search.account)
+  const selected = requested && visibleAccounts.some((account) => account.id === requested.id)
+    ? requested
+    : visibleAccounts[0] ?? null
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.accounts })
@@ -53,13 +113,39 @@ export function AccountsPage() {
       })
   }, [selected, transactions])
 
-  const addAccount = () => {
-    const trimmedName = name.trim()
-    if (!trimmedName) return
-    upsertAccount({ name: trimmedName, type, openingBalance: parseAmountInput(openingBalance), includedInCash: true })
-    setName("")
-    setOpeningBalance("")
-    setType("BANK")
+  const needsIdentity = requiresPaymentIdentity(draft.type)
+  const formComplete = Boolean(
+    draft.name.trim()
+    && (!needsIdentity || (draft.bankName.trim() && draft.accountHolder.trim() && draft.accountNumber.trim())),
+  )
+
+  const resetForm = () => {
+    setEditingId(null)
+    setDraft(EMPTY_DRAFT)
+  }
+
+  const saveAccount = () => {
+    if (!formComplete) return
+    const account = upsertAccount({
+      ...(editingId ? { id: editingId } : {}),
+      name: draft.name.trim(),
+      type: draft.type,
+      bankName: draft.bankName.trim() || null,
+      accountHolder: draft.accountHolder.trim() || null,
+      accountNumber: draft.accountNumber.trim() || null,
+      enabled: draft.enabled,
+      openingBalance: parseAmountInput(draft.openingBalance),
+      includedInCash: editingId
+        ? accounts.find((item) => item.id === editingId)?.includedInCash !== false
+        : true,
+    })
+    resetForm()
+    if (!isAccountEnabled(account)) setFilter("DISABLED")
+    invalidate()
+  }
+
+  const toggleAccount = (account: Account) => {
+    upsertAccount({ ...account, enabled: !isAccountEnabled(account) })
     invalidate()
   }
 
@@ -67,19 +153,33 @@ export function AccountsPage() {
     <div className="space-y-4 pb-8">
       <div>
         <h1 className="flex items-center gap-2 text-xl tracking-tight"><Wallet className="size-5 text-primary" aria-hidden="true" />Rekening</h1>
-        <p className="text-sm text-muted-foreground">Kelola rekening dan lihat mutasi uang masuk-keluar.</p>
+        <p className="text-sm text-muted-foreground">Kelola identitas rekening dan lihat mutasi uang masuk-keluar.</p>
       </div>
 
       {writable && <Card>
         <CardContent className="space-y-3 p-5">
-          <h2 className="flex items-center gap-2 text-lg tracking-tight"><Plus className="size-4 text-primary" aria-hidden="true" />Tambah rekening</h2>
+          <h2 className="flex items-center gap-2 text-lg tracking-tight">
+            {editingId ? <Pencil className="size-4 text-primary" aria-hidden="true" /> : <Plus className="size-4 text-primary" aria-hidden="true" />}
+            {editingId ? "Edit rekening" : "Tambah rekening"}
+          </h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            <TextField label="Nama rekening" icon={Landmark} value={name} onChange={setName} placeholder="Contoh: BCA Operasional" />
-            <TextField label="Saldo awal" type="amount" prefix="Rp" value={openingBalance} onChange={setOpeningBalance} hint="Saldo sebelum mutasi pertama." />
+            <TextField label="Nama rekening" icon={Landmark} value={draft.name} onChange={(name) => setDraft((current) => ({ ...current, name }))} placeholder="Contoh: BCA Operasional" />
+            <SelectField label="Jenis rekening" value={draft.type} onChange={(value) => setDraft((current) => ({ ...current, type: value as AccountType }))} options={ACCOUNT_TYPES.map((item) => ({ value: item.value, label: item.label }))} />
+            <TextField label={draft.type === "EWALLET" ? "Penyedia" : "Nama bank"} icon={Building2} value={draft.bankName} onChange={(bankName) => setDraft((current) => ({ ...current, bankName }))} placeholder={draft.type === "EWALLET" ? "Contoh: GoPay" : "Contoh: BCA"} />
+            <TextField label="Nomor rekening" icon={Landmark} value={draft.accountNumber} onChange={(accountNumber) => setDraft((current) => ({ ...current, accountNumber }))} placeholder="Nomor rekening / e-wallet" />
+            <TextField label="Nama pemilik rekening" icon={UserRound} value={draft.accountHolder} onChange={(accountHolder) => setDraft((current) => ({ ...current, accountHolder }))} placeholder="Sesuai nama pada rekening" />
+            <TextField label="Saldo awal" type="amount" prefix="Rp" value={draft.openingBalance} onChange={(openingBalance) => setDraft((current) => ({ ...current, openingBalance }))} hint="Saldo sebelum mutasi pertama." />
           </div>
-          <div className="flex items-center gap-2">
-            <SelectField aria-label="Jenis rekening" value={type} onChange={(value) => setType(value as AccountType)} options={ACCOUNT_TYPES.map((item) => ({ value: item.value, label: item.label }))} />
-            <Button onClick={addAccount} disabled={!name.trim()}><Plus aria-hidden="true" />Tambah</Button>
+          {editingId && (
+            <button type="button" onClick={() => setDraft((current) => ({ ...current, enabled: !current.enabled }))} className="flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left">
+              <span><span className="block text-sm font-semibold">Rekening aktif</span><span className="block text-xs text-muted-foreground">Rekening aktif tersedia untuk transaksi baru.</span></span>
+              <span className={`relative h-6 w-11 rounded-full transition-colors ${draft.enabled ? "bg-primary" : "bg-slate-300"}`} aria-label={draft.enabled ? "Aktif" : "Nonaktif"}><span className={`absolute top-1 size-4 rounded-full bg-white transition-transform ${draft.enabled ? "translate-x-6" : "translate-x-1"}`} /></span>
+            </button>
+          )}
+          {needsIdentity && !formComplete && draft.name.trim() && <p className="text-xs text-amber-700">Nama bank/penyedia, nomor rekening, dan nama pemilik wajib diisi.</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={saveAccount} disabled={!formComplete}>{editingId ? <Save aria-hidden="true" /> : <Plus aria-hidden="true" />}{editingId ? "Simpan perubahan" : "Tambah"}</Button>
+            {editingId && <Button variant="outline" onClick={resetForm}><X aria-hidden="true" />Batal</Button>}
           </div>
           {!profile?.useAccountTracking && (
             <p className="text-xs text-muted-foreground">Aktifkan “Lacak lokasi uang” di <Link to="/settings" className="font-semibold text-primary underline">Pengaturan</Link> agar saldo rekening masuk ke Safe To Spend.</p>
@@ -87,11 +187,16 @@ export function AccountsPage() {
         </CardContent>
       </Card>}
 
-      {accounts.length === 0 ? (
-        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Belum ada rekening. Tambahkan rekening untuk mulai melihat mutasinya.</CardContent></Card>
+      <div className="flex items-end justify-between gap-3">
+        <div><h2 className="font-semibold">Daftar rekening</h2><p className="text-xs text-muted-foreground">Rekening nonaktif tetap menyimpan histori mutasi.</p></div>
+        <SelectField aria-label="Filter status rekening" className="w-36" value={filter} onChange={(value) => setFilter(value as AccountFilter)} options={[{ value: "ENABLED", label: "Aktif" }, { value: "DISABLED", label: "Nonaktif" }, { value: "ALL", label: "Semua" }]} />
+      </div>
+
+      {visibleAccounts.length === 0 ? (
+        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">{filter === "DISABLED" ? "Tidak ada rekening nonaktif." : "Belum ada rekening aktif. Tambahkan atau aktifkan rekening untuk menampilkannya di sini."}</CardContent></Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {accounts.map((account) => (
+          {visibleAccounts.map((account) => (
             <Link
               key={account.id}
               to="/accounts"
@@ -101,7 +206,11 @@ export function AccountsPage() {
                 : "block min-w-0 rounded-[10px]"}
             >
               <Card className="h-full transition-colors hover:border-primary/50"><CardContent className="flex items-start justify-between gap-3 p-5">
-                <span className="min-w-0"><span className="block truncate font-semibold">{account.name}</span><span className="text-xs text-muted-foreground">{ACCOUNT_TYPES.find((item) => item.value === account.type)?.label}</span></span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2"><span className="block truncate font-semibold">{account.name}</span>{!isAccountEnabled(account) && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Nonaktif</span>}</span>
+                  <span className="block text-xs text-muted-foreground">{account.bankName || ACCOUNT_TYPES.find((item) => item.value === account.type)?.label}{account.accountNumber ? ` · ${account.accountNumber}` : ""}</span>
+                  {account.accountHolder && <span className="block truncate text-xs text-muted-foreground">a.n. {account.accountHolder}</span>}
+                </span>
                 <span className="shrink-0 text-right"><span className="block text-sm font-semibold tabular-nums">{formatRupiah(currentAccountBalance(account, transactions))}</span><span className="text-xs text-muted-foreground">saldo saat ini</span></span>
               </CardContent></Card>
             </Link>
@@ -112,9 +221,13 @@ export function AccountsPage() {
       {selected && (
         <Card>
           <CardContent className="space-y-3 p-5">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0"><h2 className="flex min-w-0 items-center gap-2 text-lg tracking-tight"><ArrowLeftRight className="size-4 shrink-0 text-primary" aria-hidden="true" /><span className="truncate">Mutasi {selected.name}</span></h2><p className="text-xs text-muted-foreground">Saldo awal {formatRupiah(selected.openingBalance)}</p></div>
-              {writable && <Button variant="ghost" size="sm" aria-label={`Hapus ${selected.name}`} onClick={() => void dialog.confirm({ title: `Hapus rekening ${selected.name}?`, description: "Rekening akan dihapus dari daftar. Pastikan mutasi yang terkait sudah diperiksa.", confirmLabel: "Hapus rekening", tone: "destructive" }).then((confirmed) => { if (confirmed) { deleteAccount(selected.id); invalidate() } })}><Trash2 className="size-4" aria-hidden="true" /></Button>}
+              {writable && <div className="flex gap-1">
+                <Button variant="ghost" size="sm" onClick={() => { setEditingId(selected.id); setDraft(draftFrom(selected)); window.scrollTo({ top: 0, behavior: "smooth" }) }}><Pencil className="size-4" aria-hidden="true" />Edit</Button>
+                <Button variant="ghost" size="sm" onClick={() => toggleAccount(selected)}>{isAccountEnabled(selected) ? <Power className="size-4" aria-hidden="true" /> : <CheckCircle2 className="size-4" aria-hidden="true" />}{isAccountEnabled(selected) ? "Nonaktifkan" : "Aktifkan"}</Button>
+                <Button variant="ghost" size="sm" aria-label={`Hapus ${selected.name}`} onClick={() => void dialog.confirm({ title: `Hapus rekening ${selected.name}?`, description: "Rekening akan dihapus permanen bila belum dipakai transaksi. Untuk menyimpan histori, pilih Nonaktifkan.", confirmLabel: "Hapus rekening", tone: "destructive" }).then((confirmed) => { if (confirmed) { deleteAccount(selected.id); invalidate() } })}><Trash2 className="size-4" aria-hidden="true" /></Button>
+              </div>}
             </div>
             {mutations.length === 0 ? <p className="rounded-xl bg-secondary/50 p-4 text-sm text-muted-foreground">Belum ada mutasi untuk rekening ini.</p> : (
               <div className="divide-y divide-border/50">

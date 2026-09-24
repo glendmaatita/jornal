@@ -8,6 +8,7 @@ import {
   parseAmountInput,
   formatDateLong,
   formatDateShort,
+  formatInvoiceNumber,
   formatMonthYear,
   formatShortDateLabel,
   formatGroupLabel,
@@ -57,6 +58,13 @@ expect(formatRupiah(0)).toContain("0")
     expect(formatDateShort("2026-09-02")).toBe("2 Sep 2026")
     expect(formatMonthYear("2026-09-02")).toBe("September 2026")
     expect(formatShortDateLabel("2026-09-02")).toBe("2 Sep")
+  })
+
+  test("invoice number formatter upgrades legacy numeric numbers", () => {
+    expect(formatInvoiceNumber("002", 2, "2026-09-24")).toBe("2026/09/INV/002")
+    expect(formatInvoiceNumber("2026/09/INV/003", 3, "2026-09-24")).toBe("2026/09/INV/003")
+    expect(formatInvoiceNumber("CUSTOM-004", 4, "2026-09-24")).toBe("CUSTOM-004")
+    expect(formatInvoiceNumber(null, null, "2026-09-24")).toBeNull()
   })
 
   test("todayIsoDate/toIsoDate/parseIsoDate roundtrip", () => {

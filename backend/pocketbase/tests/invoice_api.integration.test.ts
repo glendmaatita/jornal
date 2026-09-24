@@ -149,6 +149,32 @@ integrationTest(
             id: "bank-a",
             name: "Bank A",
             type: "BANK",
+            bankName: "BCA",
+            accountNumber: "1234567890",
+            accountHolder: "Toko Invoice",
+            enabled: true,
+            openingBalance: 0,
+            includedInCash: true,
+          },
+          {
+            id: "bank-b",
+            name: "Bank B",
+            type: "BANK",
+            bankName: "Mandiri",
+            accountNumber: "9876543210",
+            accountHolder: "Toko Invoice",
+            enabled: true,
+            openingBalance: 0,
+            includedInCash: true,
+          },
+          {
+            id: "bank-disabled",
+            name: "Bank Nonaktif",
+            type: "BANK",
+            bankName: "Bank Nonaktif",
+            accountNumber: "0000000000",
+            accountHolder: "Toko Invoice",
+            enabled: false,
             openingBalance: 0,
             includedInCash: true,
           },
@@ -158,6 +184,26 @@ integrationTest(
     expect(setup.response.status).toBe(201);
     const companyId = String(setup.data.id);
     const base = { companyId, dataEpoch: 1 };
+    const settingsResult = await send(
+      `/api/jornal/invoicing/settings?companyId=${companyId}&dataEpoch=1`,
+      { headers: headers(owner.token) },
+    );
+    const settings = settingsResult.data.settings as Record<string, unknown>;
+    const updatedSettings = await send("/api/jornal/invoicing/settings", {
+      method: "PUT",
+      headers: headers(owner.token),
+      body: JSON.stringify({
+        ...settings,
+        ...base,
+        commandKey: "settings-payment-accounts",
+        expectedRevision: settings.revision,
+        paymentInstructions: [
+          { accountId: "bank-a", name: "BCA", accountNumber: "1234567890", accountHolder: "Toko Invoice" },
+          { accountId: "bank-b", name: "Mandiri", accountNumber: "9876543210", accountHolder: "Toko Invoice" },
+        ],
+      }),
+    });
+    expect(updatedSettings.response.status).toBe(200);
     const customer = await send("/api/jornal/invoicing/customers", {
       method: "POST",
       headers: headers(owner.token),
@@ -229,11 +275,64 @@ integrationTest(
       );
     expect(issued.response.status).toBe(200);
     const unpaid = issued.data.invoice as Record<string, unknown>;
-    expect(unpaid.invoiceNumber).toBe("001");
+    expect(unpaid.invoiceNumber).toBe(`${today.slice(0, 7).replace("-", "/")}/INV/001`);
+    expect(unpaid.paymentInstructionsSnapshot).toEqual([
+      { accountId: "bank-a", name: "BCA", accountNumber: "1234567890", accountHolder: "Toko Invoice" },
+      { accountId: "bank-b", name: "Mandiri", accountNumber: "9876543210", accountHolder: "Toko Invoice" },
+    ]);
+    const issuedSettings = updatedSettings.data.settings as Record<string, unknown>;
+    const changedNumbering = await send("/api/jornal/invoicing/settings", {
+      method: "PUT",
+      headers: headers(owner.token),
+      body: JSON.stringify({
+        ...issuedSettings,
+        ...base,
+        commandKey: "settings-numbering-after-issue",
+        expectedRevision: issuedSettings.revision,
+        numberingPrefix: "BARU-",
+        numberingPadding: 5,
+      }),
+    });
+    expect(changedNumbering.response.status).toBe(200);
+    const revised = await send(
+      `/api/jornal/invoicing/invoices/${invoice.id}`,
+      {
+        method: "PATCH",
+        headers: headers(owner.token),
+        body: JSON.stringify({
+          ...draftBody,
+          commandKey: "revise-unpaid-1",
+          expectedRevision: unpaid.revision,
+          shippingMethod: "Kurir revisi",
+        }),
+      },
+    );
+    expect(revised.response.status).toBe(200);
+    const revisedUnpaid = revised.data.invoice as Record<string, unknown>;
+    expect(revisedUnpaid.status).toBe("UNPAID");
+    expect(revisedUnpaid.invoiceNumber).toBe(unpaid.invoiceNumber);
+    expect(revisedUnpaid.shippingMethod).toBe("Kurir revisi");
+    const disabledAccountPayment = await send(
+      `/api/jornal/invoicing/invoices/${invoice.id}/mark-paid`,
+      {
+        method: "POST",
+        headers: headers(owner.token),
+        body: JSON.stringify({
+          ...base,
+          commandKey: "pay-disabled-account",
+          expectedRevision: revisedUnpaid.revision,
+          paidOn: today,
+          transactionId: "invoice-disabled-account",
+          accountId: "bank-disabled",
+          mode: "CREATE",
+        }),
+      },
+    );
+    expect(disabledAccountPayment.response.status).toBe(409);
     const paymentBody = {
       ...base,
       commandKey: "pay-1",
-      expectedRevision: unpaid.revision,
+      expectedRevision: revisedUnpaid.revision,
       paidOn: today,
       transactionId: "invoice-cash-1",
       accountId: "bank-a",
@@ -251,6 +350,19 @@ integrationTest(
     expect(
       (paid.data.ledgerTransaction as Record<string, unknown>).amount,
     ).toBe(200_000);
+    const rejectedPaidRevision = await send(
+      `/api/jornal/invoicing/invoices/${invoice.id}`,
+      {
+        method: "PATCH",
+        headers: headers(owner.token),
+        body: JSON.stringify({
+          ...draftBody,
+          commandKey: "revise-paid-rejected",
+          expectedRevision: (paid.data.invoice as Record<string, unknown>).revision,
+        }),
+      },
+    );
+    expect(rejectedPaidRevision.response.status).toBe(409);
     const replay = await send(
       `/api/jornal/invoicing/invoices/${invoice.id}/mark-paid`,
       {
@@ -924,5 +1036,28 @@ integrationTest(
       body: JSON.stringify({ ...base, backup: corruptedBackup }),
     });
     expect(rejectedBackup.response.status).toBe(400);
+
+    const legacyNumber = "777";
+    const legacyInvoice = invoice;
+    const patchedLegacyInvoice = await send(
+      `/api/collections/invoices/records/${legacyInvoice.id}`,
+      {
+        method: "PATCH",
+        headers: headers(String(admin.data.token)),
+        body: JSON.stringify({ invoice_number: legacyNumber }),
+      },
+    );
+    expect(patchedLegacyInvoice.response.status).toBe(200);
+    const displayedLegacyNumber = `${String(legacyInvoice.issueDate).slice(0, 7).replace("-", "/")}/INV/${legacyNumber}`;
+    const legacySearch = await send(
+      `/api/jornal/invoicing/invoices?companyId=${companyId}&dataEpoch=1&search=${encodeURIComponent(displayedLegacyNumber)}`,
+      { headers: headers(owner.token) },
+    );
+    expect(legacySearch.response.status).toBe(200);
+    expect(
+      (legacySearch.data.items as Record<string, unknown>[]).some(
+        (item) => item.id === legacyInvoice.id,
+      ),
+    ).toBe(true);
   },
 );

@@ -6,7 +6,7 @@ import { ChevronRight, FileText, Paperclip, Receipt, Search, SearchX, User, type
 import { TextField } from "@/components/ui/text-field"
 import { listCustomers, listInvoices } from "@/lib/invoice-client"
 import { useTransactions } from "@/lib/queries"
-import { formatRupiah } from "@/lib/format"
+import { formatInvoiceNumber, formatRupiah } from "@/lib/format"
 import { searchDocuments } from "@/lib/document-client"
 
 const rowClass = "flex items-center gap-3 rounded-xl border bg-white p-3"
@@ -47,7 +47,7 @@ export function SearchPage() {
       <TextField label="Cari minimal 2 karakter" icon={Search} value={search} onChange={setSearch} placeholder="Nama, deskripsi, nomor invoice…" autoFocus />
       {local.map((item) => <Link key={item.id} to="/transactions/$transactionId" params={{ transactionId: item.id }} className={rowClass}><ResultRow icon={Receipt} kind="Transaksi" title={item.description} amount={item.amount} /></Link>)}
       {customers.data?.items.map((item) => <Link key={item.id} to="/customers/$customerId" params={{ customerId: item.id }} className={rowClass}><ResultRow icon={User} kind="Pelanggan" title={item.name} /></Link>)}
-      {invoices.data?.items.map((item) => <Link key={item.id} to="/invoices/$invoiceId" params={{ invoiceId: item.id }} className={rowClass}><ResultRow icon={FileText} kind="Invoice" title={item.invoiceNumber || "Draft"} amount={item.grandTotal} /></Link>)}
+      {invoices.data?.items.map((item) => <Link key={item.id} to="/invoices/$invoiceId" params={{ invoiceId: item.id }} className={rowClass}><ResultRow icon={FileText} kind="Invoice" title={formatInvoiceNumber(item.invoiceNumber, item.sequence, item.issueDate) || "Draft"} amount={item.grandTotal} /></Link>)}
       {documents.data?.items.map((item) => <Link key={item.document.id} to="/inbox/$documentId" params={{ documentId: item.document.id }} className={rowClass}><ResultRow icon={Paperclip} kind="Dokumen" title={item.summary.merchantName || item.summary.description || item.document.filename} /></Link>)}
       {settled && total === 0 && (
         <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">

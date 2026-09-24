@@ -5,7 +5,10 @@ test("creates a customer, issues an invoice, and records payment once", async ({
   await page.setViewportSize({ width: 360, height: 800 })
   const adminAuth = await request.post(`${backend}/api/collections/_superusers/auth-with-password`, { data: { identity: "e2e-admin@jornal.test", password: "StrongPass123!" } }); expect(adminAuth.ok()).toBeTruthy(); const admin = await adminAuth.json() as { token: string }
   const email = `invoice-e2e-${Date.now()}@example.com`; const createdUser = await request.post(`${backend}/api/collections/users/records`, { headers: { Authorization: admin.token }, data: { email, verified: true, password: "UserPass123!", passwordConfirm: "UserPass123!" } }); expect(createdUser.ok()).toBeTruthy(); const user = await createdUser.json() as { id: string; email: string; verified: boolean; collectionId: string; collectionName: string }; const impersonated = await request.post(`${backend}/api/collections/users/impersonate/${user.id}`, { headers: { Authorization: admin.token } }); const auth = await impersonated.json() as { token: string }
-  const setup = await request.post(`${backend}/api/jornal/companies/setup`, { headers: { Authorization: auth.token }, data: { name: "Toko Invoice Browser", creationKey: "invoice-e2e-company", requestId: "invoice-e2e-company", initialSetup: true, profile: { businessName: "Toko Invoice Browser", businessType: "INDIVIDUAL", businessStartDate: "2026-01-01", fiscalYear: 2026, taxScheme: "UMKM_FINAL", pkpStatus: false, useAccountTracking: false, openingBalance: 0, taxReserveConfirmed: 0, lastBalanceCheckIn: null, lastCheckedBalance: null, lastCheckInDelta: null, onboardingCompletedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }, accounts: [] } }); expect(setup.ok()).toBeTruthy(); const company = await setup.json() as { id: string }
+  const setup = await request.post(`${backend}/api/jornal/companies/setup`, { headers: { Authorization: auth.token }, data: { name: "Toko Invoice Browser", creationKey: "invoice-e2e-company", requestId: "invoice-e2e-company", initialSetup: true, profile: { businessName: "Toko Invoice Browser", businessType: "INDIVIDUAL", businessStartDate: "2026-01-01", fiscalYear: 2026, taxScheme: "UMKM_FINAL", pkpStatus: false, useAccountTracking: false, openingBalance: 0, taxReserveConfirmed: 0, lastBalanceCheckIn: null, lastCheckedBalance: null, lastCheckInDelta: null, onboardingCompletedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }, accounts: [
+    { id: "browser-bca", name: "BCA Operasional", type: "BANK", bankName: "BCA", accountNumber: "1234567890", accountHolder: "Toko Invoice Browser", enabled: true, openingBalance: 0, includedInCash: true },
+    { id: "browser-mandiri", name: "Mandiri Operasional", type: "BANK", bankName: "Mandiri", accountNumber: "9876543210", accountHolder: "Toko Invoice Browser", enabled: true, openingBalance: 0, includedInCash: true },
+  ] } }); expect(setup.ok()).toBeTruthy(); const company = await setup.json() as { id: string }
   await page.addInitScript(({ token, record }) => localStorage.setItem("pocketbase_auth", JSON.stringify({ token, record })), { token: auth.token, record: user })
   await page.goto(`/invoices?company=${company.id}`)
   const unpaidCard = page.getByText("Belum bayar", { exact: true }).locator("..")
@@ -26,6 +29,11 @@ test("creates a customer, issues an invoice, and records payment once", async ({
   await expect(resetDialog.getByText("Company lain tidak akan terpengaruh.")).toBeVisible()
   await resetDialog.getByRole("button", { name: "Batal" }).click()
   await expect(resetDialog).toBeHidden()
+  await page.goto(`/settings/invoice?company=${company.id}`)
+  await page.getByLabel(/BCA.*1234567890/).check()
+  await page.getByLabel(/Mandiri.*9876543210/).check()
+  await page.getByRole("button", { name: "Simpan Pengaturan" }).click()
+  await expect(page.getByRole("button", { name: "Tersimpan" })).toBeVisible()
   await page.goto(`/customers/new?company=${company.id}`); await page.getByLabel("Nama").fill("Pelanggan Browser"); await page.getByLabel("Kode pos").fill("00123"); await page.getByRole("button", { name: "Simpan pelanggan" }).click(); await expect(page.getByRole("heading", { name: "Pelanggan Browser" })).toBeVisible(); await page.getByRole("link", { name: "Buat Invoice" }).click()
   await page.getByRole("combobox", { name: "Pelanggan" }).click()
   const customerSearch = page.getByRole("searchbox", { name: "Cari pelanggan…" })
@@ -36,12 +44,14 @@ test("creates a customer, issues an invoice, and records payment once", async ({
   await expect(page.getByText("Tidak ada hasil untuk “tidak ditemukan”")).toBeVisible()
   await customerSearch.fill("pelanggan")
   await page.getByRole("option", { name: "Pelanggan Browser" }).click()
-  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
+  const today = new Date()
+  const officialInvoiceNumber = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, "0")}/INV/001`
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1)
   const shortMonths = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
   await expect(page.getByLabel("Jatuh tempo")).toContainText(`${tomorrow.getDate()} ${shortMonths[tomorrow.getMonth()]} ${tomorrow.getFullYear()}`)
   const quantityBox = await page.getByLabel("Jumlah").locator("xpath=..").boundingBox()
   const unitBox = await page.getByLabel("Satuan").locator("xpath=..").boundingBox()
-  const priceBox = await page.getByLabel("Harga").locator("xpath=..").boundingBox()
+  const priceBox = await page.getByLabel("Harga/unit").locator("xpath=..").boundingBox()
   expect(quantityBox).toBeTruthy(); expect(unitBox).toBeTruthy(); expect(priceBox).toBeTruthy()
   expect(Math.abs(quantityBox!.y - unitBox!.y)).toBeLessThanOrEqual(1)
   expect(Math.abs(quantityBox!.height - unitBox!.height)).toBeLessThanOrEqual(1)
@@ -49,6 +59,13 @@ test("creates a customer, issues an invoice, and records payment once", async ({
   expect(priceBox!.width).toBeGreaterThan(quantityBox!.width * 1.8)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByRole("button", { name: "Tambah item" }).click(); await expect(page.getByRole("button", { name: "Hapus item 2" })).toBeVisible(); await page.getByRole("button", { name: "Hapus item 2" }).click()
-  await page.getByLabel("Deskripsi").fill("Jasa browser"); await page.getByLabel("Jumlah").fill("2"); await page.getByLabel("Harga").fill("100000"); await expect(page.getByText("Rp200.000")).toBeVisible(); await page.getByRole("button", { name: "Terbitkan" }).click(); await expect(page.getByRole("heading", { name: "001" })).toBeVisible(); await expect(page.getByText("UNPAID", { exact: false })).toBeVisible()
-  await page.getByRole("button", { name: "Konfirmasi pelunasan" }).click(); await expect(page.getByText(/Pembayaran tercatat/)).toBeVisible(); await page.goto(`/transactions?company=${company.id}`); await expect(page.getByText("Pelunasan invoice 001", { exact: true })).toBeVisible(); await expect(page.getByRole("button", { name: "Pakai perangkat" })).toHaveCount(0)
+  await page.getByLabel("Deskripsi").fill("Jasa browser"); await page.getByLabel("Jumlah").fill("2"); await page.getByLabel("Harga/unit").fill("100000"); await expect(page.getByText("Rp200.000")).toBeVisible(); await page.getByRole("button", { name: "Terbitkan" }).click(); await expect(page.getByRole("heading", { name: officialInvoiceNumber })).toBeVisible(); await expect(page.getByText("UNPAID", { exact: false })).toBeVisible()
+  await expect(page.getByText("1234567890", { exact: false })).toBeVisible()
+  await expect(page.getByText("9876543210", { exact: false })).toBeVisible()
+  await page.getByRole("link", { name: "Revisi" }).click()
+  await page.getByLabel("Pengiriman").fill("Kurir revisi")
+  await page.getByRole("button", { name: "Simpan Revisi" }).click()
+  await expect(page.getByRole("heading", { name: officialInvoiceNumber })).toBeVisible()
+  await expect(page.getByText("Kurir revisi", { exact: false })).toBeVisible()
+  await page.getByRole("button", { name: "Konfirmasi pelunasan" }).click(); await expect(page.getByText(/Pembayaran tercatat/)).toBeVisible(); await page.goto(`/transactions?company=${company.id}`); await expect(page.getByText(`Pelunasan invoice ${officialInvoiceNumber}`, { exact: true })).toBeVisible(); await expect(page.getByRole("button", { name: "Pakai perangkat" })).toHaveCount(0)
 })

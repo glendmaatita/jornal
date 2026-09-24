@@ -276,7 +276,13 @@ export function loadProfileHistory(): VersionRecord<BusinessProfile>[] {
 // ── Accounts (§31) ──
 
 export function loadAccounts(): Account[] {
-  return read<Account[]>(KEYS.accounts, [])
+  return read<Account[]>(KEYS.accounts, []).map((account) => ({
+    ...account,
+    bankName: account.bankName ?? null,
+    accountHolder: account.accountHolder ?? null,
+    accountNumber: account.accountNumber ?? null,
+    enabled: account.enabled !== false,
+  }))
 }
 
 export function saveAccounts(accounts: Account[]) {

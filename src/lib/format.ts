@@ -77,6 +77,23 @@ export function formatDateShort(isoDate: string): string {
   return `${day} ${monthNamesShort[month - 1]} ${year}`
 }
 
+/**
+ * Keeps newly-issued official numbers unchanged and upgrades legacy numeric
+ * numbers for display without rewriting an already-issued invoice record.
+ */
+export function formatInvoiceNumber(
+  invoiceNumber: string | null,
+  sequence: number | null,
+  issueDate: string,
+): string | null {
+  if (!invoiceNumber) return null
+  if (/^\d{4}\/\d{2}\/INV\/.+$/i.test(invoiceNumber)) return invoiceNumber
+  if (!/^\d+$/.test(invoiceNumber) || !sequence) return invoiceNumber
+  const [year, month] = issueDate.split("-")
+  if (!/^\d{4}$/.test(year) || !/^\d{2}$/.test(month)) return invoiceNumber
+  return `${year}/${month}/INV/${invoiceNumber}`
+}
+
 /** "YYYY-MM-DD" → "September 2026" */
 export function formatMonthYear(isoDate: string): string {
   const [year, month] = isoDate.split("-").map(Number)

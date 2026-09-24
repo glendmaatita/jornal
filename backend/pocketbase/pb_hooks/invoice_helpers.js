@@ -38,6 +38,32 @@ function customerInput(body) {
     district: requireText(body.district, "Kecamatan", 255, false), city: requireText(body.city, "Kota", 255, false), province: requireText(body.province, "Provinsi", 255, false), postal_code: requireText(body.postalCode, "Kode pos", 30, false),
   }
 }
+function paymentInstructionsInput(value) {
+  if (!Array.isArray(value)) throw new ApiError(400, "Daftar rekening pembayaran tidak valid")
+  if (value.length > 3) throw new ApiError(400, "Maksimal 3 rekening pembayaran aktif")
+  return value.map((item) => ({
+    accountId: requireText(item && item.accountId, "ID rekening pembayaran", 100, false) || undefined,
+    name: requireText(item && item.name, "Nama bank atau penyedia", 80, true),
+    accountNumber: requireText(item && item.accountNumber, "Nomor rekening", 100, true),
+    accountHolder: requireText(item && item.accountHolder, "Nama pemilik rekening", 100, true),
+  }))
+}
+function activePaymentInstructions(tx, settings, tenantId, companyId, epoch) {
+  return paymentInstructionsInput(json(settings, "payment_instructions", [])).flatMap((instruction) => {
+    if (!instruction.accountId) return [instruction]
+    let account
+    try { account = tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'accounts' && app_id = {:id} && deleted_at = ''", { tenant: tenantId, company: companyId, epoch, id: instruction.accountId }) }
+    catch { return [] }
+    const payload = json(account, "payload", {})
+    if (payload.enabled === false) return []
+    return [{
+      accountId: instruction.accountId,
+      name: String(payload.bankName || payload.name || instruction.name).trim(),
+      accountNumber: String(payload.accountNumber || instruction.accountNumber).trim(),
+      accountHolder: String(payload.accountHolder || instruction.accountHolder).trim(),
+    }]
+  })
+}
 function json(record, field, fallback) {
   const raw = record.get(field)
   if (Array.isArray(raw) || (raw && typeof raw === "object" && typeof raw.length === "number" && typeof raw[0] === "number")) { try { return JSON.parse(String.fromCharCode(...raw)) } catch { return fallback } }
@@ -94,6 +120,14 @@ function invoiceResponse(record) {
     currency: record.getString("currency"), paidAt: record.getString("paid_at") || null, voidReason: record.getString("void_reason") || null, replacedInvoiceId: record.getString("replaced_invoice_id") || null,
     revision: record.getInt("revision"), createdAt: record.getString("created"), updatedAt: record.getString("updated"),
   }
+}
+function invoiceNumberForDisplay(record) {
+  const raw = record.getString("invoice_number")
+  if (!raw || /^\d{4}\/\d{2}\/INV\/.+$/i.test(raw)) return raw
+  if (!/^\d+$/.test(raw) || !record.getInt("sequence")) return raw
+  const parts = record.getString("issue_date").split("-")
+  if (!/^\d{4}$/.test(parts[0] || "") || !/^\d{2}$/.test(parts[1] || "")) return raw
+  return `${parts[0]}/${parts[1]}/INV/${raw}`
 }
 function unitResponse(record) {
   return { id: record.id, label: record.getString("label"), status: record.getString("status"), sortOrder: record.getInt("sort_order"), revision: record.getInt("revision") }
@@ -196,4 +230,4 @@ function ensureSettings(tx, tenantId, companyId, epoch, senderName) {
   return settings
 }
 
-module.exports = { DEFAULT_UNITS, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceResponse, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }
+module.exports = { DEFAULT_UNITS, activePaymentInstructions, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceNumberForDisplay, invoiceResponse, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentInstructionsInput, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }

@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router"
 import { CircleCheck, Clock, FilePlus2, FileText, History, Mail, MapPin, Pencil, Phone, User } from "lucide-react"
 
 import { Card, CardContent } from "@/components/ui/card"
-import { formatRupiah } from "@/lib/format"
+import { formatInvoiceNumber, formatRupiah } from "@/lib/format"
 import { getCustomer } from "@/lib/invoice-client"
 
 export function CustomerDetailPage({ customerId }: { customerId: string }) {
@@ -43,7 +43,7 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
       {invoices.map((invoice) => (
         <Link key={invoice.id} to="/invoices/$invoiceId" params={{ invoiceId: invoice.id }} className="flex items-center gap-3 rounded-xl border bg-white p-3">
           <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="flex-1">{invoice.invoiceNumber || "Draft"} · {invoice.status}</span>
+          <span className="flex-1">{formatInvoiceNumber(invoice.invoiceNumber, invoice.sequence, invoice.issueDate) || "Draft"} · {invoice.status}</span>
           <strong className="tabular-nums">{formatRupiah(invoice.grandTotal)}</strong>
         </Link>
       ))}

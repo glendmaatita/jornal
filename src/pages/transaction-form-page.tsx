@@ -23,7 +23,7 @@ import { parseTransactionInput } from "@/lib/nlp"
 import { queryKeys, useAccounts, useCorrections, useSettings, useTransactions } from "@/lib/queries"
 import { createTransaction, updateTransaction } from "@/lib/store"
 import type { ClassificationSource, TransactionClassification, TransactionDirection } from "@/lib/types"
-import { CLASSIFICATION_LABELS } from "@/lib/types"
+import { CLASSIFICATION_LABELS, isAccountEnabled } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { activeCompany } from "@/lib/companies"
 import { scopedStorageKey } from "@/lib/store"
@@ -78,6 +78,14 @@ export function TransactionFormPage() {
   const [captureRequested, setCaptureRequested] = useState(false)
   const [classificationOverride, setClassificationOverride] = useState<TransactionClassification | null>(null)
   const [receivableDueDate, setReceivableDueDate] = useState<string | null>(null)
+  const historicalAccountIds = new Set<string>(
+    editing
+      ? [editing.accountId, editing.transferAccountId].filter((id): id is string => Boolean(id))
+      : [],
+  )
+  const selectableAccounts = accounts.filter((account) =>
+    isAccountEnabled(account) || historicalAccountIds.has(account.id),
+  )
   const [smartText, setSmartText] = useState("")
   const [showSmart, setShowSmart] = useState(false)
   const [loadedId, setLoadedId] = useState<string | null>(null)
@@ -252,8 +260,8 @@ export function TransactionFormPage() {
   // Validation (shown after first submit attempt)
   const amountValue = parseNumberValue(amount)
   const amountError = amountValue <= 0 ? "Jumlah wajib diisi (lebih dari nol)." : undefined
-  const selectedAccountId = accountId && accounts.some((account) => account.id === accountId) ? accountId : null
-  const selectedTransferAccountId = transferAccountId && accounts.some((account) => account.id === transferAccountId) ? transferAccountId : null
+  const selectedAccountId = accountId && selectableAccounts.some((account) => account.id === accountId) ? accountId : null
+  const selectedTransferAccountId = transferAccountId && selectableAccounts.some((account) => account.id === transferAccountId) ? transferAccountId : null
   const transferError =
     mode === "transfer" && (!selectedAccountId || !selectedTransferAccountId || selectedAccountId === selectedTransferAccountId)
       ? "Pilih akun asal dan tujuan yang berbeda."
@@ -540,7 +548,7 @@ export function TransactionFormPage() {
                 placeholder="Pilih akun"
                 searchable
                 searchPlaceholder="Cari akun…"
-                options={accounts.map((account) => ({ value: account.id, label: account.name }))}
+                options={selectableAccounts.map((account) => ({ value: account.id, label: account.name }))}
               />
               <SelectField
                 label="Ke akun"
@@ -549,7 +557,7 @@ export function TransactionFormPage() {
                 placeholder="Pilih akun"
                 searchable
                 searchPlaceholder="Cari akun…"
-                options={accounts.filter((account) => account.id !== accountId).map((account) => ({ value: account.id, label: account.name }))}
+                options={selectableAccounts.filter((account) => account.id !== accountId).map((account) => ({ value: account.id, label: account.name }))}
               />
               {showErrors && transferError && <p className="field-error">{transferError}</p>}
             </div>
@@ -662,7 +670,7 @@ export function TransactionFormPage() {
                 placeholder="Tanpa akun"
                 searchable
                 searchPlaceholder="Cari akun…"
-                options={accounts.map((account) => ({ value: account.id, label: account.name }))}
+                options={selectableAccounts.map((account) => ({ value: account.id, label: account.name }))}
               />
               <TextField
                 label="Metode pembayaran"

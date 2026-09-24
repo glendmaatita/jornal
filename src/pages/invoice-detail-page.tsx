@@ -43,9 +43,10 @@ import {
   invoicePng,
   printInvoice,
 } from "@/lib/invoice-export";
-import { todayIsoDate } from "@/lib/format";
+import { formatInvoiceNumber, todayIsoDate } from "@/lib/format";
 import { useAccounts } from "@/lib/queries";
 import { activeCompany, loadCompanyLogo } from "@/lib/companies";
+import { isAccountEnabled } from "@/lib/types";
 
 export function InvoiceDetailPage({
   invoiceId,
@@ -81,8 +82,13 @@ export function InvoiceDetailPage({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const effectiveAccountId =
-    accountId || settings.data?.settings.defaultAccountId || "";
+  const enabledAccounts = accounts.filter(isAccountEnabled);
+  const selectedEnabledAccountId = accountId && enabledAccounts.some((account) => account.id === accountId)
+    ? accountId
+    : "";
+  const defaultAccountId = settings.data?.settings.defaultAccountId || "";
+  const effectiveAccountId = selectedEnabledAccountId
+    || (enabledAccounts.some((account) => account.id === defaultAccountId) ? defaultAccountId : "");
   const snapshotLogoId = String(
     detail.data?.invoice.senderSnapshot?.logoAssetId || "",
   );
@@ -117,6 +123,11 @@ export function InvoiceDetailPage({
       </p>
     );
   const { invoice, payment } = detail.data;
+  const displayedInvoiceNumber = formatInvoiceNumber(
+    invoice.invoiceNumber,
+    invoice.sequence,
+    invoice.issueDate,
+  );
   const candidate = candidates.data?.items.find(
     (item) => item.transaction.id === candidateId,
   );
@@ -128,20 +139,20 @@ export function InvoiceDetailPage({
             <div>
               <h1 className="flex items-center gap-2 text-2xl">
                 <FileText className="size-5 text-primary" aria-hidden="true" />
-                {invoice.invoiceNumber || "Draft Invoice"}
+                {displayedInvoiceNumber || "Draft Invoice"}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {invoice.status} · revisi {invoice.revision}
               </p>
             </div>
-            {invoice.status === "DRAFT" && (
+            {(invoice.status === "DRAFT" || invoice.status === "UNPAID") && (
               <Link
                 to="/invoices/$invoiceId/edit"
                 params={{ invoiceId }}
                 className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--link)]"
               >
                 <Pencil className="size-4" aria-hidden="true" />
-                Edit
+                {invoice.status === "UNPAID" ? "Revisi" : "Edit"}
               </Link>
             )}
           </header>
@@ -246,10 +257,10 @@ export function InvoiceDetailPage({
                     placeholder="Tanpa rekening"
                     searchable
                     searchPlaceholder="Cari rekening…"
-                    options={accounts.map((account) => ({
-                      value: account.id,
-                      label: account.name,
-                    }))}
+                    options={enabledAccounts.map((account) => ({
+                        value: account.id,
+                        label: account.name,
+                      }))}
                   />
                 </>
               ) : (
@@ -328,7 +339,7 @@ export function InvoiceDetailPage({
               onClick={() =>
                 void downloadInvoiceFile(
                   invoice.id,
-                  invoice.invoiceNumber,
+                  displayedInvoiceNumber,
                   "pdf",
                 ).catch(() => printInvoice())
               }
@@ -341,14 +352,14 @@ export function InvoiceDetailPage({
               onClick={() =>
                 void downloadInvoiceFile(
                   invoice.id,
-                  invoice.invoiceNumber,
+                  displayedInvoiceNumber,
                   "png",
                 )
                   .catch(() =>
                     documentRef.current?.querySelector("[data-invoice-document]")
                       ? invoicePng(
                           documentRef.current.querySelector("[data-invoice-document]") as HTMLElement,
-                          `invoice-${invoice.invoiceNumber || invoice.id}.png`,
+                          `invoice-${displayedInvoiceNumber || invoice.id}.png`,
                         )
                       : Promise.reject(),
                   )

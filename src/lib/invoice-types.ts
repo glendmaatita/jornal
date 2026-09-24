@@ -60,6 +60,7 @@ export interface InvoiceTotals {
 }
 
 export interface InvoicePaymentInstruction {
+  accountId?: string | null
   name: string
   accountNumber: string
   accountHolder: string

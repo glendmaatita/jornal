@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageLoading } from "@/components/loading-screen";
 import { DateField } from "@/components/ui/date-field";
 import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
@@ -91,6 +93,7 @@ export function InvoiceFormPage({
   initialCustomerId?: string;
 }) {
   const navigate = useNavigate();
+  const client = useQueryClient();
   const today = todayIsoDate();
   const companyId = activeCompany()?.id || "none";
   const storageKey = `jornal.invoice-compose.${companyId}.v1`;
@@ -181,8 +184,11 @@ export function InvoiceFormPage({
       const saved = invoice
         ? await updateInvoice(invoice, form)
         : await createInvoice(form);
-      const result = publish ? await issueInvoice(saved.invoice) : saved;
+      const result = publish && saved.invoice.status === "DRAFT"
+        ? await issueInvoice(saved.invoice)
+        : saved;
       sessionStorage.removeItem(storageKey);
+      await client.invalidateQueries({ queryKey: ["invoice"] });
       await navigate({
         to: "/invoices/$invoiceId",
         params: { invoiceId: result.invoice.id },
@@ -195,6 +201,12 @@ export function InvoiceFormPage({
       setBusy(false);
     }
   };
+  const revising = invoice?.status === "UNPAID";
+  const editable = !invoice || invoice.status === "DRAFT" || revising;
+  if (invoiceId && !invoice) {
+    if (!error) return <PageLoading label="Memuat invoice…" />;
+    return <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>;
+  }
   return (
     <div className="min-w-0 space-y-4 pb-28 sm:pb-8">
       <header>
@@ -204,11 +216,12 @@ export function InvoiceFormPage({
           ) : (
             <FilePlus2 className="size-5 text-primary" aria-hidden="true" />
           )}
-          {invoice ? "Edit draft" : "Buat Invoice"}
+          {revising ? "Revisi Invoice" : invoice ? "Edit draft" : "Buat Invoice"}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Nomor resmi dibuat saat invoice diterbitkan. Draft di perangkat
-          dipulihkan otomatis setelah kembali atau refresh.
+          {revising
+            ? "Invoice belum lunas dapat direvisi. Nomor sequence tetap dipertahankan."
+            : "Nomor resmi dibuat saat invoice diterbitkan. Draft di perangkat dipulihkan otomatis setelah kembali atau refresh."}
         </p>
       </header>
       {error && (
@@ -322,7 +335,7 @@ export function InvoiceFormPage({
                 options={units.map((unit) => ({ value: unit, label: unit }))}
               />
               <TextField
-                label="Harga"
+                label="Harga/unit"
                 icon={Banknote}
                 className="col-span-2 min-w-0 sm:col-span-1"
                 type="amount"
@@ -417,23 +430,38 @@ export function InvoiceFormPage({
           </div>
         </CardContent>
       </Card>
-      <div className="grid gap-3 min-[420px]:grid-cols-2">
+      {editable ? revising ? (
         <Button
-          variant="outline"
+          className="w-full"
           disabled={busy || !totals || !form.customerId}
           onClick={() => void persist(false)}
         >
           <Save aria-hidden="true" />
-          Simpan Draft
+          {busy ? "Menyimpan revisi…" : "Simpan Revisi"}
         </Button>
-        <Button
-          disabled={busy || !totals || !form.customerId}
-          onClick={() => void persist(true)}
-        >
-          <Send aria-hidden="true" />
-          Terbitkan
-        </Button>
-      </div>
+      ) : (
+        <div className="grid gap-3 min-[420px]:grid-cols-2">
+          <Button
+            variant="outline"
+            disabled={busy || !totals || !form.customerId}
+            onClick={() => void persist(false)}
+          >
+            <Save aria-hidden="true" />
+            Simpan Draft
+          </Button>
+          <Button
+            disabled={busy || !totals || !form.customerId}
+            onClick={() => void persist(true)}
+          >
+            <Send aria-hidden="true" />
+            Terbitkan
+          </Button>
+        </div>
+      ) : (
+        <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+          Invoice yang sudah lunas atau dibatalkan tidak dapat direvisi.
+        </p>
+      )}
     </div>
   );
 }

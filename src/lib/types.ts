@@ -69,11 +69,23 @@ export interface Account {
   id: string
   name: string
   type: AccountType
+  /** Bank/provider name shown on the account master data. */
+  bankName?: string | null
+  /** Name printed on the bank or e-wallet account. */
+  accountHolder?: string | null
+  /** Bank account or e-wallet number. */
+  accountNumber?: string | null
+  /** Disabled accounts remain available for history but cannot be selected for new activity. */
+  enabled?: boolean
   // Opening balance per prd.md §46.4 — never counted as revenue (classification OPENING_BALANCE)
   openingBalance: number
   includedInCash: boolean
   createdAt: string
   updatedAt: string
+}
+
+export function isAccountEnabled(account: Account): boolean {
+  return account.enabled !== false
 }
 
 export type CategoryKind = "income" | "expense"

@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
 import { SelectField } from "@/components/ui/select-field"
 import { TextField } from "@/components/ui/text-field"
+import { formatInvoiceNumber } from "@/lib/format"
 import { archiveDocument, confirmDocument, extractDocument, getAiJob, getDocument, listDocumentInvoiceCandidates, unlinkDocument } from "@/lib/document-client"
 import type { DocumentExtraction } from "@/lib/document-types"
 import { todayIsoDate } from "@/lib/format"
@@ -46,7 +47,7 @@ export function DocumentReviewPage({ documentId }: { documentId: string }) {
       <DateField label="Tanggal transaksi" value={review.transactionDate} onChange={(transactionDate) => setReview({ ...review, transactionDate })} />
       <SelectField label="Arah" icon={review.direction === "MONEY_IN" ? ArrowDownLeft : ArrowUpRight} value={review.direction} onChange={(direction) => setReview({ ...review, direction: direction as "MONEY_IN" | "MONEY_OUT" })} options={[{ value: "MONEY_OUT", label: "Uang keluar" }, { value: "MONEY_IN", label: "Uang masuk" }]} />
       <TextField label="Deskripsi" icon={PenLine} value={review.description} onChange={(description) => setReview({ ...review, description })} />
-      {invoiceCandidates.data?.items.length ? <SelectField label="Cocokkan invoice (opsional)" icon={Link2} value={invoiceId} onChange={setInvoiceId} placeholder="Simpan sebagai transaksi biasa" searchable searchPlaceholder="Cari invoice…" options={invoiceCandidates.data.items.map((invoice) => ({ value: invoice.id, label: `${invoice.invoiceNumber} · ${String(invoice.customerSnapshot?.name || "Pelanggan")}` }))} /> : null}
+      {invoiceCandidates.data?.items.length ? <SelectField label="Cocokkan invoice (opsional)" icon={Link2} value={invoiceId} onChange={setInvoiceId} placeholder="Simpan sebagai transaksi biasa" searchable searchPlaceholder="Cari invoice…" options={invoiceCandidates.data.items.map((invoice) => ({ value: invoice.id, label: `${formatInvoiceNumber(invoice.invoiceNumber, invoice.sequence, invoice.issueDate) || "Draft"} · ${String(invoice.customerSnapshot?.name || "Pelanggan")}` }))} /> : null}
       {extraction && extraction.uncertainFields.length > 0 && <p className="flex gap-2 rounded-lg bg-amber-50 p-2 text-amber-900"><AlertTriangle className="size-4" />Periksa: {extraction.uncertainFields.join(", ")}</p>}
       <Button className="mt-2" disabled={busy} onClick={() => void confirm()}>{invoiceId ? <Link2 aria-hidden="true" /> : <Save aria-hidden="true" />}{invoiceId ? "Cocokkan & lunasi invoice" : "Simpan transaksi"}</Button>
     </CardContent></Card>}
