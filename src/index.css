@@ -128,6 +128,11 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Give every clickable link and button immediate press feedback. */
+:where(a[href]:not([aria-disabled="true"]), button:not(:disabled)):active {
+  opacity: 0.68;
+}
+
 ::selection {
   background: color-mix(in oklab, var(--link) 25%, transparent);
 }
