@@ -1,6 +1,8 @@
 import { activeCompany } from "./companies";
-import { mirrorState, restoreState } from "./local-db";
+import { loadCachedCompanies } from "./companies";
+import { clearMirroredState, mirrorState, restoreState } from "./local-db";
 import { pb, pocketBaseConfigured } from "./pb";
+import { clearPersistentCachePrefix, PERSISTENT_CACHE_UPDATED_EVENT, staleWhileRevalidate } from "./persistent-cache";
 import {
   reconcileServerTransaction,
   reconcileServerTransactionDeletion,
@@ -44,6 +46,20 @@ export interface InvoicePayment {
   revision: number;
 }
 
+export const OFFLINE_INVOICE_SYNCED_EVENT = "jornal:offline-invoice-synced";
+
+export type CustomerCreateInput = Omit<
+  InvoiceCustomer,
+  | "id"
+  | "tenantId"
+  | "companyId"
+  | "dataEpoch"
+  | "status"
+  | "revision"
+  | "createdAt"
+  | "updatedAt"
+>;
+
 function scope() {
   const company = activeCompany();
   if (!company) throw new Error("Pilih company terlebih dahulu");
@@ -62,25 +78,26 @@ async function send<T>(
   options: { method?: string; body?: unknown } = {},
 ) {
   if (!pocketBaseConfigured) throw new Error("Server invoice belum tersedia");
-  return pb.send<T>(path, { ...options, headers: { "X-Jornal-Protocol": "3" } });
+  const result = await pb.send<T>(path, { ...options, headers: { "X-Jornal-Protocol": "3" } });
+  if (options.method && options.method !== "GET") await clearPersistentCachePrefix(cachePrefix());
+  return result;
 }
 function command() {
   return crypto.randomUUID();
 }
 function cacheKey(name: string) {
   const company = activeCompany();
-  return `jornal.${pb.authStore.record?.id || "local"}.${company?.id || "none"}.${company?.dataEpoch || 0}.invoice.${name}.v1`;
+  return `${cachePrefixFor(company?.id || "none", company?.dataEpoch || 0)}${name}.v1`;
+}
+function cachePrefixFor(companyId: string, dataEpoch: number) {
+  return `jornal.${pb.authStore.record?.id || "local"}.${companyId}.${dataEpoch}.invoice.`;
+}
+function cachePrefix() {
+  const company = activeCompany();
+  return cachePrefixFor(company?.id || "none", company?.dataEpoch || 0);
 }
 async function cached<T>(key: string, load: () => Promise<T>) {
-  try {
-    const value = await load();
-    await mirrorState(cacheKey(key), value);
-    return value;
-  } catch (error) {
-    const value = await restoreState(cacheKey(key)).catch(() => undefined);
-    if (value !== undefined) return value as T;
-    throw error;
-  }
+  return staleWhileRevalidate("invoice", cacheKey(key), load);
 }
 
 export function listCustomers(
@@ -111,17 +128,7 @@ export function getCustomer(id: string) {
   );
 }
 export function createCustomer(
-  input: Omit<
-    InvoiceCustomer,
-    | "id"
-    | "tenantId"
-    | "companyId"
-    | "dataEpoch"
-    | "status"
-    | "revision"
-    | "createdAt"
-    | "updatedAt"
-  >,
+  input: CustomerCreateInput,
 ) {
   return send<{ customer: InvoiceCustomer; warnings: string[] }>(
     "/api/jornal/invoicing/customers",
@@ -207,6 +214,175 @@ export interface InvoiceDraftInput {
   shippingAmount?: number;
   taxRateBps?: number;
 }
+
+interface PendingInvoiceDraft {
+  id: string;
+  companyId: string;
+  dataEpoch: number;
+  commandKey: string;
+  issueCommandKey: string;
+  publish: boolean;
+  composeStorageKey: string;
+  input: InvoiceDraftInput;
+  queuedAt: string;
+}
+
+interface PendingCustomerCreate {
+  id: string;
+  companyId: string;
+  dataEpoch: number;
+  commandKey: string;
+  formStorageKey: string;
+  input: CustomerCreateInput;
+  queuedAt: string;
+}
+
+function pendingDraftsKey(companyId: string, dataEpoch: number) {
+  return `jornal.${pb.authStore.record?.id || "local"}.${companyId}.${dataEpoch}.invoice-pending-drafts.v1`;
+}
+function pendingCustomersKey(companyId: string, dataEpoch: number) {
+  return `jornal.${pb.authStore.record?.id || "local"}.${companyId}.${dataEpoch}.customer-pending-creates.v1`;
+}
+
+async function loadPendingCustomers(companyId: string, dataEpoch: number): Promise<PendingCustomerCreate[]> {
+  const key = pendingCustomersKey(companyId, dataEpoch);
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw) return JSON.parse(raw) as PendingCustomerCreate[];
+  } catch { /* use the durable copy */ }
+  return (await restoreState(key).catch(() => undefined) as PendingCustomerCreate[] | undefined) ?? [];
+}
+
+async function savePendingCustomers(companyId: string, dataEpoch: number, customers: PendingCustomerCreate[]) {
+  const key = pendingCustomersKey(companyId, dataEpoch);
+  if (customers.length === 0) {
+    try { window.localStorage.removeItem(key); } catch { /* durable cleanup follows */ }
+    await clearMirroredState(key).catch(() => undefined);
+    return;
+  }
+  try { window.localStorage.setItem(key, JSON.stringify(customers)); } catch { /* IndexedDB remains available */ }
+  await mirrorState(key, customers);
+}
+
+export async function queueCustomerCreate(input: CustomerCreateInput, formStorageKey: string) {
+  const current = scope();
+  const pending = await loadPendingCustomers(current.companyId, current.dataEpoch);
+  const next: PendingCustomerCreate = {
+    id: crypto.randomUUID(), companyId: current.companyId, dataEpoch: current.dataEpoch,
+    commandKey: command(), formStorageKey, input, queuedAt: new Date().toISOString(),
+  };
+  await savePendingCustomers(current.companyId, current.dataEpoch, [
+    ...pending.filter((item) => item.formStorageKey !== formStorageKey), next,
+  ]);
+  return next;
+}
+
+async function syncPendingCustomers() {
+  let synced = 0;
+  for (const company of loadCachedCompanies().filter((item) => item.status === "ACTIVE")) {
+    const pending = await loadPendingCustomers(company.id, company.dataEpoch);
+    for (const item of pending) {
+        const result = await pb.send<{ customer: InvoiceCustomer }>("/api/jornal/invoicing/customers", {
+          method: "POST", headers: { "X-Jornal-Protocol": "3" },
+          body: { companyId: company.id, dataEpoch: company.dataEpoch, ...item.input, commandKey: item.commandKey },
+        });
+        const latest = await loadPendingCustomers(company.id, company.dataEpoch);
+        await savePendingCustomers(company.id, company.dataEpoch, latest.filter((candidate) => candidate.id !== item.id));
+        try { window.localStorage.removeItem(item.formStorageKey); } catch { /* durable cleanup follows */ }
+        await clearMirroredState(item.formStorageKey).catch(() => undefined);
+        await clearPersistentCachePrefix(cachePrefixFor(company.id, company.dataEpoch));
+        window.dispatchEvent(new CustomEvent(PERSISTENT_CACHE_UPDATED_EVENT, { detail: { namespace: "invoice", key: item.id } }));
+        window.dispatchEvent(new CustomEvent(OFFLINE_INVOICE_SYNCED_EVENT, { detail: { kind: "customer", localId: item.id, storageKey: item.formStorageKey, serverId: result.customer.id } }));
+        synced += 1;
+    }
+  }
+  return synced;
+}
+
+async function loadPendingDrafts(companyId: string, dataEpoch: number): Promise<PendingInvoiceDraft[]> {
+  const key = pendingDraftsKey(companyId, dataEpoch);
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw) return JSON.parse(raw) as PendingInvoiceDraft[];
+  } catch { /* use the durable copy */ }
+  return (await restoreState(key).catch(() => undefined) as PendingInvoiceDraft[] | undefined) ?? [];
+}
+
+async function savePendingDrafts(companyId: string, dataEpoch: number, drafts: PendingInvoiceDraft[]) {
+  const key = pendingDraftsKey(companyId, dataEpoch);
+  if (drafts.length === 0) {
+    try { window.localStorage.removeItem(key); } catch { /* durable cleanup follows */ }
+    await clearMirroredState(key).catch(() => undefined);
+    return;
+  }
+  try { window.localStorage.setItem(key, JSON.stringify(drafts)); } catch { /* IndexedDB remains available */ }
+  await mirrorState(key, drafts);
+}
+
+/** Queue a server-authoritative draft/issue command without inventing an
+ * official invoice number on the device. Re-saving replaces the older queued
+ * snapshot for this compose form. */
+export async function queueInvoiceDraft(input: InvoiceDraftInput, publish: boolean, composeStorageKey: string) {
+  const current = scope();
+  const drafts = await loadPendingDrafts(current.companyId, current.dataEpoch);
+  const next: PendingInvoiceDraft = {
+    id: crypto.randomUUID(),
+    companyId: current.companyId,
+    dataEpoch: current.dataEpoch,
+    commandKey: command(),
+    issueCommandKey: command(),
+    publish,
+    composeStorageKey,
+    input,
+    queuedAt: new Date().toISOString(),
+  };
+  await savePendingDrafts(current.companyId, current.dataEpoch, [
+    ...drafts.filter((draft) => draft.composeStorageKey !== composeStorageKey),
+    next,
+  ]);
+  return next;
+}
+
+export async function syncPendingInvoiceDrafts() {
+  if (!pocketBaseConfigured || !pb.authStore.isValid || navigator.onLine === false) return 0;
+  let synced = 0;
+  for (const company of loadCachedCompanies().filter((item) => item.status === "ACTIVE")) {
+    const drafts = await loadPendingDrafts(company.id, company.dataEpoch);
+    for (const draft of drafts) {
+        const created = await pb.send<{ invoice: Invoice }>("/api/jornal/invoicing/invoices", {
+          method: "POST",
+          headers: { "X-Jornal-Protocol": "3" },
+          body: { companyId: company.id, dataEpoch: company.dataEpoch, ...draft.input, commandKey: draft.commandKey },
+        });
+        let syncedInvoice = created.invoice;
+        if (draft.publish) {
+          const issued = await pb.send<{ invoice: Invoice }>(`/api/jornal/invoicing/invoices/${encodeURIComponent(created.invoice.id)}/issue`, {
+            method: "POST",
+            headers: { "X-Jornal-Protocol": "3" },
+            body: { companyId: company.id, dataEpoch: company.dataEpoch, expectedRevision: created.invoice.revision, commandKey: draft.issueCommandKey },
+          });
+          syncedInvoice = issued.invoice;
+        }
+        const latest = await loadPendingDrafts(company.id, company.dataEpoch);
+        await savePendingDrafts(company.id, company.dataEpoch, latest.filter((item) => item.id !== draft.id));
+        try {
+          window.localStorage.removeItem(draft.composeStorageKey);
+          window.sessionStorage.removeItem(draft.composeStorageKey);
+        } catch { /* durable cleanup follows */ }
+        await clearMirroredState(draft.composeStorageKey).catch(() => undefined);
+        await clearPersistentCachePrefix(cachePrefixFor(company.id, company.dataEpoch));
+        window.dispatchEvent(new CustomEvent(PERSISTENT_CACHE_UPDATED_EVENT, { detail: { namespace: "invoice", key: draft.id } }));
+        window.dispatchEvent(new CustomEvent(OFFLINE_INVOICE_SYNCED_EVENT, { detail: { kind: "invoice", localId: draft.id, storageKey: draft.composeStorageKey, serverId: syncedInvoice.id } }));
+        synced += 1;
+    }
+  }
+  return synced;
+}
+
+export async function syncPendingInvoiceData() {
+  if (!pocketBaseConfigured || !pb.authStore.isValid || navigator.onLine === false) return 0;
+  return await syncPendingCustomers() + await syncPendingInvoiceDrafts();
+}
 export function listInvoices(
   options: {
     page?: number;
@@ -242,13 +418,13 @@ export function listInvoicePaymentCandidates(id: string) {
   );
 }
 export function getInvoiceDocument(id: string) {
-  return send<{
+  return cached(`document.${id}`, () => send<{
     documentVersion: string;
     contentHash: string;
     invoice: Invoice;
   }>(
     `/api/jornal/invoicing/invoices/${encodeURIComponent(id)}/document?${query(scope())}`,
-  );
+  ));
 }
 export function getInvoiceSummary() {
   return cached("summary", () =>
@@ -386,14 +562,14 @@ export async function correctInvoicePayment(
 }
 
 export function listInvoiceReminders() {
-  return send<{
+  return cached("reminders", () => send<{
     items: Array<{
       id: string;
       invoiceId: string;
       status: "UNREAD" | "READ";
       scheduledLocalDate: string;
     }>;
-  }>(`/api/jornal/invoicing/reminders?${query(scope())}`);
+  }>(`/api/jornal/invoicing/reminders?${query(scope())}`));
 }
 export function markInvoiceRemindersRead(ids: string[]) {
   return send<{ updated: number }>("/api/jornal/invoicing/reminders/read", {

@@ -3,7 +3,7 @@ import { LogIn, MailOpen, RefreshCw, UserRoundX } from "lucide-react"
 
 import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
-import { loadCompanies, selectCompany } from "@/lib/companies"
+import { loadCompaniesFromServer, selectCompany } from "@/lib/companies"
 import { loginWithGoogle, logout, pb } from "@/lib/pb"
 import { bootstrapSession } from "@/lib/team-client"
 
@@ -12,7 +12,7 @@ export function InvitationPage({ publicId }: { publicId: string }) {
   const [message, setMessage] = useState("Masuk dengan akun Google yang menerima undangan.")
   const finish = useCallback(async () => {
     const result = await bootstrapSession(publicId)
-    const companies = await loadCompanies()
+    const companies = await loadCompaniesFromServer()
     if (result.targetCompanyId && companies.some((company) => company.id === result.targetCompanyId)) { selectCompany(result.targetCompanyId); window.location.assign(`/?company=${encodeURIComponent(result.targetCompanyId)}`); return }
     if (result.invitationStatus === "UNAVAILABLE") { setMessage("Undangan tidak tersedia untuk akun Google ini. Gunakan akun lain atau minta undangan baru."); return }
     if (result.invitationStatus === "EXPIRED" || result.invitationStatus === "REVOKED") { setMessage("Undangan ini sudah kedaluwarsa atau dibatalkan. Minta anggota company mengirim undangan baru."); return }

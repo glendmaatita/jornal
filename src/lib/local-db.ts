@@ -25,6 +25,11 @@ export interface BlobRow {
 
 export interface OutboxRow { key: string; value: unknown; queuedAt: number; version?: string }
 
+// Synchronous session mirror closes the small race between a local write and
+// IndexedDB committing it, and keeps sync functional when IndexedDB is
+// temporarily unavailable (private-mode/quota failures).
+const volatileOutbox = new Map<string, OutboxRow>()
+
 function outboxRow(key: string, value: unknown): OutboxRow {
   return { key, value, queuedAt: Date.now(), version: crypto.randomUUID() }
 }
@@ -153,10 +158,12 @@ export async function clearMirroredStateByPrefix(prefix: string): Promise<void> 
 }
 
 export async function enqueueOutbox(key: string, value: unknown): Promise<void> {
+  const row = outboxRow(key, value)
+  volatileOutbox.set(key, row)
   const db = await database()
   if (!db) return
   await new Promise<void>((resolve, reject) => {
-    const request = db.transaction(OUTBOX, "readwrite").objectStore(OUTBOX).put(outboxRow(key, value))
+    const request = db.transaction(OUTBOX, "readwrite").objectStore(OUTBOX).put(row)
     request.onsuccess = () => resolve()
     request.onerror = () => reject(request.error ?? new Error("IndexedDB outbox write failed"))
   }).finally(() => db.close())
@@ -164,12 +171,17 @@ export async function enqueueOutbox(key: string, value: unknown): Promise<void> 
 
 /** Persist the local mirror and its pending sync operation atomically. */
 export async function persistState(key: string, value: unknown): Promise<void> {
+  // Sync reads the authoritative snapshot from local state. The outbox only
+  // needs to mark which collection changed, so avoid cloning the same large
+  // transaction array into IndexedDB a second time.
+  const row = outboxRow(key, null)
+  volatileOutbox.set(key, row)
   const db = await database()
   if (!db) return
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction([STORE, OUTBOX], "readwrite")
     transaction.objectStore(STORE).put({ key, value, updatedAt: Date.now() } satisfies StateRow)
-    transaction.objectStore(OUTBOX).put(outboxRow(key, value))
+    transaction.objectStore(OUTBOX).put(row)
     transaction.oncomplete = () => resolve()
     transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB persistence failed"))
     transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB persistence aborted"))
@@ -178,10 +190,14 @@ export async function persistState(key: string, value: unknown): Promise<void> {
 
 export async function listOutbox(): Promise<OutboxRow[]> {
   const db = await database()
-  if (!db) return []
+  if (!db) return [...volatileOutbox.values()]
   return new Promise<OutboxRow[]>((resolve, reject) => {
     const request = db.transaction(OUTBOX, "readonly").objectStore(OUTBOX).getAll()
-    request.onsuccess = () => { resolve(request.result as OutboxRow[]); db.close() }
+    request.onsuccess = () => {
+      const rows = new Map((request.result as OutboxRow[]).map((row) => [row.key, row]))
+      for (const row of volatileOutbox.values()) rows.set(row.key, row)
+      resolve([...rows.values()]); db.close()
+    }
     request.onerror = () => { reject(request.error ?? new Error("IndexedDB outbox read failed")); db.close() }
   })
 }
@@ -214,6 +230,7 @@ export async function copyOutboxByPrefix(sourcePrefix: string, targetPrefix: str
 
 export async function acknowledgeOutbox(keys: string[]): Promise<void> {
   if (keys.length === 0) return
+  for (const key of keys) volatileOutbox.delete(key)
   const db = await database()
   if (!db) return
   await new Promise<void>((resolve, reject) => {
@@ -229,6 +246,10 @@ export async function acknowledgeOutbox(keys: string[]): Promise<void> {
  * same key must stay queued. */
 export async function acknowledgeOutboxSnapshots(rows: OutboxRow[]): Promise<void> {
   if (rows.length === 0) return
+  for (const row of rows) {
+    const current = volatileOutbox.get(row.key)
+    if (current?.version === row.version) volatileOutbox.delete(row.key)
+  }
   const db = await database()
   if (!db) return
   await new Promise<void>((resolve, reject) => {
@@ -250,6 +271,7 @@ export async function acknowledgeOutboxSnapshots(rows: OutboxRow[]): Promise<voi
 }
 
 export async function clearOutboxByPrefix(prefix: string): Promise<void> {
+  for (const key of volatileOutbox.keys()) if (key.startsWith(prefix)) volatileOutbox.delete(key)
   const db = await database()
   if (!db) return
   await new Promise<void>((resolve, reject) => {

@@ -1,11 +1,15 @@
+import { useEffect, useState } from "react"
+
 import { CompanyLogo } from "@/components/company-logo"
 import { SelectField } from "@/components/ui/select-field"
 import { useAppDialog } from "@/components/ui/app-dialog-context"
 
-import { activeCompany, loadCachedCompanies, multiCompanyCreationEnabled, persistCompanyDrafts, rememberCompanyCreationReturn, selectCompany } from "@/lib/companies"
+import { activeCompany, loadCachedCompanies, multiCompanyCreationEnabled, persistCompanyDrafts, rememberCompanyCreationReturn, selectCompany, subscribeCompanies } from "@/lib/companies"
 
 export function CompanySwitcher() {
   const dialog = useAppDialog()
+  const [, setCatalogRevision] = useState(0)
+  useEffect(() => subscribeCompanies(() => setCatalogRevision((revision) => revision + 1)), [])
   const current = activeCompany()
   if (!current) return null
   const companies = loadCachedCompanies().filter((company) => company.status === "ACTIVE" || company.id === current.id)

@@ -121,7 +121,7 @@ export function PwaStatus() {
 
   return (
     <aside
-      className={`fixed inset-x-3 bottom-[calc(80px+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-primary text-primary-foreground shadow-2xl sm:inset-x-4 ${compactUpdate ? "gap-0 px-3 py-2.5" : "gap-3 px-4 py-3"}`}
+      className={`pointer-events-none fixed inset-x-3 bottom-[calc(80px+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-primary text-primary-foreground shadow-2xl sm:inset-x-4 ${compactUpdate ? "gap-0 px-3 py-2.5" : "gap-3 px-4 py-3"}`}
       aria-live="polite"
       aria-busy={Boolean(resolvingConflict)}
     >
@@ -147,16 +147,16 @@ export function PwaStatus() {
               : "Anda sedang offline — data tetap tersimpan di perangkat ini."}
         </p>
         {compactUpdate && (
-          <Button size="sm" variant="secondary" className="shrink-0" onClick={() => void installUpdate()}>
+          <Button size="sm" variant="secondary" className="pointer-events-auto shrink-0" onClick={() => void installUpdate()}>
             {updateFailed ? "Coba lagi" : "Update"}
           </Button>
         )}
-        <Button size="icon" variant="ghost" className={`shrink-0 hover:bg-white/10 ${compactUpdate ? "size-8" : "-mr-2 -mt-1 size-10"}`} onClick={dismiss} aria-label="Tutup pemberitahuan">
+        <Button size="icon" variant="ghost" className={`pointer-events-auto shrink-0 hover:bg-white/10 ${compactUpdate ? "size-8" : "-mr-2 -mt-1 size-10"}`} onClick={dismiss} aria-label="Tutup pemberitahuan">
           <X aria-hidden="true" />
         </Button>
       </div>
       {conflictError && <p role="alert" className="rounded-lg bg-red-950/35 px-3 py-2 text-xs leading-relaxed">{conflictError}</p>}
-      {!compactUpdate && hasFooterAction && <div className="flex flex-wrap items-center justify-end gap-2">
+      {!compactUpdate && hasFooterAction && <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
         {needRefresh && (
           <Button size="sm" variant="secondary" onClick={() => void installUpdate()}>
             {updateFailed ? "Coba lagi" : "Update"}

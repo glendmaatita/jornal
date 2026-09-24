@@ -15,7 +15,7 @@
     "test:tax:e2e": "playwright test e2e/tax-reminders.e2e.ts",
     "test:invoice:integration": "RUN_POCKETBASE_INTEGRATION=1 bun test backend/pocketbase/tests/invoice_api.integration.test.ts",
     "test:invoice:renderer": "bun scripts/verify-invoice-renderer.ts",
-    "test:invoice:e2e": "playwright test e2e/invoices.e2e.ts",
+    "test:invoice:e2e": "playwright test e2e/invoices.e2e.ts e2e/offline-pwa.e2e.ts",
     "test:invoice:visual": "bun run test:invoice:renderer",
     "test:team:integration": "bun scripts/verify-team-invitations.ts",
     "test:team:email": "bun scripts/verify-team-invitations.ts",

@@ -1,5 +1,5 @@
 import { pb, pocketBaseConfigured } from "./pb"
-import { mirrorState, restoreState } from "./local-db"
+import { clearPersistentCachePrefix, readPersistentCache, staleWhileRevalidate } from "./persistent-cache"
 import { reconcileServerTransaction } from "./store"
 import { acceptServerTransactionRevision } from "./pocketbase-sync"
 import { getCompanyScope, getDataScope } from "./store"
@@ -34,44 +34,29 @@ export interface TaxAgenda {
 
 function configurationKey(ownerId = getDataScope()) { return `jornal.v3.${ownerId}.tax.configuration.v1` }
 function agendaKey(companyId?: string, ownerId = getDataScope()) { return `jornal.v3.${ownerId}.tax.agenda.${companyId || "all"}.v1` }
-
-async function cache<T>(key: string, value: T) {
-  try { window.localStorage.setItem(key, JSON.stringify(value)) } catch { /* IndexedDB remains available */ }
-  await mirrorState(key, value).catch(() => undefined)
-  return value
-}
-
-async function cached<T>(key: string): Promise<T | null> {
-  try {
-    const value = window.localStorage.getItem(key)
-    if (value) return JSON.parse(value) as T
-  } catch { /* use IndexedDB */ }
-  return (await restoreState(key).catch(() => undefined) as T | undefined) ?? null
-}
+function inboxKey(ownerId = getDataScope()) { return `jornal.v3.${ownerId}.tax.inbox.v1` }
+function taxCachePrefix(ownerId = getDataScope()) { return `jornal.v3.${ownerId}.tax.` }
 
 async function send<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   if (!pocketBaseConfigured || !taxComplianceEnabled) throw new Error("Modul agenda pajak belum tersedia pada server ini.")
-  return pb.send<T>(path, { ...options, headers: { "X-Jornal-Company": getCompanyScope().companyId, "X-Jornal-Protocol": "3" } })
+  const result = await pb.send<T>(path, { ...options, headers: { "X-Jornal-Company": getCompanyScope().companyId, "X-Jornal-Protocol": "3" } })
+  if (options.method && options.method !== "GET") await clearPersistentCachePrefix(taxCachePrefix())
+  return result
 }
 
 export async function loadTaxConfiguration(): Promise<TaxConfiguration> {
   const ownerId = getDataScope()
-  try {
+  return staleWhileRevalidate("tax", configurationKey(ownerId), async () => {
     const result = await send<TaxConfiguration>(`/api/jornal/tax/configuration?companyId=${encodeURIComponent(getCompanyScope().companyId)}`)
     if (getDataScope() !== ownerId) throw new Error("Sesi berubah saat data pajak dimuat.")
-    return cache(configurationKey(ownerId), result)
-  } catch (error) {
-    if (getDataScope() !== ownerId) throw error
-    const local = await cached<TaxConfiguration>(configurationKey(ownerId))
-    if (local) return local
-    throw error
-  }
+    return result
+  })
 }
 
 export async function loadTaxAgenda(companyId?: string): Promise<TaxAgenda> {
   const ownerId = getDataScope()
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""
-  try {
+  return staleWhileRevalidate("tax", agendaKey(companyId, ownerId), async () => {
     const wire = await send<{ obligations: Array<Record<string, unknown>>; filings: Array<Record<string, unknown>>; settlements?: Array<Record<string, unknown>>; allocations?: Array<Record<string, unknown>>; evidence?: Array<Record<string, unknown>> }>(`/api/jornal/tax/agenda${query}`)
     const result = {
       obligations: wire.obligations.map(parseObligation),
@@ -79,17 +64,16 @@ export async function loadTaxAgenda(companyId?: string): Promise<TaxAgenda> {
       settlements: wire.settlements ?? [], allocations: wire.allocations ?? [], evidence: wire.evidence ?? [], taxCoverage: (wire as { taxCoverage?: TaxAgenda["taxCoverage"] }).taxCoverage,
     }
     if (getDataScope() !== ownerId) throw new Error("Sesi berubah saat agenda pajak dimuat.")
-    return cache(agendaKey(companyId, ownerId), result)
-  } catch (error) {
-    if (getDataScope() !== ownerId) throw error
-    const local = await cached<TaxAgenda>(agendaKey(companyId, ownerId))
-    if (local) return local
-    throw error
-  }
+    return result
+  })
 }
 
 export async function loadTaxInbox(): Promise<{ items: Array<Record<string, unknown>> }> {
-  return send<{ items: Array<Record<string, unknown>> }>("/api/jornal/tax/inbox")
+  return staleWhileRevalidate("tax", inboxKey(), () => send<{ items: Array<Record<string, unknown>> }>("/api/jornal/tax/inbox"))
+}
+
+export function loadCachedTaxInbox(): Promise<{ items: Array<Record<string, unknown>> } | undefined> {
+  return readPersistentCache(inboxKey())
 }
 
 export async function markTaxInboxRead(ids: string[]): Promise<{ updated: number }> {

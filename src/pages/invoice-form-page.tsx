@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -33,12 +33,16 @@ import {
   issueInvoice,
   listCustomers,
   listInvoiceProducts,
+  OFFLINE_INVOICE_SYNCED_EVENT,
+  queueInvoiceDraft,
   updateInvoice,
   type InvoiceDraftInput,
 } from "@/lib/invoice-client";
 import { formatRupiah, parseAmountInput, todayIsoDate } from "@/lib/format";
 import type { Invoice, InvoiceItemInput } from "@/lib/invoice-types";
 import { activeCompany } from "@/lib/companies";
+import { clearMirroredState, mirrorState, restoreState } from "@/lib/local-db";
+import { getDataScope } from "@/lib/store";
 
 function plusDays(dateText: string, days: number) {
   const date = new Date(`${dateText}T00:00:00Z`);
@@ -75,7 +79,7 @@ function initialDraft(
   if (invoiceId) return { form: fallback, restored: false };
   try {
     const saved = JSON.parse(
-      sessionStorage.getItem(storageKey) || "null",
+      sessionStorage.getItem(storageKey) || localStorage.getItem(storageKey) || "null",
     ) as InvoiceDraftInput | null;
     if (saved?.items?.length)
       return {
@@ -98,7 +102,7 @@ export function InvoiceFormPage({
   const client = useQueryClient();
   const today = todayIsoDate();
   const companyId = activeCompany()?.id || "none";
-  const storageKey = `jornal.invoice-compose.${companyId}.v1`;
+  const storageKey = `jornal.invoice-compose.${getDataScope()}.v2`;
   const [initial] = useState(() =>
     initialDraft(storageKey, invoiceId, initialCustomerId, today),
   );
@@ -109,10 +113,32 @@ export function InvoiceFormPage({
   const [units, setUnits] = useState<string[]>(["pcs", "Lusin", "Kodi"]);
   const [dueDays, setDueDays] = useState(1);
   const [form, setForm] = useState<InvoiceDraftInput>(initial.form);
+  const [draftReady, setDraftReady] = useState(Boolean(invoiceId || initial.restored));
+  const restoredDraft = useRef(initial.restored);
+  const userEditedDraft = useRef(false);
   const [productSearch, setProductSearch] = useState("");
   const [debouncedProductSearch, setDebouncedProductSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const updateForm = (updater: Parameters<typeof setForm>[0]) => {
+    userEditedDraft.current = true;
+    setForm(updater);
+  };
+  useEffect(() => {
+    if (invoiceId || initial.restored) return;
+    let cancelled = false;
+    void restoreState(storageKey)
+      .then((value) => {
+        const saved = value as InvoiceDraftInput | undefined;
+        if (cancelled || userEditedDraft.current || !saved?.items?.length) return;
+        restoredDraft.current = true;
+        setForm({ ...saved, customerId: initialCustomerId || saved.customerId });
+      })
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setDraftReady(true); });
+    return () => { cancelled = true; };
+  }, [initial.restored, initialCustomerId, invoiceId, storageKey]);
   useEffect(() => {
     void Promise.all([
       listCustomers({ perPage: 100 }),
@@ -127,7 +153,7 @@ export function InvoiceFormPage({
             .map((unit) => unit.label),
         );
         setDueDays(config.settings.defaultDueDays);
-        if (!invoiceId && !initial.restored)
+        if (!invoiceId && !restoredDraft.current)
           setForm((current) => ({
             ...current,
             items: [
@@ -160,8 +186,27 @@ export function InvoiceFormPage({
       .catch((cause) => setError(String(cause)));
   }, [initial.restored, invoiceId]);
   useEffect(() => {
-    if (!invoiceId) sessionStorage.setItem(storageKey, JSON.stringify(form));
-  }, [form, invoiceId, storageKey]);
+    if (invoiceId || !draftReady) return;
+    const timer = window.setTimeout(() => {
+      const serialized = JSON.stringify(form);
+      try {
+        sessionStorage.setItem(storageKey, serialized);
+        localStorage.setItem(storageKey, serialized);
+      } catch { /* IndexedDB remains available */ }
+      void mirrorState(storageKey, form).catch(() => undefined);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [draftReady, form, invoiceId, storageKey]);
+  useEffect(() => {
+    if (invoiceId) return;
+    const onSynced = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind?: string; storageKey?: string; serverId?: string }>).detail;
+      if (detail?.kind !== "invoice" || detail.storageKey !== storageKey || !detail.serverId) return;
+      void navigate({ to: "/invoices/$invoiceId", params: { invoiceId: detail.serverId } });
+    };
+    window.addEventListener(OFFLINE_INVOICE_SYNCED_EVENT, onSynced);
+    return () => window.removeEventListener(OFFLINE_INVOICE_SYNCED_EVENT, onSynced);
+  }, [invoiceId, navigate, storageKey]);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedProductSearch(productSearch.trim()), 180);
     return () => window.clearTimeout(timer);
@@ -185,7 +230,7 @@ export function InvoiceFormPage({
     }
   }, [form]);
   const setItem = (index: number, patch: Partial<InvoiceItemInput>) =>
-    setForm((current) => ({
+    updateForm((current) => ({
       ...current,
       items: current.items.map((item, itemIndex) =>
         itemIndex === index ? { ...item, ...patch } : item,
@@ -194,7 +239,15 @@ export function InvoiceFormPage({
   const persist = async (publish: boolean) => {
     setBusy(true);
     setError("");
+    setNotice("");
     try {
+      if (!invoice && navigator.onLine === false) {
+        await queueInvoiceDraft(form, publish, storageKey);
+        setNotice(publish
+          ? "Invoice disimpan di perangkat dan akan diterbitkan otomatis saat kembali online."
+          : "Draft disimpan di perangkat dan akan disinkronkan otomatis saat kembali online.");
+        return;
+      }
       const saved = invoice
         ? await updateInvoice(invoice, form)
         : await createInvoice(form);
@@ -202,14 +255,25 @@ export function InvoiceFormPage({
         ? await issueInvoice(saved.invoice)
         : saved;
       sessionStorage.removeItem(storageKey);
+      localStorage.removeItem(storageKey);
+      await clearMirroredState(storageKey).catch(() => undefined);
       await client.invalidateQueries({ queryKey: ["invoice"] });
       await navigate({
         to: "/invoices/$invoiceId",
         params: { invoiceId: result.invoice.id },
       });
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Invoice gagal disimpan";
+      const connectivityFailure = cause instanceof TypeError || /failed to fetch|network|offline|load failed/i.test(message);
+      if (!invoice && connectivityFailure) {
+        await queueInvoiceDraft(form, publish, storageKey);
+        setNotice(publish
+          ? "Koneksi terputus. Invoice diamankan di perangkat dan akan diterbitkan saat online."
+          : "Koneksi terputus. Draft diamankan di perangkat dan akan disinkronkan saat online.");
+        return;
+      }
       setError(
-        cause instanceof Error ? cause.message : "Invoice gagal disimpan",
+        message,
       );
     } finally {
       setBusy(false);
@@ -244,6 +308,7 @@ export function InvoiceFormPage({
           {error}
         </p>
       )}
+      {notice && <p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-800" role="status">{notice}</p>}
       <Card>
         <CardContent className="grid gap-4 p-4">
           <SelectField
@@ -251,7 +316,7 @@ export function InvoiceFormPage({
             icon={Users}
             value={form.customerId}
             onChange={(customerId) =>
-              setForm((current) => ({ ...current, customerId }))
+              updateForm((current) => ({ ...current, customerId }))
             }
             placeholder="Pilih pelanggan"
             searchable
@@ -276,7 +341,7 @@ export function InvoiceFormPage({
               label="Tanggal invoice"
               value={form.issueDate}
               onChange={(issueDate) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   issueDate,
                   dueDate: plusDays(issueDate, dueDays),
@@ -287,7 +352,7 @@ export function InvoiceFormPage({
               label="Jatuh tempo"
               value={form.dueDate}
               onChange={(dueDate) =>
-                setForm((current) => ({ ...current, dueDate }))
+                updateForm((current) => ({ ...current, dueDate }))
               }
             />
           </div>
@@ -310,7 +375,7 @@ export function InvoiceFormPage({
                   aria-label={`Hapus item ${index + 1}`}
                   title={`Hapus item ${index + 1}`}
                   onClick={() =>
-                    setForm((current) => ({
+                    updateForm((current) => ({
                       ...current,
                       items: current.items.filter((_, i) => i !== index),
                     }))
@@ -376,7 +441,7 @@ export function InvoiceFormPage({
         variant="outline"
         className="w-full"
         onClick={() =>
-          setForm((current) => ({
+          updateForm((current) => ({
             ...current,
             items: [
               ...current.items,
@@ -401,7 +466,7 @@ export function InvoiceFormPage({
                   : ""
               }
               onChange={(value) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   discountAmount: parseAmountInput(value),
                 }))
@@ -417,7 +482,7 @@ export function InvoiceFormPage({
                   : ""
               }
               onChange={(value) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   shippingAmount: parseAmountInput(value),
                 }))
@@ -428,7 +493,7 @@ export function InvoiceFormPage({
               icon={Percent}
               value={String((form.taxRateBps || 0) / 100)}
               onChange={(value) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   taxRateBps:
                     Math.round(Number(value.replace(",", ".")) * 100) || 0,
@@ -440,7 +505,7 @@ export function InvoiceFormPage({
               icon={Truck}
               value={form.shippingMethod || ""}
               onChange={(shippingMethod) =>
-                setForm((current) => ({ ...current, shippingMethod }))
+                updateForm((current) => ({ ...current, shippingMethod }))
               }
             />
           </div>

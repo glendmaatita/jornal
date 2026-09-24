@@ -115,7 +115,16 @@ export default defineConfig({
           params: { title: "title", text: "text", url: "url", files: [{ name: "files", accept: ["image/*", "application/pdf"] }] },
         },
       },
-      injectManifest: { globPatterns: ["**/*.{js,css,html,webmanifest,png,svg,woff,woff2}"] },
+      injectManifest: {
+        globPatterns: ["**/*.{js,css,html,webmanifest,png,svg,woff,woff2}"],
+        // Export/editor engines are large and used only on their respective
+        // routes. Cache them on first use instead of delaying every install.
+        globIgnores: [
+          "**/html2canvas-*.js",
+          "**/jspdf*.js",
+          "**/rich-text-field-*.js",
+        ],
+      },
       devOptions: {
         enabled: true,
         suppressWarnings: true,

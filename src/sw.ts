@@ -8,6 +8,22 @@ precacheAndRoute(self.__WB_MANIFEST)
 cleanupOutdatedCaches(); clientsClaim()
 registerRoute(new NavigationRoute(createHandlerBoundToURL("/index.html"), { denylist: [/^\/pb(?:\/|$)/, /^\/api(?:\/|$)/, /^\/healthz(?:\/|$)/, /^\/share-target(?:\/|$)/] }))
 
+const RUNTIME_ASSETS = "jornal-runtime-assets-v1"
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url)
+  if (event.request.method !== "GET" || url.origin !== self.location.origin || !url.pathname.startsWith("/assets/")) return
+  event.respondWith((async () => {
+    const cached = await caches.match(event.request)
+    if (cached) return cached
+    const response = await fetch(event.request)
+    if (response.ok) {
+      const cache = await caches.open(RUNTIME_ASSETS)
+      await cache.put(event.request, response.clone())
+    }
+    return response
+  })())
+})
+
 self.addEventListener("message", (event) => { if (event.data?.type === "SKIP_WAITING") void self.skipWaiting() })
 self.addEventListener("push", (event) => { let data: { title?: string; body?: string; url?: string; tag?: string }; try { data = event.data?.json() || {} } catch { data = { body: event.data?.text() } }; event.waitUntil(Promise.all([self.registration.showNotification(data.title || "Jornal", { body: data.body || "Ada tindakan keuangan yang perlu diperiksa.", icon: "/pwa-192x192.png", badge: "/favicon-32x32.png", tag: data.tag || "jornal-action", data: { url: data.url || "/" } }), (self.navigator as Navigator & { setAppBadge?: (count?: number) => Promise<void> }).setAppBadge?.(1) || Promise.resolve()])) })
 self.addEventListener("notificationclick", (event) => { event.notification.close(); const target = new URL(String(event.notification.data?.url || "/"), self.location.origin).href; event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => { const existing = clients.find((client) => "focus" in client) as WindowClient | undefined; if (existing) { void existing.navigate(target); return existing.focus() } return self.clients.openWindow(target) })) })

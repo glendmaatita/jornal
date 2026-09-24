@@ -15,12 +15,15 @@ import {
   subscribeFinancialEvents,
   getDataScope,
   getCompanyScope,
+  invalidateLocalMemory,
 } from "@/lib/store"
 import { ALL_CATEGORIES } from "@/lib/categories"
 import { computeSafeToSpend } from "@/lib/safe-to-spend"
 import type { SafeToSpendInput } from "@/lib/safe-to-spend"
-import { loadTaxInbox, taxComplianceEnabled } from "@/lib/tax-compliance-client"
+import { loadCachedTaxInbox, taxComplianceEnabled } from "@/lib/tax-compliance-client"
 import { useTaxAgenda, useTaxConfiguration } from "@/lib/tax-compliance-queries"
+import { PERSISTENT_CACHE_UPDATED_EVENT } from "@/lib/persistent-cache"
+import type { FinancialEvent } from "@/lib/types"
 
 // Keys include the active tenant. This prevents React Query from briefly
 // rendering the previous account while auth and local storage switch.
@@ -38,28 +41,71 @@ export const queryKeys = {
 export function useFinancialEvents() {
   const queryClient = useQueryClient()
   useEffect(() => {
+    let badgeTimer: ReturnType<typeof setTimeout> | undefined
     const syncBadge = async () => {
       const badge = (navigator as Navigator & { setAppBadge?: (count?: number) => Promise<void> }).setAppBadge
       if (!badge) return
       const pending = loadTransactions().filter((transaction) => transaction.reviewStatus === "NEEDS_REVIEW").length
       let taxPending = 0
       if (taxComplianceEnabled) {
-        taxPending = await loadTaxInbox().then((result) => result.items.length).catch(() => 0)
+        taxPending = await loadCachedTaxInbox().then((result) => result?.items.length ?? 0).catch(() => 0)
       }
       void badge(pending + taxPending).catch(() => undefined)
     }
-    const invalidateAll = () => {
-      for (const key of Object.values(queryKeys)) {
+    const scheduleBadge = () => {
+      if (badgeTimer) clearTimeout(badgeTimer)
+      badgeTimer = setTimeout(() => void syncBadge(), 500)
+    }
+    const invalidate = (event?: FinancialEvent) => {
+      const keys = !event
+        ? Object.values(queryKeys)
+        : event.startsWith("TRANSACTION_")
+          ? [
+              queryKeys.transactions,
+              ...(["TRANSACTION_CREATED", "TRANSACTION_UPDATED", "TRANSACTION_RECLASSIFIED"].includes(event)
+                ? [queryKeys.corrections]
+                : []),
+            ]
+          : event.startsWith("RESERVE_")
+            ? [queryKeys.reserves]
+            : event === "ACCOUNT_BALANCE_UPDATED"
+              ? [queryKeys.accounts]
+              : event === "TAX_PROFILE_UPDATED"
+                ? [queryKeys.profile]
+                : [queryKeys.settings]
+      for (const key of keys) {
         void queryClient.invalidateQueries({ queryKey: key })
       }
-      void syncBadge()
+      scheduleBadge()
     }
-    const unsubscribe = subscribeFinancialEvents(invalidateAll)
-    window.addEventListener("storage", invalidateAll)
+    const onStorage = (event: StorageEvent) => {
+      invalidateLocalMemory(event.key)
+      invalidate()
+    }
+    const onPersistentCacheUpdated = (event: Event) => {
+      const namespace = (event as CustomEvent<{ namespace?: string }>).detail?.namespace
+      if (namespace === "invoice") {
+        void queryClient.invalidateQueries({ queryKey: ["invoice"] })
+        void queryClient.invalidateQueries({ queryKey: ["actions"] })
+        void queryClient.invalidateQueries({ queryKey: ["search"] })
+      } else if (namespace === "documents") {
+        void queryClient.invalidateQueries({ queryKey: ["documents"] })
+        void queryClient.invalidateQueries({ queryKey: ["actions"] })
+        void queryClient.invalidateQueries({ queryKey: ["search"] })
+      } else if (namespace === "tax") {
+        void queryClient.invalidateQueries({ queryKey: ["jornal-tax"] })
+      }
+      scheduleBadge()
+    }
+    const unsubscribe = subscribeFinancialEvents(invalidate)
+    window.addEventListener("storage", onStorage)
+    window.addEventListener(PERSISTENT_CACHE_UPDATED_EVENT, onPersistentCacheUpdated)
     void syncBadge()
     return () => {
+      if (badgeTimer) clearTimeout(badgeTimer)
       unsubscribe()
-      window.removeEventListener("storage", invalidateAll)
+      window.removeEventListener("storage", onStorage)
+      window.removeEventListener(PERSISTENT_CACHE_UPDATED_EVENT, onPersistentCacheUpdated)
     }
   }, [queryClient])
 }

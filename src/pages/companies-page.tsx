@@ -7,14 +7,19 @@ import { Button } from "@/components/ui/button"
 import { useAppDialog } from "@/components/ui/app-dialog-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { TextField } from "@/components/ui/text-field"
-import { activeCompany, loadCompanies, multiCompanyCreationEnabled, pendingChangesForCompany, persistCompanyDrafts, rememberCompanyCreationReturn, selectCompany, updateCompany } from "@/lib/companies"
+import { activeCompany, loadCachedCompanies, loadCompanies, multiCompanyCreationEnabled, pendingChangesForCompany, persistCompanyDrafts, rememberCompanyCreationReturn, selectCompany, subscribeCompanies, updateCompany } from "@/lib/companies"
 import type { Company } from "@/lib/types"
 import { CompanyLogo, CompanyLogoEditor } from "@/components/company-logo"
 
 export function CompaniesPage() {
   const dialog = useAppDialog()
   const queryClient = useQueryClient()
-  const { data: companies = [], isLoading, error } = useQuery({ queryKey: ["jornal", "companies"], queryFn: loadCompanies })
+  const cachedCompanies = loadCachedCompanies()
+  const { data: companies = [], isLoading, error } = useQuery({
+    queryKey: ["jornal", "companies"],
+    queryFn: loadCompanies,
+    initialData: cachedCompanies.length > 0 ? cachedCompanies : undefined,
+  })
   const current = activeCompany()
   const [editing, setEditing] = useState<string | null>(null)
   const [name, setName] = useState("")
@@ -23,6 +28,10 @@ export function CompaniesPage() {
   const [search, setSearch] = useState("")
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({})
   const accessEnded = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("access") === "ended"
+
+  useEffect(() => subscribeCompanies(() => {
+    queryClient.setQueryData(["jornal", "companies"], loadCachedCompanies())
+  }), [queryClient])
 
   useEffect(() => {
     let cancelled = false

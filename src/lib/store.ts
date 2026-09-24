@@ -125,11 +125,25 @@ export function storageKeyForScope(scope: { actorUserId?: string; ownerTenantId?
 
 // ── Low-level helpers (SSR/private-mode safe) ──
 
+const memoryState = new Map<string, { raw: string | null; value: unknown }>()
+
+/** Keep the synchronous local-first API fast without reparsing large arrays
+ * on every selector call. Storage events call this for cross-tab changes. */
+export function invalidateLocalMemory(storageKey?: string | null) {
+  if (storageKey) memoryState.delete(storageKey)
+  else memoryState.clear()
+}
+
 function read<T>(key: string, fallback: T): T {
+  const storageKey = scopedStorageKey(key)
   try {
-    const stored = window.localStorage.getItem(scopedStorageKey(key))
+    const stored = window.localStorage.getItem(storageKey)
+    const cached = memoryState.get(storageKey)
+    if (cached && cached.raw === stored) return cached.value as T
     if (!stored) return fallback
-    return JSON.parse(stored) as T
+    const parsed = JSON.parse(stored) as T
+    memoryState.set(storageKey, { raw: stored, value: parsed })
+    return parsed
   } catch {
     return fallback
   }
@@ -137,8 +151,10 @@ function read<T>(key: string, fallback: T): T {
 
 function write<T>(key: string, value: T) {
   const storageKey = scopedStorageKey(key)
+  const serialized = JSON.stringify(value)
+  memoryState.set(storageKey, { raw: serialized, value })
   try {
-    window.localStorage.setItem(storageKey, JSON.stringify(value))
+    window.localStorage.setItem(storageKey, serialized)
   } catch {
     // Storage unavailable — keep in-memory usage working for the session
     notifyStorageWarning()
@@ -452,7 +468,6 @@ function createTransactionRecord(input: NewTransaction, stableId: string = newId
   }
   persistTransactions([transaction, ...loadTransactions()])
   appendTransactionVersion(transaction)
-  emitFinancialEvent("TRANSACTION_CREATED")
   if (transaction.classificationSource === "USER" && transaction.description.trim()) {
     recordCorrection(
       transaction.description,
@@ -461,6 +476,7 @@ function createTransactionRecord(input: NewTransaction, stableId: string = newId
       transaction.direction,
     )
   }
+  emitFinancialEvent("TRANSACTION_CREATED")
   schedulePocketBaseSync()
   return transaction
 }
@@ -491,7 +507,6 @@ export function updateTransaction(id: string, patch: Partial<NewTransaction>): T
   appendTransactionVersion(updated)
   const reclassified =
     before.classification !== updated.classification || before.categoryId !== updated.categoryId
-  emitFinancialEvent(reclassified ? "TRANSACTION_RECLASSIFIED" : "TRANSACTION_UPDATED")
   if (updated.classificationSource === "USER" && updated.description.trim()) {
     recordCorrection(
       updated.description,
@@ -500,6 +515,7 @@ export function updateTransaction(id: string, patch: Partial<NewTransaction>): T
       updated.direction,
     )
   }
+  emitFinancialEvent(reclassified ? "TRANSACTION_RECLASSIFIED" : "TRANSACTION_UPDATED")
   schedulePocketBaseSync()
   return updated
 }
@@ -860,6 +876,7 @@ export async function resetAllData(options: { remoteAlreadyReset?: boolean } = {
     const storageKey = scopedStorageKey(key)
     try {
       window.localStorage.removeItem(storageKey)
+      memoryState.delete(storageKey)
     } catch {
       // ignore
     }

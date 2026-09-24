@@ -143,18 +143,20 @@ describe("syncToPocketBase", () => {
     saveProfile({ ...emptyProfile(), businessName: "Kedai" })
     createTransaction(transactionFixture("txn-1"))
     await flushQueuedSync()
+    const initialCalls = [...calls]
     calls = []
     await syncToPocketBase()
 
-    const posts = calls.filter((call) => call.method === "POST")
+    const posts = initialCalls.filter((call) => call.method === "POST")
     expect(posts.length).toBeGreaterThanOrEqual(2)
     const payloads = posts.map((call) => call.body as { entity: string; app_id: string })
     expect(payloads.some((payload) => payload.entity === "profile")).toBe(true)
     expect(payloads.some((payload) => payload.entity === "transactions")).toBe(true)
     // listRecords pre-checks happened with a business_id filter
-    expect(calls.some((call) => call.url.includes("filter="))).toBe(true)
+    expect(initialCalls.some((call) => call.url.includes("filter="))).toBe(true)
     // null settings are skipped (no upsert for null singleton)
     expect(payloads.some((payload) => payload.entity === "settings")).toBe(false)
+    expect(calls).toHaveLength(0)
   })
 
   test("uploads transaction attachments as multipart files", async () => {
@@ -207,6 +209,9 @@ describe("syncToPocketBase", () => {
     await syncToPocketBase()
     expect(calls.some((call) => call.method === "PATCH" && call.url.endsWith("/records/pb-1"))).toBe(true)
     expect(calls.some((call) => call.method === "DELETE")).toBe(false)
+    const recordReads = calls.filter((call) => call.method === "GET" && call.url.includes("/records?"))
+    expect(recordReads.filter((call) => decodeURIComponent(call.url).includes('app_id = "txn-1"'))).toHaveLength(0)
+    expect(recordReads.every((call) => !decodeURIComponent(call.url).includes('app_id = "txn-gone"'))).toBe(true)
   })
 
   test("history records use id:effectiveAt:deletedAt composite app ids", async () => {
@@ -214,9 +219,10 @@ describe("syncToPocketBase", () => {
     saveProfile({ ...emptyProfile(), businessName: "Hist" })
     createTransaction(transactionFixture("txn-hist"))
     await flushQueuedSync()
+    const initialCalls = [...calls]
     calls = []
     await syncToPocketBase()
-    const historyUpserts = calls.filter(
+    const historyUpserts = initialCalls.filter(
       (call) =>
         (call.method === "POST" || call.method === "PATCH") &&
         (call.body as { entity?: string })?.entity?.endsWith("History"),
@@ -224,6 +230,7 @@ describe("syncToPocketBase", () => {
     expect(historyUpserts.length).toBeGreaterThan(0)
     const appId = (historyUpserts[0].body as { app_id: string }).app_id
     expect(appId).toContain(":")
+    expect(calls).toHaveLength(0)
   })
 
   test("server errors propagate to the caller", async () => {
@@ -461,11 +468,13 @@ describe("hydrateFromPocketBase", () => {
 })
 
 describe("initializePocketBaseSync", () => {
-  test("reports success and runs only once per session", async () => {
+  test("reports completed hydration to later consumers without running it again", async () => {
     setEnv("http://pb.test")
     respond = () => ({ status: 200, body: { items: [], totalPages: 1 } })
     expect(await initializePocketBaseSync()).toBe(true)
-    expect(await initializePocketBaseSync()).toBe(false)
+    const callsAfterHydration = calls.length
+    expect(await initializePocketBaseSync()).toBe(true)
+    expect(calls).toHaveLength(callsAfterHydration)
     expect(getHydrationState()).toBe("ready")
   })
 
@@ -510,6 +519,7 @@ describe("attachment handling", () => {
       if (method === "PATCH") return { status: 200, body: {} }
       return { status: 200, body: {} }
     }
+    localStorageShim.setItem(KEYS.transactions, JSON.stringify([{ ...transactionWithAttachment("txn-att"), notes: "edited" }]))
     calls = []
     await syncToPocketBase()
     expect(calls.some((call) => call.method === "PATCH")).toBe(true)

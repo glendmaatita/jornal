@@ -114,21 +114,19 @@ const appLayoutRoute = createRoute({
     }
     const tenantId = pb.authStore.record?.id ?? "local"
     store.setTenantScope(tenantId)
-    try {
-      await team.bootstrapSession()
-    } catch {
-      // Bootstrap claims invitations and is required for a first-time user,
-      // but an existing offline-first session must not be expelled from the
-      // app when this request briefly fails during client-side navigation.
-      if (companyStore.loadCachedCompanies().length === 0) {
+    // A returning PWA session renders its durable company and ledger snapshot
+    // immediately. Invitation claiming and membership refresh continue in the
+    // background; first-time devices still wait because they have no safe
+    // company scope to render.
+    let companies = await companyStore.restoreCachedCompanies()
+    const hadCachedCompanies = companies.length > 0
+    if (companies.length === 0) {
+      try {
+        await team.bootstrapSession()
+        companies = await companyStore.loadCompaniesFromServer()
+      } catch {
         throw redirect({ to: "/data-unavailable", replace: true })
       }
-    }
-    let companies
-    try {
-      companies = await companyStore.loadCompanies()
-    } catch {
-      throw redirect({ to: "/data-unavailable", replace: true })
     }
     const companyIndependent = location.pathname === "/onboarding"
       || location.pathname === "/companies"
@@ -162,13 +160,33 @@ const appLayoutRoute = createRoute({
     store.setCompanyLegacyDefault(selected.legacyDefault)
     store.setCompanyDisplayName(selected.name)
     await companyStore.migrateLegacyCompanyData(selected)
+    if (hadCachedCompanies && navigator.onLine !== false) {
+      void team.bootstrapSession()
+        .then(() => companyStore.refreshCompanyMemberships())
+        .then((result) => {
+          if (result.removed) {
+            const destination = result.companies.length ? "/companies?access=ended" : "/companies/empty?access=ended"
+            window.location.assign(destination)
+          } else if (result.scopeChanged) {
+            // A remote reset changes every local storage/query namespace. A
+            // reload is the clean hand-off after the fresh scope was applied.
+            window.location.reload()
+          }
+        })
+        .catch(() => undefined)
+    }
     if (companyIndependent) return
     if (selected.status === "ARCHIVED" && (location.pathname === "/add" || /\/edit$/.test(location.pathname))) {
       throw redirect({ to: "/companies", replace: true })
     }
-    await sync.initializePocketBaseSync()
-    if (pocketBaseConfigured && sync.getHydrationState() === "unavailable") {
-      throw redirect({ to: "/data-unavailable", replace: true })
+    const hasLocalState = await sync.preparePocketBaseLocalState()
+    if (hasLocalState) {
+      void sync.initializePocketBaseSync()
+    } else {
+      await sync.initializePocketBaseSync()
+      if (pocketBaseConfigured && sync.getHydrationState() === "unavailable") {
+        throw redirect({ to: "/data-unavailable", replace: true })
+      }
     }
     if (!selected.onboardingCompletedAt) {
       throw redirect({ to: "/companies/$companyId/setup", params: { companyId: selected.id }, replace: true })

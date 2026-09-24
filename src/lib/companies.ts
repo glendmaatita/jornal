@@ -1,7 +1,8 @@
 import { copyOutboxByPrefix, listMirroredStateByPrefix, listOutbox, mirrorState, persistState, quarantineOutboxByPrefix, restoreState } from "./local-db"
 import { pb } from "./pb"
-import { getCompanyScope, KEYS, RESET_PENDING_KEY, setCompanyDisplayName } from "./store"
+import { getCompanyScope, KEYS, RESET_PENDING_KEY, setCompanyDisplayName, setCompanyLegacyDefault, setCompanyScope, setCompanyWritable } from "./store"
 import type { Account, AppSettings, BusinessProfile, Company } from "./types"
+import { staleWhileRevalidate } from "./persistent-cache"
 
 const catalogVersion = 1
 const listeners = new Set<() => void>()
@@ -46,7 +47,7 @@ function saveCatalog(companies: Company[]) {
 
 export function subscribeCompanies(listener: () => void) {
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => { listeners.delete(listener) }
 }
 
 export function loadCachedCompanies(): Company[] {
@@ -56,21 +57,24 @@ export function loadCachedCompanies(): Company[] {
   } catch { return [] }
 }
 
+export async function restoreCachedCompanies(): Promise<Company[]> {
+  const cached = loadCachedCompanies()
+  if (cached.length > 0) return cached
+  const durable = await restoreState(catalogKey()).catch(() => undefined)
+  if (!Array.isArray(durable)) return []
+  saveCatalog(durable as Company[])
+  return durable as Company[]
+}
+
 export async function loadCompanies(): Promise<Company[]> {
   if (!pb.authStore.isValid) return []
+  const cached = await restoreCachedCompanies()
   try {
-    return await loadCompaniesFromServer()
-  } catch (error) {
-    let cached = loadCachedCompanies()
-    if (cached.length === 0) {
-      const durable = await restoreState(catalogKey()).catch(() => undefined)
-      if (Array.isArray(durable)) {
-        cached = durable as Company[]
-        saveCatalog(cached)
-      }
-    }
+    const result = await refreshCompanyMemberships()
+    return result.companies
+  } catch (cause) {
     if (cached.length > 0) return cached
-    throw error
+    throw cause
   }
 }
 
@@ -89,9 +93,26 @@ export async function loadCompaniesFromServer(): Promise<Company[]> {
 export async function refreshCompanyMemberships() {
   const previous = activeCompany()
   const companies = await loadCompaniesFromServer()
-  if (!previous || companies.some((company) => company.id === previous.id && company.membershipRevision === previous.membershipRevision)) return { removed: false, companies }
-  await quarantineOutboxByPrefix(companyStoragePrefix(previous.tenantId, previous.id, previous.dataEpoch, previous.membershipRevision), "membership-revoked-or-replaced")
-  return { removed: true, companies }
+  if (!previous) return { removed: false, scopeChanged: false, companies }
+  const current = companies.find((company) => company.id === previous.id)
+  if (!current || current.membershipRevision !== previous.membershipRevision) {
+    await quarantineOutboxByPrefix(companyStoragePrefix(previous.tenantId, previous.id, previous.dataEpoch, previous.membershipRevision), "membership-revoked-or-replaced")
+    return { removed: true, scopeChanged: false, companies }
+  }
+  const scopeChanged = current.dataEpoch !== previous.dataEpoch || current.tenantId !== previous.tenantId
+  if (scopeChanged) {
+    await quarantineOutboxByPrefix(companyStoragePrefix(previous.tenantId, previous.id, previous.dataEpoch, previous.membershipRevision), "remote-company-scope-changed")
+  }
+  // Keep the synchronous local store aligned with the catalog that was just
+  // accepted. This matters when a reset or metadata change happened on a
+  // different device while this tab rendered from its cached catalog.
+  if (selectedCompanyId() === current.id) {
+    setCompanyScope(current.id, current.dataEpoch, current.tenantId, current.membershipRevision)
+    setCompanyWritable(current.status === "ACTIVE")
+    setCompanyLegacyDefault(current.legacyDefault)
+    setCompanyDisplayName(current.name)
+  }
+  return { removed: false, scopeChanged, companies }
 }
 
 export function selectedCompanyId(): string | null {
@@ -203,7 +224,7 @@ export async function uploadCompanyLogo(company: Company, file: File) {
   const updated = parseCompany(result.company); saveCatalog(loadCachedCompanies().map((item) => item.id === updated.id ? updated : item)); return updated
 }
 export async function removeCompanyLogo(company: Company) { const result = await pb.send<{ company: Record<string, unknown> }>(`/api/jornal/companies/${encodeURIComponent(company.id)}/logo`, { method: "DELETE", body: { revision: company.revision, requestId: crypto.randomUUID() } }); const updated = parseCompany(result.company); saveCatalog(loadCachedCompanies().map((item) => item.id === updated.id ? updated : item)); return updated }
-export async function loadCompanyLogo(company: Company, assetId = company.logoAssetId) { if (!assetId) return null; const result = await pb.send<{ mime: string; contentBase64: string; checksum: string }>(`/api/jornal/companies/${encodeURIComponent(company.id)}/assets/${encodeURIComponent(assetId)}`, {}); return { ...result, dataUrl: `data:${result.mime};base64,${result.contentBase64}` } }
+export async function loadCompanyLogo(company: Company, assetId = company.logoAssetId) { if (!assetId) return null; return staleWhileRevalidate("company-assets", `${catalogKey()}.asset.${company.id}.${assetId}`, async () => { const result = await pb.send<{ mime: string; contentBase64: string; checksum: string }>(`/api/jornal/companies/${encodeURIComponent(company.id)}/assets/${encodeURIComponent(assetId)}`, {}); return { ...result, dataUrl: `data:${result.mime};base64,${result.contentBase64}` } }) }
 
 export function companyStoragePrefix(ownerTenant: string, company: string, dataEpoch = 1, membershipRevision = 1) {
   const actor = pb.authStore.record?.id ?? ownerTenant

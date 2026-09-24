@@ -1,5 +1,5 @@
 import type { Account, AppSettings, BusinessProfile, CompanyScope, CorrectionPattern, RecurringRule, Reserve, Transaction } from "./types"
-import { getCompanyScope, KEYS, RESET_PENDING_KEY, scopedStorageKey, storageKeyForScope } from "./store"
+import { getCompanyScope, invalidateLocalMemory, KEYS, RESET_PENDING_KEY, scopedStorageKey, storageKeyForScope } from "./store"
 import { pb } from "./pb"
 import { acknowledgeOutboxSnapshots, clearMirroredState, listOutbox, mirrorState, persistState, restoreState } from "./local-db"
 
@@ -134,10 +134,12 @@ interface ScopeRuntime {
   hydrationState: "idle" | "ready" | "unavailable"
   syncStatus: SyncStatus
   running?: Promise<unknown>
+  hydration?: Promise<boolean>
 }
 
 const scopeRuntimes = new Map<string, ScopeRuntime>()
 const syncStatusListeners = new Set<(status: SyncStatus) => void>()
+const revisionMemory = new Map<string, Record<string, number>>()
 
 function scopeId(scope: CompanyScope) {
   return `${scope.actorUserId}:${scope.ownerTenantId}:${scope.companyId}:${scope.dataEpoch}:${scope.membershipRevision}`
@@ -154,15 +156,36 @@ function runtimeFor(scope = companyScope()) {
 }
 
 function revisionKey(scope: CompanyScope) { return storageKeyForScope(scope, "remote-revisions.v1") }
+function fingerprintKey(scope: CompanyScope) { return storageKeyForScope(scope, "remote-payload-fingerprints.v1") }
 function revisionId(entity: EntityName, appId: string) { return `${entity}:${appId}` }
 function loadRevisions(scope: CompanyScope): Record<string, number> {
-  try { return JSON.parse(window.localStorage.getItem(revisionKey(scope)) || "{}") as Record<string, number> } catch { return {} }
+  const key = revisionKey(scope)
+  const cached = revisionMemory.get(key)
+  if (cached) return cached
+  try {
+    const revisions = JSON.parse(window.localStorage.getItem(key) || "{}") as Record<string, number>
+    revisionMemory.set(key, revisions)
+    return revisions
+  } catch { return {} }
 }
 function baseRevision(scope: CompanyScope, entity: EntityName, appId: string) { return loadRevisions(scope)[revisionId(entity, appId)] }
-function saveBaseRevision(scope: CompanyScope, entity: EntityName, appId: string, revision: number) {
-  const revisions = loadRevisions(scope); revisions[revisionId(entity, appId)] = revision
+function persistRevisions(scope: CompanyScope, revisions: Record<string, number>) {
+  revisionMemory.set(revisionKey(scope), revisions)
   try { window.localStorage.setItem(revisionKey(scope), JSON.stringify(revisions)) } catch { /* conflicts still fail closed when storage is unavailable */ }
   void mirrorState(revisionKey(scope), revisions).catch(() => undefined)
+}
+function saveBaseRevision(scope: CompanyScope, entity: EntityName, appId: string, revision: number) {
+  const revisions = loadRevisions(scope); revisions[revisionId(entity, appId)] = revision
+  persistRevisions(scope, revisions)
+}
+
+function loadFingerprints(scope: CompanyScope): Record<string, string> {
+  try { return JSON.parse(window.localStorage.getItem(fingerprintKey(scope)) || "{}") as Record<string, string> } catch { return {} }
+}
+
+function saveFingerprints(scope: CompanyScope, fingerprints: Record<string, string>) {
+  try { window.localStorage.setItem(fingerprintKey(scope), JSON.stringify(fingerprints)) } catch { /* optional optimization */ }
+  void mirrorState(fingerprintKey(scope), fingerprints).catch(() => undefined)
 }
 
 /** Register a transaction already committed by an atomic backend command.
@@ -333,6 +356,7 @@ export function setPocketBaseUrl(url: string | null) {
   for (const controller of activeRequestControllers) controller.abort("PocketBase endpoint changed")
   activeRequestControllers.clear()
   scopeRuntimes.clear()
+  revisionMemory.clear()
   syncGeneration += 1
 }
 
@@ -341,6 +365,7 @@ export function resetPocketBaseSyncState() {
   for (const controller of activeRequestControllers) controller.abort("Authentication session changed")
   activeRequestControllers.clear()
   scopeRuntimes.clear()
+  revisionMemory.clear()
   syncGeneration += 1
   setSyncStatus("idle")
 }
@@ -373,6 +398,7 @@ function localJson<T>(key: string, fallback: T, scope?: CompanyScope): T {
 
 function writeLocalJson<T>(key: string, value: T, scope?: CompanyScope) {
   const storageKey = scope ? storageKeyForScope(scope, key) : scopedStorageKey(key)
+  invalidateLocalMemory(storageKey)
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(value))
   } catch {
@@ -382,16 +408,17 @@ function writeLocalJson<T>(key: string, value: T, scope?: CompanyScope) {
 }
 
 async function restoreMissingLocalState(scope = companyScope()) {
-  for (const key of Object.values(KEYS)) {
+  await Promise.all(Object.values(KEYS).map(async (key) => {
     const storageKey = storageKeyForScope(scope, key)
-    if (window.localStorage.getItem(storageKey) !== null) continue
+    if (window.localStorage.getItem(storageKey) !== null) return
     const value = await restoreState(storageKey).catch(() => undefined)
-    if (value === undefined) continue
+    if (value === undefined) return
+    invalidateLocalMemory(storageKey)
     try { window.localStorage.setItem(storageKey, JSON.stringify(value)) } catch { /* quota remains unavailable */ }
-  }
+  }))
 }
 
-function hasCachedCompanyState(scope: CompanyScope) {
+export function hasCachedCompanyState(scope = companyScope()) {
   return [KEYS.profile, KEYS.settings, KEYS.accounts, KEYS.transactions]
     .some((key) => window.localStorage.getItem(storageKeyForScope(scope, key)) !== null)
 }
@@ -421,6 +448,22 @@ function stablePayload(value: unknown): string {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, item]) => `${JSON.stringify(key)}:${stablePayload(item)}`)
     .join(",")}}`
+}
+
+function payloadFingerprint(value: unknown) {
+  const text = stablePayload(value)
+  let hash = 2166136261
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+function payloadForRemote(entity: EntityName, payload: unknown) {
+  return entity === "transactions" && payload && typeof payload === "object"
+    ? transactionPayloadForRemote(payload as Transaction)
+    : payload
 }
 
 function isDataUrl(value: string | null | undefined): value is string {
@@ -613,10 +656,7 @@ async function upsertRecord(entity: EntityName, appId: string, payload: unknown,
   const existing = await listRecords(entity, appId, requestedScope)
   const found = existing.find((record) => record.app_id === appId)
   const base = baseRevision(requestedScope, entity, appId)
-  const sanitizedPayload =
-    entity === "transactions" && payload && typeof payload === "object"
-      ? transactionPayloadForRemote(payload as Transaction)
-      : payload
+  const sanitizedPayload = payloadForRemote(entity, payload)
   const body = {
     business_id: requestedScope.tenantId,
     company_id: requestedScope.companyId,
@@ -753,7 +793,16 @@ async function clearResetMarker(markerKey: string) {
 
 async function syncToPocketBaseUnsafe(runGeneration: number, runScope: CompanyScope) {
   if (!enabled() || typeof window === "undefined") return
-  await processPendingReset(runScope)
+  const resetProcessed = await processPendingReset(runScope)
+  if (resetProcessed) return
+  const scopePrefix = storageKeyForScope(runScope, "")
+  const queuedRows = (await listOutbox()).filter((row) => row.key.startsWith(scopePrefix))
+  // Browsers use the durable outbox as the source of pending work. The
+  // no-IndexedDB branch retains the legacy full scan for SSR/test shims and
+  // exceptionally constrained WebViews.
+  if (queuedRows.length === 0 && typeof indexedDB !== "undefined") return
+  const queuedKeys = new Set(queuedRows.map((row) => row.key))
+  const fingerprints = loadFingerprints(runScope)
   const states: Partial<LocalStateMap> = {
     profile: localJson(KEYS.profile, null, runScope),
     settings: localJson(KEYS.settings, null, runScope),
@@ -768,13 +817,8 @@ async function syncToPocketBaseUnsafe(runGeneration: number, runScope: CompanySc
     reserveHistory: localJson(KEYS.reserveHistory, [], runScope),
   }
 
-  const scopePrefix = storageKeyForScope(runScope, "")
-  const queuedRows = (await listOutbox()).filter((row) => row.key.startsWith(scopePrefix))
-  const queuedKeys = new Set(queuedRows.map((row) => row.key))
-  const hasQueuedState = queuedRows.length > 0
-
   for (const [entity, value] of Object.entries(states) as Array<[EntityName, unknown]>) {
-    if (hasQueuedState && !queuedKeys.has(storageKeyForScope(runScope, entityKey(entity)))) continue
+    if (queuedRows.length > 0 && !queuedKeys.has(storageKeyForScope(runScope, entityKey(entity)))) continue
     // Never continue a request sequence after logout or tenant switch.
     if (runGeneration !== syncGeneration) {
       throw new Error("Sync cancelled: session changed")
@@ -786,16 +830,26 @@ async function syncToPocketBaseUnsafe(runGeneration: number, runScope: CompanySc
         : value
       for (const item of items as Array<{ id?: string }>) {
         const appId = entityAppId(entity, item)
-      await upsertRecord(entity, appId, item, runScope)
+        const fingerprintId = revisionId(entity, appId)
+        const fingerprint = payloadFingerprint(payloadForRemote(entity, item))
+        if (fingerprints[fingerprintId] === fingerprint) continue
+        await upsertRecord(entity, appId, item, runScope)
+        fingerprints[fingerprintId] = fingerprint
       }
       // A missing item is ambiguous across devices. Only explicit tombstones
       // may delete a remote record.
       await pruneExplicitlyDeleted(entity, runScope)
     } else {
-      await upsertRecord(entity, entity, value, runScope)
+      const fingerprintId = revisionId(entity, entity)
+      const fingerprint = payloadFingerprint(payloadForRemote(entity, value))
+      if (fingerprints[fingerprintId] !== fingerprint) {
+        await upsertRecord(entity, entity, value, runScope)
+        fingerprints[fingerprintId] = fingerprint
+      }
       await pruneExplicitlyDeleted(entity, runScope)
     }
   }
+  saveFingerprints(runScope, fingerprints)
   await acknowledgeOutboxSnapshots(queuedRows)
 }
 
@@ -862,18 +916,24 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
   let foundAny = false
   // Files are protected by the collection view rule; a short-lived token lets
   // payload URLs render attachments. Empty token = public files (local dev).
-  const fileAccess = await getCompanyFileAccess(runScope).catch(() => ({ token: "", grant: "" }))
+  const fileAccessPromise = getCompanyFileAccess(runScope).catch(() => ({ token: "", grant: "" }))
   const queuedRows = await listOutbox()
   const queuedKeys = new Set(queuedRows.map((row) => row.key))
-  for (const entity of entities) {
+  const fingerprints = loadFingerprints(runScope)
+  const revisions = loadRevisions(runScope)
+  let cursor = 0
+  const hydrateEntity = async (entity: EntityName) => {
     if (runGeneration !== syncGeneration) throw new Error("Hydration cancelled: session changed")
     const remote = await listRecords(entity, undefined, runScope)
     if (runGeneration !== syncGeneration) throw new Error("Hydration cancelled: session changed")
-    if (remote.length === 0) continue
+    if (remote.length === 0) return
     foundAny = true
     const key = entityKey(entity)
     const entityIsDirty = queuedKeys.has(storageKeyForScope(runScope, key))
-    if (!entityIsDirty) for (const record of remote) saveBaseRevision(runScope, entity, record.app_id, Number(record.revision || 0))
+    if (!entityIsDirty) for (const record of remote) {
+      revisions[revisionId(entity, record.app_id)] = Number(record.revision || 0)
+      fingerprints[revisionId(entity, record.app_id)] = payloadFingerprint(record.payload)
+    }
     else {
       const localState = localJson<unknown>(key, null, runScope)
       for (const record of remote) {
@@ -899,8 +959,9 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
       if (!(typeof localUpdatedAt === "string" && typeof remoteUpdatedAt === "string" && localUpdatedAt > remoteUpdatedAt)) {
         writeLocalJson(key, payload, runScope)
       }
-      continue
+      return
     }
+    const fileAccess = entity === "transactions" ? await fileAccessPromise : { token: "", grant: "" }
     writeLocalJson(
       key,
       mergeLocalArray(
@@ -923,6 +984,15 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
       runScope,
     )
   }
+  const worker = async () => {
+    while (cursor < entities.length) {
+      const entity = entities[cursor++]
+      await hydrateEntity(entity)
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()])
+  persistRevisions(runScope, revisions)
+  saveFingerprints(runScope, fingerprints)
   return foundAny
 }
 
@@ -972,14 +1042,27 @@ export async function syncPendingCompanies() {
   await Promise.all([worker(), worker()])
 }
 
+export async function preparePocketBaseLocalState() {
+  if (typeof window === "undefined") return false
+  const runScope = companyScope()
+  await restoreMissingLocalState(runScope)
+  const cached = hasCachedCompanyState(runScope)
+  if (cached) runtimeFor(runScope).hydrationState = "ready"
+  return cached
+}
+
 export async function initializePocketBaseSync() {
   if (typeof window === "undefined") return false
   const runScope = companyScope()
   const runtime = runtimeFor(runScope)
-  if (runtime.hydrationStarted) return false
+  if (runtime.hydration) return runtime.hydration
+  // A later consumer may mount after the router's background hydration has
+  // already completed. Report that completed hydration as successful so it
+  // can invalidate queries that may have read the earlier local snapshot.
+  if (runtime.hydrationStarted) return runtime.hydrationState === "ready"
   runtime.hydrationStarted = true
-  try {
-    await restoreMissingLocalState(runScope)
+  const hydration = (async () => { try {
+    await preparePocketBaseLocalState()
     if (navigator.onLine === false) {
       runtime.hydrationStarted = false
       runtime.hydrationState = hasCachedCompanyState(runScope) ? "ready" : "unavailable"
@@ -998,5 +1081,9 @@ export async function initializePocketBaseSync() {
     runtime.hydrationState = hasCachedCompanyState(runScope) ? "ready" : "unavailable"
     if (runtime.hydrationState === "ready") setSyncStatus("failed", runScope)
     return false
-  }
+  } finally {
+    runtime.hydration = undefined
+  } })()
+  runtime.hydration = hydration
+  return hydration
 }
