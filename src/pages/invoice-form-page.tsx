@@ -4,6 +4,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
   Banknote,
+  Copy,
   FilePen,
   FilePlus2,
   Hash,
@@ -39,7 +40,7 @@ import {
   type InvoiceDraftInput,
 } from "@/lib/invoice-client";
 import { formatRupiah, parseAmountInput, todayIsoDate } from "@/lib/format";
-import type { Invoice, InvoiceItemInput } from "@/lib/invoice-types";
+import { MAX_INVOICE_ITEMS, type Invoice, type InvoiceItemInput } from "@/lib/invoice-types";
 import { activeCompany } from "@/lib/companies";
 import { clearMirroredState, mirrorState, restoreState } from "@/lib/local-db";
 import { getDataScope } from "@/lib/store";
@@ -111,6 +112,7 @@ export function InvoiceFormPage({
     Array<{ id: string; name: string }>
   >([]);
   const [units, setUnits] = useState<string[]>(["pcs", "Lusin", "Kodi"]);
+  const [defaultUnitLabel, setDefaultUnitLabel] = useState("pcs");
   const [dueDays, setDueDays] = useState(1);
   const [form, setForm] = useState<InvoiceDraftInput>(initial.form);
   const [draftReady, setDraftReady] = useState(Boolean(invoiceId || initial.restored));
@@ -152,16 +154,16 @@ export function InvoiceFormPage({
             .filter((unit) => unit.status === "ACTIVE")
             .map((unit) => unit.label),
         );
+        const configuredDefaultUnit = config.units.find(
+          (unit) => unit.id === config.settings.defaultUnitId && unit.status === "ACTIVE",
+        )?.label || "pcs";
+        setDefaultUnitLabel(configuredDefaultUnit);
         setDueDays(config.settings.defaultDueDays);
         if (!invoiceId && !restoredDraft.current)
           setForm((current) => ({
             ...current,
             items: [
-              newItem(
-                config.units.find(
-                  (unit) => unit.id === config.settings.defaultUnitId,
-                )?.label || "pcs",
-              ),
+              newItem(configuredDefaultUnit),
             ],
             dueDate: plusDays(
               current.issueDate,
@@ -236,6 +238,13 @@ export function InvoiceFormPage({
         itemIndex === index ? { ...item, ...patch } : item,
       ),
     }));
+  const duplicateItem = (index: number) =>
+    updateForm((current) => {
+      if (current.items.length >= MAX_INVOICE_ITEMS) return current;
+      const items = [...current.items];
+      items.splice(index + 1, 0, { ...items[index], id: crypto.randomUUID() });
+      return { ...current, items: items.map((item, sortOrder) => ({ ...item, sortOrder })) };
+    });
   const persist = async (publish: boolean) => {
     setBusy(true);
     setError("");
@@ -366,24 +375,40 @@ export function InvoiceFormPage({
                 <Package className="size-4 text-primary" aria-hidden="true" />
                 Item {index + 1}
               </strong>
-              {form.items.length > 1 && (
+              <div className="flex items-center gap-1">
                 <Button
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="size-11 text-red-700 hover:bg-red-50 hover:text-red-700"
-                  aria-label={`Hapus item ${index + 1}`}
-                  title={`Hapus item ${index + 1}`}
-                  onClick={() =>
-                    updateForm((current) => ({
-                      ...current,
-                      items: current.items.filter((_, i) => i !== index),
-                    }))
-                  }
+                  className="size-11"
+                  aria-label={`Duplikat item ${index + 1}`}
+                  title={`Duplikat item ${index + 1}`}
+                  disabled={form.items.length >= MAX_INVOICE_ITEMS}
+                  onClick={() => duplicateItem(index)}
                 >
-                  <Trash2 className="size-5" aria-hidden="true" />
+                  <Copy className="size-5" aria-hidden="true" />
                 </Button>
-              )}
+                {form.items.length > 1 && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-11 text-red-700 hover:bg-red-50 hover:text-red-700"
+                    aria-label={`Hapus item ${index + 1}`}
+                    title={`Hapus item ${index + 1}`}
+                    onClick={() =>
+                      updateForm((current) => ({
+                        ...current,
+                        items: current.items
+                          .filter((_, i) => i !== index)
+                          .map((item, sortOrder) => ({ ...item, sortOrder })),
+                      }))
+                    }
+                  >
+                    <Trash2 className="size-5" aria-hidden="true" />
+                  </Button>
+                )}
+              </div>
             </div>
             <InvoiceProductField
               value={item.description}
@@ -440,12 +465,13 @@ export function InvoiceFormPage({
       <Button
         variant="outline"
         className="w-full"
+        disabled={form.items.length >= MAX_INVOICE_ITEMS}
         onClick={() =>
           updateForm((current) => ({
             ...current,
             items: [
-              ...current.items,
-              { ...newItem(units[0]), sortOrder: current.items.length },
+              ...current.items.map((item, sortOrder) => ({ ...item, sortOrder })),
+              { ...newItem(defaultUnitLabel), sortOrder: current.items.length },
             ],
           }))
         }

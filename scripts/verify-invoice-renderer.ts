@@ -13,7 +13,18 @@ try {
   const tenItems = Array.from({ length: 10 }, (_, index) => ({ ...invoice.items[0], id: `item-${index + 1}`, description: `Barang pengujian ${index + 1} dengan deskripsi yang cukup panjang`, sortOrder: index }))
   const denseInvoice = { ...invoice, items: tenItems, subtotal: 2_000_000, grandTotal: 2_000_000, shippingMethod: "Kurir pengujian" }
   const densePng = await render("png", denseInvoice); const denseView = new DataView(densePng.buffer, densePng.byteOffset, densePng.byteLength); assert.equal(denseView.getUint32(16), 1240); assert.equal(denseView.getUint32(20), 1754)
+  const manyItems = Array.from({ length: 18 }, (_, index) => ({
+    ...invoice.items[0],
+    id: `many-item-${index + 1}`,
+    description: `Barang pengujian ${index + 1} dengan deskripsi panjang yang harus tampil seluruhnya pada invoice`,
+    sortOrder: index,
+  }))
+  const manyInvoice = { ...invoice, items: manyItems, subtotal: 3_600_000, grandTotal: 3_600_000 }
+  const manyPdf = await render("pdf", manyInvoice); assert.equal(String.fromCharCode(...manyPdf.slice(0, 5)), "%PDF-")
+  const manyPng = await render("png", manyInvoice); const manyView = new DataView(manyPng.buffer, manyPng.byteOffset, manyPng.byteLength); assert.equal(manyView.getUint32(16), 1240); assert.ok(manyView.getUint32(20) > 1754)
   if (process.env.INVOICE_RENDER_DENSE_OUTPUT) await Bun.write(process.env.INVOICE_RENDER_DENSE_OUTPUT, densePng)
+  if (process.env.INVOICE_RENDER_MANY_PDF_OUTPUT) await Bun.write(process.env.INVOICE_RENDER_MANY_PDF_OUTPUT, manyPdf)
+  if (process.env.INVOICE_RENDER_MANY_PNG_OUTPUT) await Bun.write(process.env.INVOICE_RENDER_MANY_PNG_OUTPUT, manyPng)
   if (process.env.INVOICE_RENDER_OUTPUT) await Bun.write(process.env.INVOICE_RENDER_OUTPUT, png)
-  console.log(`invoice renderer smoke passed: PDF ${pdf.byteLength} bytes, PNG ${png.byteLength} bytes (${view.getUint32(16)}x${view.getUint32(20)}), 10-item PNG ${densePng.byteLength} bytes (${denseView.getUint32(16)}x${denseView.getUint32(20)})`)
+  console.log(`invoice renderer smoke passed: PDF ${pdf.byteLength} bytes, PNG ${png.byteLength} bytes (${view.getUint32(16)}x${view.getUint32(20)}), 10-item PNG ${densePng.byteLength} bytes (${denseView.getUint32(16)}x${denseView.getUint32(20)}), 18-item PDF ${manyPdf.byteLength} bytes and PNG ${manyPng.byteLength} bytes (${manyView.getUint32(16)}x${manyView.getUint32(20)})`)
 } finally { processHandle.kill(); await Promise.race([processHandle.exited, Bun.sleep(2_000)]) }

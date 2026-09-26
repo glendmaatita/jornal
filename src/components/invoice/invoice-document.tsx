@@ -173,7 +173,8 @@ export const INVOICE_CSS = `
 .invoice-items-table th.invoice-no-col{width:14mm;text-align:center}
 .invoice-items-table th.invoice-qty-col{width:37mm;text-align:center}
 .invoice-items-table th.invoice-price-col,.invoice-items-table th.invoice-total-col{width:36mm;text-align:right}
-.invoice-items-table td{height:18.5mm;padding:0 5mm;border-bottom:1.2px solid #111;font-size:13.5px;vertical-align:middle;overflow-wrap:anywhere}
+.invoice-items-table td{height:18.5mm;padding:2mm 5mm;border-bottom:1.2px solid #111;font-size:13.5px;vertical-align:middle;overflow-wrap:anywhere}
+.invoice-description{display:block;white-space:pre-wrap}
 .invoice-items-table tbody tr:last-child td{border-bottom:0}
 .invoice-items-table td.invoice-no-cell,.invoice-items-table td.invoice-qty-cell{text-align:center}
 .invoice-items-table td.invoice-money-cell{text-align:right;white-space:nowrap}
@@ -226,8 +227,7 @@ export const INVOICE_CSS = `
 .invoice-paper-dense .invoice-customer-address{font-size:11.5px;line-height:1.2}
 .invoice-paper-dense .invoice-items-table{margin-top:4mm}
 .invoice-paper-dense .invoice-items-table th{height:9.5mm;padding:0 3mm;font-size:11px}
-.invoice-paper-dense .invoice-items-table td{height:10.5mm;padding:0 3mm;font-size:11.5px;line-height:1.15}
-.invoice-paper-dense .invoice-description{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.invoice-paper-dense .invoice-items-table td{height:10.5mm;padding:1.5mm 3mm;font-size:11.5px;line-height:1.15}
 .invoice-paper-dense .invoice-summary-divider{height:5.5mm;margin-top:1mm}
 .invoice-paper-dense .invoice-summary-row{gap:10mm;padding:2.5mm 3mm 0}
 .invoice-paper-dense .invoice-payment-title,.invoice-paper-dense .invoice-shipping-title{font-size:13px;margin-bottom:1mm}
@@ -243,5 +243,5 @@ export const INVOICE_CSS = `
 .invoice-paper-dense .invoice-payment-confirm{font-size:12px}
 .invoice-paper-dense .invoice-payment-confirm strong,.invoice-paper-dense .invoice-footer-email{font-size:13px}
 @media(max-width:850px){.invoice-paper{transform-origin:top left}}
-@media print{@page{size:A4 portrait;margin:0}html,body{width:210mm;min-height:297mm;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.invoice-paper{width:210mm;min-height:297mm;margin:0;padding:8mm 21mm 16mm;box-shadow:none}.invoice-date-card,.invoice-items-table thead tr,.invoice-items-table th,.invoice-summary-divider,.invoice-grand-total{background-color:#d9d9d9;-webkit-print-color-adjust:exact;print-color-adjust:exact}.invoice-topbar,.invoice-info-row,.invoice-items-table,.invoice-summary-divider,.invoice-summary-row,.invoice-grand-total,.invoice-footer{break-inside:avoid;page-break-inside:avoid}}
+@media print{@page{size:A4 portrait;margin:8mm 21mm 16mm}html,body{width:auto;min-height:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.invoice-paper{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}.invoice-date-card,.invoice-items-table thead tr,.invoice-items-table th,.invoice-summary-divider,.invoice-grand-total{background-color:#d9d9d9;-webkit-print-color-adjust:exact;print-color-adjust:exact}.invoice-items-table{break-inside:auto;page-break-inside:auto}.invoice-summary-divider{break-after:avoid;page-break-after:avoid}.invoice-topbar,.invoice-info-row,.invoice-summary-row,.invoice-grand-total,.invoice-footer{break-inside:avoid;page-break-inside:avoid}}
 `
