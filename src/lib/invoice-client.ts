@@ -390,6 +390,7 @@ export function listInvoices(
     search?: string;
     status?: string;
     customerId?: string;
+    expenseLinkable?: boolean;
   } = {},
 ) {
   return cached(`invoices.${JSON.stringify(options)}`, () =>
@@ -559,6 +560,22 @@ export async function correctInvoicePayment(
     reconcileServerTransactionDeletion(result.ledgerTransaction);
   else reconcileServerTransaction(result.ledgerTransaction);
   acceptServerTransactionRevision(result.ledgerTransaction.id, result.ledgerRevision);
+  return result;
+}
+
+export async function setInvoicePaidAmount(invoice: Invoice, paidAmount: number, reason: string) {
+  const result = await send<{
+    invoice: Invoice;
+    ledgerChanges: Array<{ transaction: Transaction; ledgerRevision: number; ledgerDeleted: boolean }>;
+  }>(`/api/jornal/invoicing/invoices/${encodeURIComponent(invoice.id)}/set-paid-amount`, {
+    method: "POST",
+    body: { ...scope(), expectedRevision: invoice.revision, paidAmount, reason, commandKey: command() },
+  });
+  for (const change of result.ledgerChanges) {
+    if (change.ledgerDeleted) reconcileServerTransactionDeletion(change.transaction);
+    else reconcileServerTransaction(change.transaction);
+    acceptServerTransactionRevision(change.transaction.id, change.ledgerRevision);
+  }
   return result;
 }
 

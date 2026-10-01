@@ -16,6 +16,7 @@ import {
   Tag,
   Trash2,
   Truck,
+  Undo2,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import {
   OFFLINE_INVOICE_SYNCED_EVENT,
   queueInvoiceDraft,
   updateInvoice,
+  setInvoicePaidAmount,
   type InvoiceDraftInput,
 } from "@/lib/invoice-client";
 import { formatRupiah, parseAmountInput, todayIsoDate } from "@/lib/format";
@@ -123,6 +125,8 @@ export function InvoiceFormPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [correctedPaidAmount, setCorrectedPaidAmount] = useState("");
+  const [paymentCorrectionReason, setPaymentCorrectionReason] = useState("");
   const updateForm = (updater: Parameters<typeof setForm>[0]) => {
     userEditedDraft.current = true;
     setForm(updater);
@@ -288,11 +292,36 @@ export function InvoiceFormPage({
       setBusy(false);
     }
   };
-  const revising = invoice?.status === "UNPAID";
+  const revising = invoice?.status === "UNPAID" && !(invoice.paidAmount ?? 0);
   const editable = !invoice || invoice.status === "DRAFT" || revising;
   if (invoiceId && !invoice) {
     if (!error) return <PageLoading label="Memuat invoice…" />;
     return <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>;
+  }
+  if (invoice && (invoice.paidAmount ?? 0) > 0) {
+    const currentPaid = invoice.paidAmount ?? 0;
+    const nextPaid = parseAmountInput(correctedPaidAmount);
+    return <div className="space-y-4 pb-8">
+      <header><h1 className="flex items-center gap-2 text-2xl"><FilePen className="size-5 text-primary" aria-hidden="true" />Revisi Invoice</h1><p className="text-sm text-muted-foreground">Koreksi pembayaran untuk kembali ke belum bayar atau dibayar sebagian.</p></header>
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      <Card><CardContent className="grid gap-3 p-4">
+        <p className="text-sm">Total invoice: <strong>{formatRupiah(invoice.grandTotal)}</strong></p>
+        <p className="text-sm">Sudah dibayar: <strong>{formatRupiah(currentPaid)}</strong></p>
+        <TextField label="Total sudah dibayar setelah koreksi" type="amount" prefix="Rp" value={correctedPaidAmount} onChange={setCorrectedPaidAmount} placeholder="0 untuk belum bayar" />
+        <TextField label="Alasan perubahan pembayaran" value={paymentCorrectionReason} onChange={setPaymentCorrectionReason} placeholder="Contoh: nominal transfer keliru" />
+        <p className="text-xs text-muted-foreground">Transaksi pemasukan yang dikoreksi akan ikut berubah. Isi 0 untuk membuka revisi isi invoice.</p>
+        <Button disabled={busy || !correctedPaidAmount.trim() || !paymentCorrectionReason.trim() || nextPaid >= currentPaid} onClick={() => void (async () => {
+          setBusy(true); setError("");
+          try {
+            const result = await setInvoicePaidAmount(invoice, nextPaid, paymentCorrectionReason.trim());
+            setInvoice(result.invoice); setCorrectedPaidAmount(""); setPaymentCorrectionReason("");
+            await client.invalidateQueries({ queryKey: ["invoice"] });
+          } catch (cause) { setError(cause instanceof Error ? cause.message : "Pembayaran gagal dikoreksi."); }
+          finally { setBusy(false); }
+        })()}><Undo2 aria-hidden="true" />Simpan koreksi pembayaran</Button>
+      </CardContent></Card>
+      <Link to="/invoices/$invoiceId" params={{ invoiceId: invoice.id }} className="inline-block text-sm font-semibold text-[var(--link)] underline">Kembali ke invoice</Link>
+    </div>;
   }
   return (
     <div className="min-w-0 space-y-4 pb-28 sm:pb-8">

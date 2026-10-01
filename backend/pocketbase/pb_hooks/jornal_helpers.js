@@ -32,6 +32,12 @@ function validatePayloadReferences(event, companyId) {
       throw new ApiError(409, "Invoice metadata can only be changed through invoice commands")
     }
     if (value(payload, "documentId")) throw new ApiError(409, "Document linkage can only be changed through document commands")
+    const relatedInvoiceId = String(value(payload, "relatedInvoiceId") || "")
+    if (relatedInvoiceId) {
+      if (value(payload, "direction") !== "MONEY_OUT" || value(payload, "classification") === "INTERNAL_TRANSFER") throw new ApiError(400, "Only money-out transactions can relate to an invoice")
+      const invoice = require(`${__hooks}/invoice_helpers.js`).ownedRecord($app, "invoices", relatedInvoiceId, scope.ownerTenantId, companyId, scope.dataEpoch, "Invoice")
+      if (!["UNPAID", "PAID"].includes(invoice.getString("status")) || invoice.getString("deleted_at")) throw new ApiError(409, "Related invoice is not available")
+    }
     const invoiceLinks = $app.findRecordsByFilter(
       "invoice_payments",
       "tenant_id = {:tenant} && company_id = {:company} && ledger_transaction_id = {:transaction} && status = 'ACTIVE'",

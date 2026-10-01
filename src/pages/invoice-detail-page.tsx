@@ -38,6 +38,7 @@ import {
   issueInvoice,
   listInvoicePaymentCandidates,
   markInvoicePaid,
+  setInvoicePaidAmount,
   voidInvoice,
 } from "@/lib/invoice-client";
 import {
@@ -46,10 +47,11 @@ import {
   invoicePng,
   printInvoice,
 } from "@/lib/invoice-export";
-import { formatDateLong, formatDateShort, formatInvoiceNumber, formatRupiah, todayIsoDate } from "@/lib/format";
-import { useAccounts } from "@/lib/queries";
+import { formatDateLong, formatDateShort, formatInvoiceNumber, formatRupiah, parseAmountInput, todayIsoDate } from "@/lib/format";
+import { useAccounts, useTransactions } from "@/lib/queries";
 import { activeCompany, loadCompanyLogo } from "@/lib/companies";
 import { isAccountEnabled } from "@/lib/types";
+import { INVOICE_STATUS_LABELS } from "@/lib/invoice-types";
 
 export function InvoiceDetailPage({
   invoiceId,
@@ -75,6 +77,7 @@ export function InvoiceDetailPage({
     queryFn: getInvoiceSettings,
   });
   const { data: accounts = [] } = useAccounts();
+  const { data: transactions = [] } = useTransactions();
   const documentRef = useRef<HTMLDivElement>(null);
   const [paidOn, setPaidOn] = useState(todayIsoDate());
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -84,6 +87,8 @@ export function InvoiceDetailPage({
   );
   const [candidateId, setCandidateId] = useState("");
   const [reason, setReason] = useState("");
+  const [correctedPaidAmount, setCorrectedPaidAmount] = useState("");
+  const [paymentCorrectionReason, setPaymentCorrectionReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const enabledAccounts = accounts.filter(isAccountEnabled);
@@ -127,6 +132,8 @@ export function InvoiceDetailPage({
       </p>
     );
   const { invoice, payments = [] } = detail.data;
+  const relatedExpenses = transactions.filter((transaction) => transaction.direction === "MONEY_OUT" && transaction.relatedInvoiceId === invoice.id)
+    .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || b.createdAt.localeCompare(a.createdAt));
   const remainingAmount = invoice.remainingAmount ?? invoice.grandTotal - (invoice.paidAmount ?? 0);
   const enteredAmount = paymentAmount ? Number(paymentAmount.replace(/\D/g, "")) : remainingAmount;
   const displayedInvoiceNumber = formatInvoiceNumber(
@@ -148,17 +155,17 @@ export function InvoiceDetailPage({
                 {displayedInvoiceNumber || "Draft Invoice"}
               </h1>
               <p className="text-sm text-muted-foreground">
-                {invoice.status === "UNPAID" && (invoice.paidAmount ?? 0) > 0 ? "Dibayar sebagian" : invoice.status} · revisi {invoice.revision}
+                {invoice.status === "UNPAID" && (invoice.paidAmount ?? 0) > 0 ? "Dibayar sebagian" : INVOICE_STATUS_LABELS[invoice.status]} · revisi {invoice.revision}
               </p>
             </div>
-            {(invoice.status === "DRAFT" || (invoice.status === "UNPAID" && !(invoice.paidAmount ?? 0))) && (
+            {invoice.status !== "VOID" && (
               <Link
                 to="/invoices/$invoiceId/edit"
                 params={{ invoiceId }}
                 className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--link)]"
               >
                 <Pencil className="size-4" aria-hidden="true" />
-                {invoice.status === "UNPAID" ? "Revisi" : "Edit"}
+                {invoice.status === "DRAFT" ? "Edit" : "Revisi"}
               </Link>
             )}
           </header>
@@ -369,7 +376,7 @@ export function InvoiceDetailPage({
               />
               {payments.map((payment) => (
                 <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
-                  <span>{formatDateLong(payment.paidOn)} · {formatRupiah(payment.amount)}</span>
+                  <Link to="/transactions/$transactionId" params={{ transactionId: payment.ledgerTransactionId }} className="font-medium text-[var(--link)] underline">{formatDateLong(payment.paidOn)} · {formatRupiah(payment.amount)}</Link>
                   <Button
                     variant="outline"
                     disabled={busy || !reason.trim()}
@@ -382,6 +389,26 @@ export function InvoiceDetailPage({
               ))}
             </section>
           )}
+          {(invoice.paidAmount ?? 0) > 0 && <section id="payment-correction" className="grid gap-3 rounded-xl border bg-white p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><Pencil className="size-4 text-primary" aria-hidden="true" />Ubah status pembayaran</h2>
+            <p className="text-sm text-muted-foreground">Saat ini dibayar {formatRupiah(invoice.paidAmount ?? 0)}. Isi 0 untuk kembali ke belum bayar, atau jumlah lebih kecil untuk dibayar sebagian. Transaksi pemasukan terkait akan ikut dikoreksi.</p>
+            <TextField label="Total sudah dibayar setelah koreksi" type="amount" prefix="Rp" value={correctedPaidAmount} onChange={setCorrectedPaidAmount} placeholder="0 untuk belum bayar" />
+            <TextField label="Alasan perubahan pembayaran" value={paymentCorrectionReason} onChange={setPaymentCorrectionReason} placeholder="Contoh: nominal transfer keliru" />
+            <Button variant="outline" disabled={busy || !correctedPaidAmount.trim() || !paymentCorrectionReason.trim() || parseAmountInput(correctedPaidAmount) >= (invoice.paidAmount ?? 0)} onClick={() => void run(async () => {
+              await setInvoicePaidAmount(invoice, parseAmountInput(correctedPaidAmount), paymentCorrectionReason.trim())
+              setCorrectedPaidAmount(""); setPaymentCorrectionReason("")
+            })}><Undo2 aria-hidden="true" />Simpan koreksi pembayaran</Button>
+          </section>}
+          <section className="grid gap-3 rounded-xl border bg-white p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><ArrowUpRight className="size-4 text-primary" aria-hidden="true" />Uang keluar terkait</h2>
+            {relatedExpenses.length ? <>
+              <p className="text-sm text-muted-foreground">{relatedExpenses.length} transaksi · Total {formatRupiah(relatedExpenses.reduce((sum, transaction) => sum + transaction.amount, 0))}</p>
+              {relatedExpenses.map((transaction) => <Link key={transaction.id} to="/transactions/$transactionId" params={{ transactionId: transaction.id }} className="flex items-center justify-between gap-3 border-t pt-3 text-sm text-[var(--link)]">
+                <span className="min-w-0 truncate">{formatDateShort(transaction.transactionDate)} · {transaction.description || "Uang keluar"}</span>
+                <strong className="shrink-0 tabular-nums">{formatRupiah(transaction.amount)}</strong>
+              </Link>)}
+            </> : <p className="text-sm text-muted-foreground">Belum ada uang keluar yang dikaitkan ke invoice ini.</p>}
+          </section>
           <div className="flex gap-2">
             <Button
               variant="outline"

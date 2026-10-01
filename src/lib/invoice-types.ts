@@ -4,6 +4,7 @@ export const MAX_INVOICE_ITEMS = 100
 export const MAX_INVOICE_TOTAL = 1_000_000_000_000
 
 export type InvoiceStatus = "DRAFT" | "UNPAID" | "PAID" | "VOID"
+export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = { DRAFT: "Draft", UNPAID: "Belum bayar", PAID: "Lunas", VOID: "Batal" }
 export type InvoicePaymentOrigin = "CREATED" | "LINKED"
 export type InvoicePaymentStatus = "ACTIVE" | "REVERSED"
 export type InvoiceCustomerStatus = "ACTIVE" | "ARCHIVED"

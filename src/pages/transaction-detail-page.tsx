@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import { ArrowLeft, Copy, Pencil, Trash2 } from "lucide-react"
 
@@ -7,13 +6,16 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useAppDialog } from "@/components/ui/app-dialog-context"
 import { Card, CardContent } from "@/components/ui/card"
+import { AttachmentPreview } from "@/components/attachment-preview"
 import { categoryName } from "@/lib/categories"
-import { formatRupiah, formatDateLong } from "@/lib/format"
+import { formatRupiah, formatDateLong, formatInvoiceNumber } from "@/lib/format"
+import { getInvoice } from "@/lib/invoice-client"
+import { paymentMethodLabel } from "@/lib/payment-method"
 import { queryKeys, useAccountMap, useTransactions } from "@/lib/queries"
 import { deleteTransaction, duplicateTransaction, isCompanyWritable } from "@/lib/store"
 import { TAX_TREATMENTS } from "@/lib/tax"
 import { CLASSIFICATION_LABELS, type Transaction } from "@/lib/types"
-import { getCompanyFileAccess } from "@/lib/pocketbase-sync"
+import { useAttachmentUrl } from "@/lib/use-attachment-url"
 
 export function TransactionDetailPage({ transactionId }: { transactionId: string }) {
   const dialog = useAppDialog()
@@ -24,24 +26,13 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
   const accountMap = useAccountMap()
 
   const transaction = transactions.find((candidate) => candidate.id === transactionId)
-  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(transaction?.attachmentDataUrl ?? transaction?.attachmentRemoteUrl ?? null)
-
-  /* eslint-disable react-hooks/set-state-in-effect -- reset when the viewed record changes */
-  useEffect(() => {
-    let cancelled = false
-    const currentUrl = transaction?.attachmentDataUrl ?? transaction?.attachmentRemoteUrl ?? null
-    setAttachmentUrl(currentUrl)
-    if (!currentUrl || currentUrl.startsWith("data:")) return () => { cancelled = true }
-    void getCompanyFileAccess().then(({ token, grant }) => {
-      if (cancelled || !token || !grant) return
-      const url = new URL(currentUrl, window.location.origin)
-      url.searchParams.set("token", token)
-      url.searchParams.set("grant", grant)
-      setAttachmentUrl(url.toString())
-    }).catch(() => undefined)
-    return () => { cancelled = true }
-  }, [transaction?.attachmentDataUrl, transaction?.attachmentRemoteUrl])
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const attachmentUrl = useAttachmentUrl(transaction?.attachmentDataUrl, transaction?.attachmentRemoteUrl)
+  const invoiceId = transaction?.relatedInvoiceId ?? transaction?.invoiceId ?? null
+  const relatedInvoice = useQuery({
+    queryKey: ["invoice", "detail", invoiceId],
+    queryFn: () => getInvoice(invoiceId!),
+    enabled: Boolean(invoiceId),
+  })
 
   const remove = useMutation({
     mutationFn: async () => deleteTransaction(transactionId),
@@ -104,8 +95,16 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
           <dl className="mt-6 space-y-3 border-t border-border/60 pt-4 text-sm">
             <DetailRow label="Kategori" value={categoryName(transaction.categoryId)} />
             {account && <DetailRow label="Akun" value={transferTo ? `${account.name} → ${transferTo.name}` : account.name} />}
-            {transaction.paymentMethod && <DetailRow label="Metode" value={transaction.paymentMethod} />}
+            {transaction.paymentMethod && <DetailRow label="Metode" value={paymentMethodLabel(transaction.paymentMethod)} />}
             {transaction.supplierCustomer && <DetailRow label="Supplier / Customer" value={transaction.supplierCustomer} />}
+            {invoiceId && (
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:gap-3">
+                <dt className="text-muted-foreground sm:w-36 sm:shrink-0">{transaction.relatedInvoiceId ? "Invoice terkait" : "Pembayaran invoice"}</dt>
+                <dd className="min-w-0 flex-1"><Link to="/invoices/$invoiceId" params={{ invoiceId }} className="break-all font-medium text-primary underline">
+                  {relatedInvoice.data?.invoice ? formatInvoiceNumber(relatedInvoice.data.invoice.invoiceNumber, relatedInvoice.data.invoice.sequence, relatedInvoice.data.invoice.issueDate) || "Draft invoice" : transaction.invoiceNumber || "Lihat invoice"}
+                </Link></dd>
+              </div>
+            )}
             {transaction.classification === "RECEIVABLE_CREATED" && transaction.receivableDueDate && <DetailRow label="Jatuh tempo piutang" value={formatDateLong(transaction.receivableDueDate)} />}
             {transaction.classification === "RECEIVABLE_PAYMENT" && transaction.receivableTransactionId && (
               <div className="flex gap-3"><dt className="w-36 shrink-0 text-muted-foreground">Untuk piutang</dt><dd><Link to="/transactions/$transactionId" params={{ transactionId: transaction.receivableTransactionId }} className="text-primary underline">Lihat piutang asal</Link></dd></div>
@@ -120,11 +119,12 @@ export function TransactionDetailPage({ transactionId }: { transactionId: string
             {transaction.attachmentName && (
               <div className="flex gap-3">
                 <dt className="w-36 shrink-0 text-muted-foreground">Lampiran</dt>
-                <dd className="flex-1">
+                <dd className="min-w-0 flex-1">
                   {attachmentUrl ? (
-                    <a href={attachmentUrl} download={transaction.attachmentName} className="text-primary underline">
-                      {transaction.attachmentName}
-                    </a>
+                    <>
+                      <a href={attachmentUrl} download={transaction.attachmentName} className="break-all text-primary underline">{transaction.attachmentName}</a>
+                      <AttachmentPreview name={transaction.attachmentName} url={attachmentUrl} />
+                    </>
                   ) : (
                     transaction.attachmentName
                   )}

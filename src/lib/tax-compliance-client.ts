@@ -292,16 +292,24 @@ export async function downloadTaxEvidence(evidenceId: string, filename: string) 
   await downloadAuthenticated(`/api/jornal/tax/evidence/${encodeURIComponent(evidenceId)}/download`, filename)
 }
 
+export function fetchTaxEvidence(evidenceId: string) {
+  return fetchAuthenticated(`/api/jornal/tax/evidence/${encodeURIComponent(evidenceId)}/download`)
+}
+
 function download(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob); const anchor = document.createElement("a")
   anchor.href = url; anchor.download = name; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url)
 }
 
 async function downloadAuthenticated(path: string, name: string) {
+  download(name, await fetchAuthenticated(path))
+}
+
+async function fetchAuthenticated(path: string): Promise<Blob> {
   if (!pocketBaseConfigured || !pb.authStore.token) throw new Error("Sesi login diperlukan untuk mengunduh data pajak.")
   const response = await fetch(`${pb.baseURL}${path}`, { headers: { Authorization: pb.authStore.token, "X-Jornal-Company": getCompanyScope().companyId, "X-Jornal-Protocol": "3" } })
   if (!response.ok) throw new Error(`Unduhan gagal (${response.status}).`)
-  download(name, await response.blob())
+  return response.blob()
 }
 
 export async function downloadTaxReport(subjectId: string, year: number) {

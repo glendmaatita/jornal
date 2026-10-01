@@ -51,13 +51,14 @@ routerAdd(
         "after_snapshot",
       ]),
     );
-    const ledgerIds = [
-      ...new Set(
-        payments
-          .map((item) => String(item.ledger_transaction_id || ""))
-          .filter(Boolean),
-      ),
-    ];
+    const invoiceIds = new Set(invoices.map((invoice) => String(invoice.id)))
+    const relatedExpenses = h.findAllRecords($app, "jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'transactions' && deleted_at = ''", "", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch })
+      .filter((record) => invoiceIds.has(String(h.json(record, "payload", {}).relatedInvoiceId || "")))
+      .map((record) => record.getString("app_id"))
+    const ledgerIds = [...new Set([
+      ...payments.map((item) => String(item.ledger_transaction_id || "")).filter(Boolean),
+      ...relatedExpenses,
+    ])];
     const ledger = ledgerIds
       .map((id) => {
         try {
@@ -593,6 +594,8 @@ routerAdd(
             companyId: scope.companyId,
             invoiceId:
               maps.invoices[String(item.payload?.invoiceId || "")] || null,
+            relatedInvoiceId:
+              maps.invoices[String(item.payload?.relatedInvoiceId || "")] || null,
             customerId:
               maps.customers[String(item.payload?.customerId || "")] || null,
             accountId: resolveAccount(item.payload?.accountId) || null,

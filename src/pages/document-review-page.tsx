@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { AlertTriangle, Archive, ArrowDownLeft, ArrowLeft, ArrowUpRight, ExternalLink, FileText, Link2, MessageSquare, PenLine, ScanSearch, Sparkles, Undo2, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { AttachmentPreview } from "@/components/attachment-preview"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
 import { SelectField } from "@/components/ui/select-field"
@@ -20,7 +21,7 @@ export function DocumentReviewPage({ documentId }: { documentId: string }) {
   const [review, setReview] = useState({ amount: "", transactionDate: todayIsoDate(), direction: "MONEY_OUT" as "MONEY_IN" | "MONEY_OUT", description: "" })
   const parsedAmount = Math.round(Number(review.amount.replace(/[^0-9.]/g, "")))
   const invoiceCandidates = useQuery({ queryKey: ["documents", documentId, "invoice-candidates", parsedAmount], queryFn: () => listDocumentInvoiceCandidates(documentId, parsedAmount), enabled: parsedAmount > 0 && detail.data?.document.status !== "LINKED" })
-  const imageUrl = useMemo(() => detail.data && detail.data.document.mimeType.startsWith("image/") ? `data:${detail.data.document.mimeType};base64,${detail.data.contentBase64}` : "", [detail.data])
+  const previewUrl = useMemo(() => detail.data?.contentBase64 ? `data:${detail.data.document.mimeType};base64,${detail.data.contentBase64}` : "", [detail.data])
 
   // Poll the durable job until terminal; `detail.refetch` belongs to this mounted document.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -37,7 +38,7 @@ export function DocumentReviewPage({ documentId }: { documentId: string }) {
   return <div className="space-y-4 pb-8">
     <header><h1 className="flex items-center gap-2 text-2xl"><ScanSearch className="size-5 text-primary" aria-hidden="true" />Review Dokumen</h1><p className="text-sm text-muted-foreground">{document.filename} · {document.status}</p></header>
     {message && <p className="rounded-xl bg-white p-3 text-sm">{message}</p>}
-    {imageUrl ? <img src={imageUrl} alt="Dokumen transaksi" className="max-h-[55vh] w-full rounded-xl bg-white object-contain" /> : <Card><CardContent className="p-8 text-center"><FileText className="mx-auto mb-2 size-7 text-muted-foreground" aria-hidden="true" />Preview PDF belum tersedia; file tetap tersimpan.</CardContent></Card>}
+    {previewUrl ? <AttachmentPreview name={document.filename} url={previewUrl} mimeType={document.mimeType} /> : <Card><CardContent className="p-8 text-center"><FileText className="mx-auto mb-2 size-7 text-muted-foreground" aria-hidden="true" />Pratinjau dokumen tidak tersedia.</CardContent></Card>}
     <Button className="w-full" disabled={busy || job?.status === "RUNNING" || job?.status === "QUEUED" || document.status === "LINKED"} onClick={() => void scan()}><Sparkles />{job?.status === "RUNNING" || job?.status === "QUEUED" ? "AI sedang membaca…" : "Baca dengan AI"}</Button>
     {job?.errorCode && <p className="text-sm text-red-700">AI gagal: {job.errorCode}. Input manual tetap tersedia.</p>}
     {document.status !== "LINKED" && <Card><CardContent className="grid gap-3 p-4">

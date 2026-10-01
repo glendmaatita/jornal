@@ -257,6 +257,16 @@ integrationTest(
       200_000,
     );
     const invoice = draft.data.invoice as Record<string, unknown>;
+    for (const term of ["pelanggan a", "a@example.com", "00123"]) {
+      const found = await send(
+        `/api/jornal/invoicing/invoices?companyId=${companyId}&dataEpoch=1&search=${encodeURIComponent(term)}`,
+        { headers: headers(owner.token) },
+      );
+      expect(found.response.status).toBe(200);
+      const match = (found.data.items as Record<string, unknown>[]).find((item) => item.id === invoice.id);
+      expect(match).toBeDefined();
+      expect((match?.customerSnapshot as Record<string, unknown>).name).toBe("Pelanggan A");
+    }
     const issued = await send(
       `/api/jornal/invoicing/invoices/${invoice.id}/issue`,
       {
@@ -649,6 +659,15 @@ integrationTest(
       string,
       unknown
     >;
+    const relatedExpense = { ...existingTransaction, id: "invoice-expense-1", direction: "MONEY_OUT", classification: "OPERATING_EXPENSE", description: "Biaya supplier", relatedInvoiceId: duplicateDraft.id };
+    const createLedgerRecord = (transaction: Record<string, unknown>) => send("/api/collections/jornal_records/records", {
+      method: "POST",
+      headers: { ...headers(owner.token), "X-Jornal-Company": companyId },
+      body: JSON.stringify({ business_id: owner.id, company_id: companyId, data_epoch: 1, entity: "transactions", app_id: transaction.id, payload: transaction, revision: 1 }),
+    });
+    expect((await createLedgerRecord(relatedExpense)).response.status).toBe(200);
+    expect((await createLedgerRecord({ ...relatedExpense, id: "invoice-expense-invalid", relatedInvoiceId: "missing-invoice" })).response.status).toBe(404);
+    expect((await createLedgerRecord({ ...relatedExpense, id: "invoice-income-invalid", direction: "MONEY_IN" })).response.status).toBe(400);
     const linked = await send(
       `/api/jornal/invoicing/invoices/${duplicateDraft.id}/mark-paid`,
       {
@@ -674,6 +693,15 @@ integrationTest(
     );
     expect((linked.data.invoice as Record<string, unknown>).remainingAmount).toBe(120_000);
     const linkedPayment = linked.data.payment as Record<string, unknown>;
+    const linkedAdjustment = await send(`/api/jornal/invoicing/invoices/${duplicateDraft.id}/set-paid-amount`, {
+      method: "POST", headers: headers(owner.token),
+      body: JSON.stringify({ ...base, commandKey: "adjust-linked-payment", expectedRevision: (linked.data.invoice as Record<string, unknown>).revision, paidAmount: 40_000, reason: "Nilai transfer dikoreksi" }),
+    });
+    expect(linkedAdjustment.response.status).toBe(200);
+    expect(linkedAdjustment.data.invoice).toMatchObject({ status: "UNPAID", paidAmount: 40_000 });
+    expect((linkedAdjustment.data.ledgerChanges as Array<Record<string, unknown>>)[0].transaction).toMatchObject({ amount: 40_000 });
+    const adjustedLinkedDetail = await send(`/api/jornal/invoicing/invoices/${duplicateDraft.id}?companyId=${companyId}&dataEpoch=1`, { headers: headers(owner.token) });
+    const adjustedLinkedPayment = (adjustedLinkedDetail.data.payments as Array<Record<string, unknown>>)[0];
     const unlink = await send(
       `/api/jornal/invoicing/payments/${linkedPayment.id}/correct`,
       {
@@ -682,12 +710,13 @@ integrationTest(
         body: JSON.stringify({
           ...base,
           commandKey: "correct-link-1",
-          expectedRevision: linkedPayment.revision,
+          expectedRevision: adjustedLinkedPayment.revision,
           reason: "Transfer bukan untuk invoice ini",
         }),
       },
     );
     expect(unlink.response.status).toBe(200);
+    expect((unlink.data.ledgerTransaction as Record<string, unknown>).amount).toBe(40_000);
     const voidDuplicate = await send(
       `/api/jornal/invoicing/invoices/${duplicateDraft.id}/void`,
       {
@@ -1144,6 +1173,7 @@ integrationTest(
     expect(
       (backup.data.data as Record<string, unknown[]>).invoices.length,
     ).toBe(3);
+    expect(((backup.data.data as Record<string, unknown[]>).ledger as Array<Record<string, unknown>>).some((row) => (row.payload as Record<string, unknown>)?.relatedInvoiceId === duplicateDraft.id)).toBe(true);
     const backupPreview = await send("/api/jornal/invoicing/backup/dry-run", {
       method: "POST",
       headers: headers(owner.token),
@@ -1227,5 +1257,49 @@ integrationTest(
         (item) => item.id === legacyInvoice.id,
       ),
     ).toBe(true);
+
+    const adjustmentDraft = await send("/api/jornal/invoicing/invoices", {
+      method: "POST", headers: headers(owner.token),
+      body: JSON.stringify({ ...base, commandKey: "draft-payment-adjustment", customerId: reminderCustomerId, issueDate: today, dueDate: nextWeek, items: [{ description: "Jasa revisi pembayaran", quantityScaled: 1_000, unitLabel: "pcs", unitPrice: 90_000, sortOrder: 0 }] }),
+    });
+    expect(adjustmentDraft.response.status).toBe(201);
+    const adjustmentInvoice = adjustmentDraft.data.invoice as Record<string, unknown>;
+    const adjustmentIssued = await send(`/api/jornal/invoicing/invoices/${adjustmentInvoice.id}/issue`, {
+      method: "POST", headers: headers(owner.token),
+      body: JSON.stringify({ ...base, commandKey: "issue-payment-adjustment", expectedRevision: adjustmentInvoice.revision }),
+    });
+    expect(adjustmentIssued.response.status).toBe(200);
+    const adjustmentPaid = await send(`/api/jornal/invoicing/invoices/${adjustmentInvoice.id}/mark-paid`, {
+      method: "POST", headers: headers(owner.token),
+      body: JSON.stringify({ ...base, commandKey: "pay-payment-adjustment", expectedRevision: (adjustmentIssued.data.invoice as Record<string, unknown>).revision, transactionId: "payment-adjustment-cash", paidOn: today, amount: 90_000 }),
+    });
+    expect(adjustmentPaid.response.status).toBe(200);
+    const partialAdjustment = await send(`/api/jornal/invoicing/invoices/${adjustmentInvoice.id}/set-paid-amount`, {
+      method: "POST", headers: headers(owner.token),
+      body: JSON.stringify({ ...base, commandKey: "adjust-to-partial", expectedRevision: (adjustmentPaid.data.invoice as Record<string, unknown>).revision, paidAmount: 35_000, reason: "Nominal transfer dikoreksi" }),
+    });
+    expect(partialAdjustment.response.status).toBe(200);
+    expect(partialAdjustment.data.invoice).toMatchObject({ status: "UNPAID", paidAmount: 35_000 });
+    expect((partialAdjustment.data.ledgerChanges as Array<Record<string, unknown>>)[0].transaction).toMatchObject({ amount: 35_000, invoiceRevenueAmount: 35_000 });
+    const repaid = await send(`/api/jornal/invoicing/invoices/${adjustmentInvoice.id}/mark-paid`, {
+      method: "POST", headers: headers(owner.token),
+      body: JSON.stringify({ ...base, commandKey: "repay-payment-adjustment", expectedRevision: (partialAdjustment.data.invoice as Record<string, unknown>).revision, transactionId: "payment-adjustment-cash-2", paidOn: today, amount: 55_000 }),
+    });
+    expect(repaid.response.status).toBe(200);
+    expect(repaid.data.invoice).toMatchObject({ status: "PAID", paidAmount: 90_000 });
+    const multipleAdjustment = await send(`/api/jornal/invoicing/invoices/${adjustmentInvoice.id}/set-paid-amount`, {
+      method: "POST", headers: headers(owner.token),
+      body: JSON.stringify({ ...base, commandKey: "adjust-multiple-payments", expectedRevision: (repaid.data.invoice as Record<string, unknown>).revision, paidAmount: 20_000, reason: "Dua transfer dikoreksi" }),
+    });
+    expect(multipleAdjustment.response.status).toBe(200);
+    expect(multipleAdjustment.data.invoice).toMatchObject({ status: "UNPAID", paidAmount: 20_000 });
+    expect((multipleAdjustment.data.ledgerChanges as Array<Record<string, unknown>>).some((change) => change.ledgerDeleted === true)).toBe(true);
+    const unpaidAdjustment = await send(`/api/jornal/invoicing/invoices/${adjustmentInvoice.id}/set-paid-amount`, {
+      method: "POST", headers: headers(owner.token),
+      body: JSON.stringify({ ...base, commandKey: "adjust-to-unpaid", expectedRevision: (multipleAdjustment.data.invoice as Record<string, unknown>).revision, paidAmount: 0, reason: "Pembayaran dibatalkan" }),
+    });
+    expect(unpaidAdjustment.response.status).toBe(200);
+    expect(unpaidAdjustment.data.invoice).toMatchObject({ status: "UNPAID", paidAmount: 0 });
+    expect((unpaidAdjustment.data.ledgerChanges as Array<Record<string, unknown>>)[0].ledgerDeleted).toBe(true);
   },
 );

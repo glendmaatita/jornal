@@ -124,9 +124,28 @@ routerAdd("GET", "/api/jornal/invoicing/invoices", (event) => {
   const page = Math.max(1, Number(query.page || 1)); const perPage = Math.max(1, Math.min(100, Number(query.perPage || 25))); const allowed = ["DRAFT", "UNPAID", "PAID", "VOID"]
   let filter = "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && deleted_at = ''"; const params = { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch }
   if (allowed.includes(String(query.status))) { filter += " && status = {:status}"; params.status = String(query.status) }
+  if (String(query.expenseLinkable) === "true") filter += " && status != 'DRAFT' && status != 'VOID'"
   if (query.customerId) { filter += " && customer_id = {:customer}"; params.customer = String(query.customerId) }
-  const all = h.findAllRecords($app, "invoices", filter, "-issue_date,-created", params); const search = String(query.search || "").trim().toLowerCase(); const filtered = search ? all.filter((record) => record.getString("invoice_number").toLowerCase().includes(search) || h.invoiceNumberForDisplay(record).toLowerCase().includes(search) || String((h.json(record, "customer_snapshot", {}) || {}).name || "").toLowerCase().includes(search)) : all
-  return event.json(200, { items: filtered.slice((page - 1) * perPage, page * perPage).map(h.invoiceResponse), page, perPage, totalItems: filtered.length, totalPages: Math.max(1, Math.ceil(filtered.length / perPage)) })
+  const all = h.findAllRecords($app, "invoices", filter, "-issue_date,-created", params)
+  const customers = h.findAllRecords($app, "invoice_customers", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch}", "", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch })
+  const customerById = new Map(customers.map((record) => [record.id, h.customerResponse(record)]))
+  const search = h.normalize(query.search)
+  const phoneSearch = h.normalizePhone(query.search)
+  const customerFields = ["name", "email", "phone", "addressLine1", "addressLine2", "district", "city", "province", "postalCode"]
+  const matchesCustomer = (customer) => customer && (customerFields.some((field) => h.normalize(customer[field]).includes(search)) || (phoneSearch && h.normalizePhone(customer.phone).includes(phoneSearch)))
+  const filtered = search ? all.filter((record) => {
+    const snapshot = h.json(record, "customer_snapshot", null)
+    return h.normalize(record.getString("invoice_number")).includes(search)
+      || h.normalize(h.invoiceNumberForDisplay(record)).includes(search)
+      || matchesCustomer(snapshot)
+      || matchesCustomer(customerById.get(record.getString("customer_id")))
+  }) : all
+  const items = filtered.slice((page - 1) * perPage, page * perPage).map((record) => {
+    const invoice = h.invoiceResponse(record)
+    if (!invoice.customerSnapshot) invoice.customerSnapshot = customerById.get(invoice.customerId) || null
+    return invoice
+  })
+  return event.json(200, { items, page, perPage, totalItems: filtered.length, totalPages: Math.max(1, Math.ceil(filtered.length / perPage)) })
 }, $apis.requireAuth())
 
 routerAdd("GET", "/api/jornal/invoicing/products", (event) => {
@@ -325,6 +344,82 @@ routerAdd("POST", "/api/jornal/invoicing/payments/{id}/correct", (event) => {
     const documents = tx.findRecordsByFilter("document_inbox", "linked_payment_id = {:payment} && status = 'LINKED'", "", 0, 0, { payment: payment.id }); documents.forEach((document) => { document.set("status", "REVIEW_READY"); document.set("linked_transaction_id", ""); document.set("linked_payment_id", ""); document.set("unlink_reason", reason); document.set("revision", document.getInt("revision") + 1); tx.save(document) })
     response = { invoice: h.invoiceResponse(invoice), payment: h.paymentResponse(payment), ledgerTransaction, ledgerRevision: ledgerRecord.getInt("revision"), ledgerDeleted: origin === "CREATED" }; h.audit(tx, scope.tenantId, scope.companyId, scope.epoch, scope.tenantId, "invoice-payment-corrected", "payment", payment.id, key, reason, null, response); h.saveCommand(tx, scope.tenantId, scope.companyId, scope.epoch, key, "CORRECT_PAYMENT", hash, 200, response)
   }); return event.json(200, response)
+}, $apis.requireAuth())
+
+routerAdd("POST", "/api/jornal/invoicing/invoices/{id}/set-paid-amount", (event) => {
+  const h = require(`${__hooks}/invoice_helpers.js`); const body = h.jsonBody(event); const scope = h.requestScope(event, body, true)
+  const key = h.requireCommand(body); const action = "SET_INVOICE_PAID_AMOUNT"; const hash = h.commandHash(action, body); let response
+  $app.runInTransaction((tx) => {
+    const replay = h.replayCommand(tx, scope.tenantId, scope.companyId, scope.epoch, key, action, hash)
+    if (replay) { response = replay.body; return }
+    const invoice = h.ownedRecord(tx, "invoices", event.request.pathValue("id"), scope.tenantId, scope.companyId, scope.epoch, "Invoice")
+    if (invoice.getInt("revision") !== Number(body.expectedRevision)) throw new ApiError(409, "Invoice telah berubah")
+    const before = h.invoiceResponse(invoice); const currentPaid = invoice.getInt("paid_amount"); const target = Number(body.paidAmount)
+    if (!["PAID", "UNPAID"].includes(invoice.getString("status")) || currentPaid <= 0 || !Number.isSafeInteger(target) || target < 0 || target >= currentPaid) throw new ApiError(400, "Jumlah pembayaran setelah koreksi tidak valid")
+    const reason = h.requireText(body.reason, "Alasan koreksi", 500, true); const now = new Date().toISOString()
+    const payments = h.findAllRecords(tx, "invoice_payments", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && invoice_id = {:invoice} && status = 'ACTIVE'", "-paid_on,-created", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, invoice: invoice.id })
+    if (payments.reduce((sum, payment) => sum + payment.getInt("amount"), 0) !== currentPaid) throw new ApiError(409, "Riwayat pembayaran tidak sesuai dengan invoice")
+    const changes = new Map(); let reduction = currentPaid - target
+    const ledgerFor = (payment) => {
+      try { return tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'transactions' && app_id = {:id} && deleted_at = ''", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, id: payment.getString("ledger_transaction_id") }) }
+      catch { throw new ApiError(409, "Transaksi pembayaran tidak ditemukan") }
+    }
+    for (const payment of payments) {
+      if (reduction <= 0) break
+      const amount = payment.getInt("amount"); const ledger = ledgerFor(payment); const transaction = h.json(ledger, "payload", {})
+      if (transaction.invoiceId !== invoice.id || transaction.invoicePaymentId !== payment.id || Number(transaction.amount) !== amount) throw new ApiError(409, "Transaksi pembayaran tidak sesuai dengan invoice")
+      const documents = tx.findRecordsByFilter("document_inbox", "linked_payment_id = {:payment} && status = 'LINKED'", "", 0, 0, { payment: payment.id })
+      if (reduction >= amount) {
+        let updated
+        if (payment.getString("origin") === "CREATED") {
+          updated = { ...transaction, lifecycle: "REVERSED", reversedAt: now, reversalReason: reason, updatedAt: now }
+          ledger.set("deleted_at", now)
+        } else {
+          updated = h.json(payment, "original_ledger_snapshot", null)
+          if (!updated) throw new ApiError(409, "Snapshot transaksi sebelum link tidak tersedia")
+        }
+        ledger.set("payload", updated); ledger.set("revision", ledger.getInt("revision") + 1); tx.save(ledger)
+        changes.set(payment.getString("ledger_transaction_id"), { transaction: updated, ledgerRevision: ledger.getInt("revision"), ledgerDeleted: payment.getString("origin") === "CREATED" })
+        payment.set("status", "REVERSED"); payment.set("reversal_reason", reason); payment.set("reversed_at", now); payment.set("revision", payment.getInt("revision") + 1); tx.save(payment)
+        documents.forEach((document) => { document.set("status", "REVIEW_READY"); document.set("linked_transaction_id", ""); document.set("linked_payment_id", ""); document.set("unlink_reason", reason); document.set("revision", document.getInt("revision") + 1); tx.save(document) })
+        reduction -= amount
+      } else {
+        if (documents.length) throw new ApiError(409, "Pembayaran terhubung ke dokumen. Koreksi tautan dokumen terlebih dahulu.")
+        const adjustedAmount = amount - reduction
+        if (payment.getString("origin") === "LINKED") {
+          const original = h.json(payment, "original_ledger_snapshot", null)
+          if (!original || Number(original.amount) !== amount) throw new ApiError(409, "Snapshot transaksi sebelum link tidak sesuai")
+          payment.set("original_ledger_snapshot", { ...original, amount: adjustedAmount, updatedAt: now })
+        }
+        payment.set("amount", adjustedAmount); payment.set("revision", payment.getInt("revision") + 1); tx.save(payment)
+        const updated = { ...transaction, amount: adjustedAmount, updatedAt: now }
+        ledger.set("payload", updated); ledger.set("revision", ledger.getInt("revision") + 1); tx.save(ledger)
+        changes.set(payment.getString("ledger_transaction_id"), { transaction: updated, ledgerRevision: ledger.getInt("revision"), ledgerDeleted: false })
+        reduction = 0
+      }
+    }
+    if (reduction !== 0) throw new ApiError(409, "Pembayaran tidak dapat dikoreksi")
+    const remaining = h.findAllRecords(tx, "invoice_payments", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && invoice_id = {:invoice} && status = 'ACTIVE'", "paid_on,created", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, invoice: invoice.id })
+    let cumulative = 0
+    for (const payment of remaining) {
+      const beforeTax = Math.round(cumulative * invoice.getInt("tax_amount") / invoice.getInt("grand_total"))
+      cumulative += payment.getInt("amount")
+      const taxAmount = Math.round(cumulative * invoice.getInt("tax_amount") / invoice.getInt("grand_total")) - beforeTax
+      const ledger = ledgerFor(payment); const transaction = h.json(ledger, "payload", {})
+      const updated = { ...transaction, amount: payment.getInt("amount"), invoiceTaxAmount: taxAmount, invoiceRevenueAmount: payment.getInt("amount") - taxAmount, updatedAt: now }
+      if (transaction.amount !== updated.amount || transaction.invoiceTaxAmount !== updated.invoiceTaxAmount || transaction.invoiceRevenueAmount !== updated.invoiceRevenueAmount) {
+        ledger.set("payload", updated); ledger.set("revision", ledger.getInt("revision") + 1); tx.save(ledger)
+        changes.set(payment.getString("ledger_transaction_id"), { transaction: updated, ledgerRevision: ledger.getInt("revision"), ledgerDeleted: false })
+      }
+    }
+    if (cumulative !== target) throw new ApiError(409, "Jumlah pembayaran tidak sesuai")
+    if (invoice.getString("status") === "PAID") invoice.set("payment_cycle", invoice.getInt("payment_cycle") + 1)
+    invoice.set("paid_amount", target); invoice.set("status", "UNPAID"); invoice.set("paid_at", ""); invoice.set("revision", invoice.getInt("revision") + 1); tx.save(invoice)
+    response = { invoice: h.invoiceResponse(invoice), ledgerChanges: [...changes.values()] }
+    h.audit(tx, scope.tenantId, scope.companyId, scope.epoch, scope.tenantId, "invoice-payment-amount-corrected", "invoice", invoice.id, key, reason, before, response)
+    h.saveCommand(tx, scope.tenantId, scope.companyId, scope.epoch, key, action, hash, 200, response)
+  })
+  return event.json(200, response)
 }, $apis.requireAuth())
 
 routerAdd("GET", "/api/jornal/invoicing/summary", (event) => {

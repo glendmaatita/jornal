@@ -156,6 +156,18 @@ describe("accounts", () => {
 })
 
 describe("transactions", () => {
+  test("keeps an invoice relation on money-out edits and rejects it on money-in or transfers", () => {
+    const expense = createTransaction(makeInput({
+      direction: "MONEY_OUT", classification: "OPERATING_EXPENSE", taxClassification: "OPERATING_EXPENSE",
+      relatedInvoiceId: "invoice-1",
+    }))
+    expect(loadTransactions()[0].relatedInvoiceId).toBe("invoice-1")
+    expect(updateTransaction(expense.id, { description: "biaya pemasok" })?.relatedInvoiceId).toBe("invoice-1")
+    expect(updateTransaction(expense.id, { relatedInvoiceId: null })?.relatedInvoiceId).toBeNull()
+    expect(() => createTransaction(makeInput({ relatedInvoiceId: "invoice-1" }))).toThrow()
+    expect(() => createTransaction(makeInput({ direction: "MONEY_OUT", classification: "INTERNAL_TRANSFER", relatedInvoiceId: "invoice-1" }))).toThrow()
+  })
+
   test("create normalizes tax fields and records USER corrections", () => {
     const created = createTransaction(makeInput({ classificationSource: "USER", description: "facebook ads campaign" }))
     expect(created.taxClassification).toBe("REVENUE")

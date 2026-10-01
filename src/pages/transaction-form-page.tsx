@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
-import { ArrowDownLeft, ArrowLeft, ArrowLeftRight, ArrowUpRight, Camera, ChevronDown, CreditCard, HandCoins, Paperclip, PenLine, Save, Sparkles, Tag, User, UserMinus, Wand2 } from "lucide-react"
+import { ArrowDownLeft, ArrowLeft, ArrowLeftRight, ArrowUpRight, Camera, ChevronDown, CreditCard, FileText, HandCoins, Paperclip, PenLine, Save, Sparkles, Tag, User, UserMinus, Wand2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { AttachmentPreview } from "@/components/attachment-preview"
 import { accountOptionLabel } from "@/lib/account-display"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
@@ -19,7 +20,10 @@ import {
   suggestFromPatterns,
   DEFAULT_THRESHOLDS,
 } from "@/lib/classification"
-import { formatDateShort, formatNumberInput, formatRupiah, parseNumberValue, todayIsoDate } from "@/lib/format"
+import { formatDateShort, formatInvoiceNumber, formatNumberInput, formatRupiah, parseNumberValue, todayIsoDate } from "@/lib/format"
+import { getInvoice, listInvoices } from "@/lib/invoice-client"
+import type { Invoice } from "@/lib/invoice-types"
+import { paymentMethodLabel } from "@/lib/payment-method"
 import { parseTransactionInput } from "@/lib/nlp"
 import { queryKeys, useAccounts, useCorrections, useSettings, useTransactions } from "@/lib/queries"
 import { createTransaction, updateTransaction } from "@/lib/store"
@@ -29,6 +33,7 @@ import { cn } from "@/lib/utils"
 import { activeCompany } from "@/lib/companies"
 import { scopedStorageKey } from "@/lib/store"
 import { clearMirroredState, mirrorState, restoreState } from "@/lib/local-db"
+import { useAttachmentUrl } from "@/lib/use-attachment-url"
 
 type Mode = "money_in" | "money_out" | "receivable" | "owner_withdrawal" | "transfer"
 
@@ -69,13 +74,16 @@ export function TransactionFormPage() {
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [accountId, setAccountId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("account") || readEntryPreference("account"))
   const [transferAccountId, setTransferAccountId] = useState<string | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState(() => supplierInvoiceIdFromUrl ? "Transfer" : readEntryPreference("payment") || "Transfer")
+  const [paymentMethod, setPaymentMethod] = useState(() => supplierInvoiceIdFromUrl ? "Transfer" : paymentMethodLabel(readEntryPreference("payment") || "Transfer"))
   const [supplierCustomer, setSupplierCustomer] = useState("")
   const [tags, setTags] = useState("")
   const [notes, setNotes] = useState("")
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
   const [attachmentDataUrl, setAttachmentDataUrl] = useState<string | null>(null)
   const [attachmentRemoved, setAttachmentRemoved] = useState(false)
+  const [relatedInvoiceId, setRelatedInvoiceId] = useState<string | null>(supplierInvoiceIdFromUrl)
+  const [invoiceSearch, setInvoiceSearch] = useState("")
+  const attachmentPreviewUrl = useAttachmentUrl(attachmentDataUrl, attachmentName && !attachmentRemoved ? editing?.attachmentRemoteUrl : null)
   const [showMore, setShowMore] = useState(() => new URLSearchParams(window.location.search).get("receivable") === "new" || Boolean(new URLSearchParams(window.location.search).get("supplierInvoiceId")))
   const [captureRequested, setCaptureRequested] = useState(false)
   const [classificationOverride, setClassificationOverride] = useState<TransactionClassification | null>(null)
@@ -110,6 +118,7 @@ export function TransactionFormPage() {
           accountId: string | null; transferAccountId: string | null; paymentMethod: string; supplierCustomer: string
           tags: string; notes: string; attachmentName: string | null; attachmentDataUrl: string | null
           classificationOverride: TransactionClassification | null; receivableDueDate: string | null
+          relatedInvoiceId: string | null
         }> | null) => {
       if (!draft || !active) return
       if (draft.mode) setMode(draft.mode)
@@ -127,12 +136,13 @@ export function TransactionFormPage() {
       if ("attachmentDataUrl" in draft) setAttachmentDataUrl(draft.attachmentDataUrl ?? null)
       if ("classificationOverride" in draft) setClassificationOverride(draft.classificationOverride ?? null)
       if ("receivableDueDate" in draft) setReceivableDueDate(draft.receivableDueDate ?? null)
+      if ("relatedInvoiceId" in draft) setRelatedInvoiceId(draft.relatedInvoiceId ?? null)
     }
     void (async () => {
       try {
         const raw = window.localStorage.getItem(draftKey)
         if (raw) restoreDraft(JSON.parse(raw))
-        else restoreDraft(await restoreState(draftKey).catch(() => null) as Partial<{ mode: Mode; amount: string; description: string; transactionDate: string; categoryId: string | null; accountId: string | null; transferAccountId: string | null; paymentMethod: string; supplierCustomer: string; tags: string; notes: string; attachmentName: string | null; attachmentDataUrl: string | null; classificationOverride: TransactionClassification | null; receivableDueDate: string | null }> | null)
+        else restoreDraft(await restoreState(draftKey).catch(() => null) as Partial<{ mode: Mode; amount: string; description: string; transactionDate: string; categoryId: string | null; accountId: string | null; transferAccountId: string | null; paymentMethod: string; supplierCustomer: string; tags: string; notes: string; attachmentName: string | null; attachmentDataUrl: string | null; classificationOverride: TransactionClassification | null; receivableDueDate: string | null; relatedInvoiceId: string | null }> | null)
       } catch {
         window.localStorage.removeItem(draftKey)
       } finally {
@@ -181,7 +191,7 @@ export function TransactionFormPage() {
     const draft = {
         mode, amount, description, transactionDate, categoryId, accountId, transferAccountId,
         paymentMethod, supplierCustomer, tags, notes, attachmentName, attachmentDataUrl,
-        classificationOverride, receivableDueDate,
+        classificationOverride, receivableDueDate, relatedInvoiceId,
       }
     try {
       window.localStorage.setItem(draftKey, JSON.stringify(draft))
@@ -189,7 +199,7 @@ export function TransactionFormPage() {
     } catch {
       // Save still reports its own durable result; draft persistence is best effort.
     }
-  }, [draftKey, editing, mode, amount, description, transactionDate, categoryId, accountId, transferAccountId, paymentMethod, supplierCustomer, tags, notes, attachmentName, attachmentDataUrl, classificationOverride, receivableDueDate])
+  }, [draftKey, editing, mode, amount, description, transactionDate, categoryId, accountId, transferAccountId, paymentMethod, supplierCustomer, tags, notes, attachmentName, attachmentDataUrl, classificationOverride, receivableDueDate, relatedInvoiceId])
 
   // Load the transaction being edited — adapted during render (no effect needed)
   if (editing && editing.id !== loadedId) {
@@ -210,7 +220,7 @@ export function TransactionFormPage() {
     setCategoryId(editing.categoryId)
     setAccountId(editing.accountId)
     setTransferAccountId(editing.transferAccountId)
-    setPaymentMethod(editing.paymentMethod)
+    setPaymentMethod(paymentMethodLabel(editing.paymentMethod))
     setSupplierCustomer(editing.supplierCustomer)
     setTags(editing.tags)
     setNotes(editing.notes)
@@ -218,6 +228,7 @@ export function TransactionFormPage() {
     setAttachmentDataUrl(editing.attachmentDataUrl)
     setAttachmentRemoved(false)
     setReceivableDueDate(editing.receivableDueDate ?? null)
+    setRelatedInvoiceId(editing.relatedInvoiceId ?? null)
     if (editing.classificationSource === "USER") setClassificationOverride(editing.classification)
   }
 
@@ -234,6 +245,20 @@ export function TransactionFormPage() {
     return Math.max(0, source.amount - paid)
   }, [repaymentSource, editing?.id, editing?.receivableTransactionId, transactions])
   const direction: TransactionDirection = mode === "money_in" || isReceivablePayment ? "MONEY_IN" : "MONEY_OUT"
+  const invoiceCandidates = useQuery({
+    queryKey: ["invoice", "expense-linkable", invoiceSearch],
+    queryFn: () => listInvoices({ search: invoiceSearch, expenseLinkable: true, perPage: 100 }),
+    enabled: direction === "MONEY_OUT" && mode !== "transfer",
+  })
+  const selectedInvoice = useQuery({
+    queryKey: ["invoice", "detail", relatedInvoiceId],
+    queryFn: () => getInvoice(relatedInvoiceId!),
+    enabled: Boolean(relatedInvoiceId),
+  })
+  const invoiceOptions = [selectedInvoice.data?.invoice, ...(invoiceCandidates.data?.items ?? [])]
+    .filter((invoice): invoice is Invoice => Boolean(invoice))
+    .filter((invoice, index, invoices) => invoices.findIndex((candidate) => candidate.id === invoice.id) === index)
+    .map((invoice) => ({ value: invoice.id, label: `${formatInvoiceNumber(invoice.invoiceNumber, invoice.sequence, invoice.issueDate) || "Draft"} · ${String(invoice.customerSnapshot?.name || "Pelanggan")}` }))
 
   // Live auto-classification (§21–23): learned patterns first, then rules
   const suggestion = useMemo(() => {
@@ -345,6 +370,7 @@ export function TransactionFormPage() {
         reviewStatus,
         receivableTransactionId: isReceivablePayment ? (repaymentSource?.id ?? editing?.receivableTransactionId ?? null) : null,
         receivableDueDate: isReceivableCreation ? receivableDueDate : null,
+        relatedInvoiceId: direction === "MONEY_OUT" && mode !== "transfer" ? relatedInvoiceId : null,
       } as const
 
       if (editing) {
@@ -376,7 +402,7 @@ export function TransactionFormPage() {
 
   const categoryOptions = categoriesForKind(direction === "MONEY_IN" ? "income" : "expense")
   const paymentMethodOptions = useMemo(() => {
-    const values = [paymentMethod, ...transactions.map((transaction) => transaction.paymentMethod)]
+    const values = [paymentMethod, ...transactions.map((transaction) => paymentMethodLabel(transaction.paymentMethod))]
     return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
   }, [paymentMethod, transactions])
   const supplierCustomerOptions = useMemo(() => {
@@ -598,6 +624,23 @@ export function TransactionFormPage() {
             onChange={setTransactionDate}
           />
 
+          {direction === "MONEY_OUT" && mode !== "transfer" && (
+            <div className="space-y-3 rounded-[10px] border border-border bg-[#f1f5fd] p-3">
+              <p className="flex items-center gap-2 text-sm font-semibold"><FileText className="size-4 text-primary" aria-hidden="true" />Invoice terkait (opsional)</p>
+              <TextField label="Cari invoice terkait" value={invoiceSearch} onChange={setInvoiceSearch} placeholder="Nomor invoice atau pelanggan" />
+              <SelectField
+                label="Kaitkan ke invoice"
+                value={relatedInvoiceId ?? ""}
+                onChange={(value) => setRelatedInvoiceId(value || null)}
+                placeholder="Tanpa invoice terkait"
+                options={invoiceOptions}
+                hint="Pilih invoice yang berkaitan dengan pengeluaran ini. Satu invoice bisa memiliki beberapa uang keluar."
+              />
+              {invoiceCandidates.isError && <p className="field-error" role="alert">Daftar invoice gagal dimuat.</p>}
+              {relatedInvoiceId && <Link to="/invoices/$invoiceId" params={{ invoiceId: relatedInvoiceId }} className="inline-block text-xs font-semibold text-[var(--link)] underline">Lihat invoice terkait</Link>}
+            </div>
+          )}
+
           {isReceivableCreation && (
             <DateField
               label="Jatuh tempo (opsional)"
@@ -774,6 +817,7 @@ export function TransactionFormPage() {
                         setAttachmentRemoved(true)
                       }}>Hapus</button>
                     </div>
+                    {attachmentPreviewUrl && <AttachmentPreview name={attachmentName} url={attachmentPreviewUrl} />}
                   </div>
                 )}
                 {attachmentError && <p className="field-error" role="alert">{attachmentError}</p>}

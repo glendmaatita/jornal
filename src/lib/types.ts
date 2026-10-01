@@ -135,6 +135,8 @@ export interface Transaction {
   /** Net document revenue. Cash amount remains the gross ledger amount. */
   invoiceRevenueAmount?: number | null
   invoiceTaxAmount?: number | null
+  /** Invoice whose work or proceeds this money-out transaction relates to. */
+  relatedInvoiceId?: string | null
   /** Private inbox document linked by a server-side confirmation command. */
   documentId?: string | null
   classification: TransactionClassification

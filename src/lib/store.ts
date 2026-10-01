@@ -395,6 +395,7 @@ function normalizeTransaction(transaction: Transaction): Transaction {
     attachmentDataUrl: transaction.attachmentDataUrl ?? null,
     receivableTransactionId: transaction.receivableTransactionId ?? null,
     receivableDueDate: transaction.receivableDueDate ?? null,
+    relatedInvoiceId: transaction.relatedInvoiceId ?? null,
   }
 }
 
@@ -520,10 +521,13 @@ export function updateTransaction(id: string, patch: Partial<NewTransaction>): T
   return updated
 }
 
-function validateTransactionLinks(transaction: Pick<Transaction, "accountId" | "transferAccountId" | "classification" | "receivableTransactionId">, editingId?: string) {
+function validateTransactionLinks(transaction: Pick<Transaction, "accountId" | "transferAccountId" | "classification" | "direction" | "receivableTransactionId" | "relatedInvoiceId">, editingId?: string) {
   const accountIds = new Set(loadAccounts().map((account) => account.id))
   if (transaction.accountId && !accountIds.has(transaction.accountId)) throw new Error("Rekening bukan milik company aktif")
   if (transaction.transferAccountId && !accountIds.has(transaction.transferAccountId)) throw new Error("Rekening tujuan bukan milik company aktif")
+  if (transaction.relatedInvoiceId && (transaction.direction !== "MONEY_OUT" || transaction.classification === "INTERNAL_TRANSFER")) {
+    throw new Error("Hanya uang keluar yang dapat dikaitkan dengan invoice")
+  }
   if (transaction.classification === "RECEIVABLE_PAYMENT") {
     const source = loadTransactions().find((item) => item.id !== editingId && item.id === transaction.receivableTransactionId)
     if (!source || source.classification !== "RECEIVABLE_CREATED" || source.companyId !== currentCompanyId()) {
