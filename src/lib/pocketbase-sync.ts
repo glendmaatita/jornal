@@ -224,8 +224,7 @@ export function loadSyncConflicts(scope = companyScope()): SyncConflict[] {
   } catch { return [] }
 }
 
-export async function resolveSyncConflict(id: string, choice: "local" | "remote") {
-  const scope = companyScope()
+export async function resolveSyncConflict(id: string, choice: "local" | "remote", scope = companyScope(), scheduleAfter = true) {
   const runtime = runtimeFor(scope)
   // A focus/reconnect sync may still be running when the user taps a choice.
   // Wait for it, then reserve the same per-company lane so a background sync
@@ -242,7 +241,7 @@ export async function resolveSyncConflict(id: string, choice: "local" | "remote"
     // The chosen record is already reconciled atomically. A later sync can
     // safely advance the shared array outbox and surface the next record (if
     // any) without racing this resolution.
-    if (resolved) schedulePocketBaseSync(scope)
+    if (resolved && scheduleAfter) schedulePocketBaseSync(scope)
   }
 }
 
@@ -424,6 +423,7 @@ export function hasCachedCompanyState(scope = companyScope()) {
 }
 
 function mergeLocalArray(remotePayloads: unknown[], key: string, scope?: CompanyScope, deletedAppIds: Set<string> = new Set(), preserveLocal = false): unknown[] {
+  if (!preserveLocal) return remotePayloads
   const local = localJson<unknown[]>(key, [], scope)
   const identity = (value: unknown) => {
     if (!value || typeof value !== "object") return String(value)
@@ -882,12 +882,26 @@ function retryableSyncError(error: unknown) {
 }
 
 async function syncWithRetry(scope = companyScope()) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  let conflictPasses = 0
+  for (let attempt = 0; attempt < 3;) {
+    let resolvingConflict = false
     try {
+      for (const conflict of loadSyncConflicts(scope)) {
+        if (!conflict.entity || !conflict.appId) continue
+        resolvingConflict = true
+        await resolveSyncConflict(conflict.id, "remote", scope, false)
+      }
+      resolvingConflict = false
       await syncToPocketBase(scope)
       return
     } catch (error) {
-      if (!retryableSyncError(error) || attempt === 2) throw error
+      const resolvable = loadSyncConflicts(scope).filter((conflict) => conflict.entity && conflict.appId)
+      if (!resolvingConflict && resolvable.length > 0 && conflictPasses < 20) {
+        conflictPasses += 1
+        continue
+      }
+      attempt += 1
+      if (!retryableSyncError(error) || attempt === 3) throw error
       setSyncStatus("retrying", scope)
       const exponentialDelay = 400 * 2 ** attempt
       const jitter = Math.floor(Math.random() * 200)
@@ -917,8 +931,6 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
   // Files are protected by the collection view rule; a short-lived token lets
   // payload URLs render attachments. Empty token = public files (local dev).
   const fileAccessPromise = getCompanyFileAccess(runScope).catch(() => ({ token: "", grant: "" }))
-  const queuedRows = await listOutbox()
-  const queuedKeys = new Set(queuedRows.map((row) => row.key))
   const fingerprints = loadFingerprints(runScope)
   const revisions = loadRevisions(runScope)
   let cursor = 0
@@ -926,10 +938,17 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
     if (runGeneration !== syncGeneration) throw new Error("Hydration cancelled: session changed")
     const remote = await listRecords(entity, undefined, runScope)
     if (runGeneration !== syncGeneration) throw new Error("Hydration cancelled: session changed")
-    if (remote.length === 0) return
-    foundAny = true
     const key = entityKey(entity)
-    const entityIsDirty = queuedKeys.has(storageKeyForScope(runScope, key))
+    const fileAccess = entity === "transactions" ? await fileAccessPromise : { token: "", grant: "" }
+    // A local edit can arrive while the server request is in flight. Check
+    // the current outbox immediately before replacing this entity's cache.
+    const entityIsDirty = (await listOutbox()).some((row) => row.key === storageKeyForScope(runScope, key))
+    if (runGeneration !== syncGeneration) throw new Error("Hydration cancelled: session changed")
+    if (remote.length === 0) {
+      if (!entityIsDirty) writeLocalJson(key, entity === "profile" || entity === "settings" ? null : [], runScope)
+      return
+    }
+    foundAny = true
     if (!entityIsDirty) for (const record of remote) {
       revisions[revisionId(entity, record.app_id)] = Number(record.revision || 0)
       fingerprints[revisionId(entity, record.app_id)] = payloadFingerprint(record.payload)
@@ -951,17 +970,9 @@ export async function hydrateFromPocketBase(runScope = companyScope()) {
     if (entity === "profile" || entity === "settings") {
       const current = remote.find((record) => !record.deleted_at)
       const payload = current?.payload ?? null
-      const local = localJson<unknown>(key, null, runScope)
-      const localUpdatedAt = local && typeof local === "object" ? (local as { updatedAt?: unknown }).updatedAt : undefined
-      const remoteUpdatedAt = payload && typeof payload === "object" ? (payload as { updatedAt?: unknown }).updatedAt : undefined
-      // A device may have a durable offline edit that has not reached the
-      // server yet. Do not erase it during startup hydration.
-      if (!(typeof localUpdatedAt === "string" && typeof remoteUpdatedAt === "string" && localUpdatedAt > remoteUpdatedAt)) {
-        writeLocalJson(key, payload, runScope)
-      }
+      if (!entityIsDirty) writeLocalJson(key, payload, runScope)
       return
     }
-    const fileAccess = entity === "transactions" ? await fileAccessPromise : { token: "", grant: "" }
     writeLocalJson(
       key,
       mergeLocalArray(
@@ -1008,8 +1019,8 @@ export function schedulePocketBaseSync(scope = companyScope()) {
   queueMicrotask(() => {
     runtime.syncQueued = false
     void syncWithRetry(scope).catch(() => {
-      // Keep local data available; the visible status remains failed so the
-      // user can retry on reconnect/focus or the next mutation.
+      // Keep pending local data available for the next reconnect, focus, or
+      // scheduled background attempt.
     })
   })
 }
@@ -1073,6 +1084,7 @@ export async function initializePocketBaseSync() {
       runtime.hydrationState = "ready"
       return false
     }
+    await syncWithRetry(runScope)
     await hydrateFromPocketBase(runScope)
     runtime.hydrationState = "ready"
     return true
@@ -1086,4 +1098,26 @@ export async function initializePocketBaseSync() {
   } })()
   runtime.hydration = hydration
   return hydration
+}
+
+/** Refresh the active company quietly after reconnect, focus, or a timed check. */
+export async function refreshPocketBaseFromServer(runScope = companyScope()) {
+  if (!enabled() || typeof window === "undefined" || navigator.onLine === false) return false
+  const runtime = runtimeFor(runScope)
+  if (runtime.hydration) return runtime.hydration
+  const refresh = (async () => {
+    try {
+      await syncWithRetry(runScope)
+      await hydrateFromPocketBase(runScope)
+      runtime.hydrationState = "ready"
+      return true
+    } catch {
+      setSyncStatus("failed", runScope)
+      return false
+    } finally {
+      runtime.hydration = undefined
+    }
+  })()
+  runtime.hydration = refresh
+  return refresh
 }

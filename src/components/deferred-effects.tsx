@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 
 import { queryKeys, useFinancialEvents } from "@/lib/queries"
-import { initializePocketBaseSync, syncPendingCompanies } from "@/lib/pocketbase-sync"
+import { initializePocketBaseSync, refreshPocketBaseFromServer, syncPendingCompanies } from "@/lib/pocketbase-sync"
 import { processRecurringRulesForCachedCompanies } from "@/lib/recurring-scheduler"
 import { refreshCompanyMemberships } from "@/lib/companies"
 
@@ -15,6 +15,12 @@ export function DeferredEffects() {
   useEffect(() => {
     let checkingAccess = false
     let lastResumeAt = 0
+    const refreshData = async () => {
+      const refreshed = await refreshPocketBaseFromServer()
+      if (refreshed) for (const key of Object.values(queryKeys)) {
+        await queryClient.invalidateQueries({ queryKey: key })
+      }
+    }
     const refreshAccess = async () => {
       if (checkingAccess) return
       checkingAccess = true
@@ -34,6 +40,7 @@ export function DeferredEffects() {
       if (!force && now - lastResumeAt < 30_000) return
       lastResumeAt = now
       void syncPendingCompanies()
+      void refreshData().catch(() => undefined)
       void import("@/lib/invoice-client").then(({ syncPendingInvoiceData }) => syncPendingInvoiceData()).catch(() => undefined)
       void refreshAccess()
     }
@@ -54,7 +61,7 @@ export function DeferredEffects() {
       await syncPendingCompanies()
       await import("@/lib/invoice-client").then(({ syncPendingInvoiceData }) => syncPendingInvoiceData()).catch(() => undefined)
     })()
-    const interval = window.setInterval(() => void refreshAccess(), 5 * 60_000)
+    const interval = window.setInterval(() => retry(true), 5 * 60_000)
     return () => {
       window.clearInterval(interval)
       window.removeEventListener("online", onOnline)

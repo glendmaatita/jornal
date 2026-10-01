@@ -7,6 +7,7 @@ import {
   initializePocketBaseSync,
   getHydrationState,
   loadSyncConflicts,
+  refreshPocketBaseFromServer,
   resetPocketBaseSyncState,
   resolveSyncConflict,
   schedulePocketBaseSync,
@@ -15,6 +16,7 @@ import {
   syncConflictLabel,
   syncToPocketBase,
 } from "./pocketbase-sync"
+import { persistState } from "./local-db"
 import { KEYS, RESET_PENDING_KEY, scopedStorageKey, saveProfile, emptyProfile, createTransaction, updateTransaction } from "./store"
 import type { Transaction } from "./types"
 
@@ -401,11 +403,11 @@ describe("sync conflict resolution", () => {
     }
 
     expect(syncConflictLabel(conflicts[0])).toBe("riwayat akun “BCA”")
-    expect(await resolveSyncConflict("history-conflict-1", "local")).toBe(true)
+    expect(await resolveSyncConflict("history-conflict-1", "local", undefined, false)).toBe(true)
     expect(loadSyncConflicts().map((item) => item.id)).toEqual(["history-conflict-2"])
     expect(calls.some((call) => decodeURIComponent(call.url).includes(secondAppId))).toBe(false)
 
-    expect(await resolveSyncConflict("history-conflict-2", "remote")).toBe(true)
+    expect(await resolveSyncConflict("history-conflict-2", "remote", undefined, false)).toBe(true)
     expect(loadSyncConflicts()).toHaveLength(0)
     const saved = JSON.parse(localStorageShim.getItem(scopedStorageKey(KEYS.accountHistory)) || "[]") as typeof firstLocal[]
     expect(saved[0].value.openingBalance).toBe(38_033_923)
@@ -424,6 +426,58 @@ describe("sync conflict resolution", () => {
 })
 
 describe("hydrateFromPocketBase", () => {
+  test("replaces clean local records with the current server snapshot", async () => {
+    setEnv("http://pb.test")
+    localStorageShim.setItem(KEYS.transactions, JSON.stringify([transactionFixture("stale-local")]))
+    localStorageShim.setItem(KEYS.accounts, JSON.stringify([{ id: "stale-account", name: "Lama" }]))
+    const current = transactionFixture("server-current")
+    respond = (url) => {
+      const filter = new URL(url).searchParams.get("filter") ?? ""
+      return { status: 200, body: { items: filter.includes('entity = "transactions"') ? [record("transactions", current.id, current, "pb-current")] : [], totalPages: 1 } }
+    }
+
+    await hydrateFromPocketBase()
+    expect(JSON.parse(localStorageShim.getItem(KEYS.transactions) || "[]").map((item: Transaction) => item.id)).toEqual(["server-current"])
+    expect(JSON.parse(localStorageShim.getItem(KEYS.accounts) || "[]")).toEqual([])
+  })
+
+  test("keeps an edit queued while the server snapshot is loading", async () => {
+    setEnv("http://pb.test")
+    const server = { ...emptyProfile(), businessName: "Server" }
+    const pending = { ...server, businessName: "Perubahan baru" }
+    let edited = false
+    respond = (url) => {
+      const filter = new URL(url).searchParams.get("filter") ?? ""
+      if (filter.includes('entity = "profile"') && !edited) {
+        edited = true
+        localStorageShim.setItem(KEYS.profile, JSON.stringify(pending))
+        void persistState(KEYS.profile, pending)
+      }
+      return { status: 200, body: { items: filter.includes('entity = "profile"') ? [record("profile", "profile", server, "pb-profile")] : [], totalPages: 1 } }
+    }
+
+    await hydrateFromPocketBase()
+    expect(JSON.parse(localStorageShim.getItem(KEYS.profile) || "{}").businessName).toBe("Perubahan baru")
+  })
+
+  test("resolves a pending revision conflict using the live server value in the background", async () => {
+    setEnv("http://pb.test")
+    const local = { ...emptyProfile(), businessName: "Perangkat", updatedAt: "2026-09-18T00:00:00.000Z" }
+    const server = { ...local, businessName: "Server", updatedAt: "2026-09-18T00:01:00.000Z" }
+    const remote = record("profile", "profile", server, "pb-profile")
+    localStorageShim.setItem(KEYS.profile, JSON.stringify(local))
+    await persistState(KEYS.profile, local)
+    respond = (url) => {
+      const filter = new URL(url).searchParams.get("filter") ?? ""
+      return { status: 200, body: { items: filter.includes('entity = "profile"') ? [remote] : [], totalPages: 1 } }
+    }
+
+    expect(await refreshPocketBaseFromServer()).toBe(true)
+    expect(JSON.parse(localStorageShim.getItem(KEYS.profile) || "{}").businessName).toBe("Server")
+    expect(loadSyncConflicts()).toHaveLength(0)
+    expect(calls.some((call) => call.method === "PATCH")).toBe(false)
+  })
+
   test("writes remote payloads into local storage", async () => {
     setEnv("http://pb.test")
     const profileRecord = record("profile", "profile", { businessName: "Remote" }, "pb-3")

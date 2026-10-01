@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test"
 
 const backend = "http://127.0.0.1:8090"
 
-test("resolves sequential account conflicts from both buttons without exposing internal ids", async ({ page, request }) => {
+test("resolves account conflicts from the server without a sync notification", async ({ page, request }) => {
   const adminAuth = await request.post(`${backend}/api/collections/_superusers/auth-with-password`, {
     data: { identity: "e2e-admin@jornal.test", password: "StrongPass123!" },
   })
@@ -80,21 +80,15 @@ test("resolves sequential account conflicts from both buttons without exposing i
 
   await page.setViewportSize({ width: 360, height: 800 })
   await page.goto(`/sync?company=${company.id}`)
-  const banner = page.locator("aside[aria-live='polite']")
-  await expect(banner.getByText("akun keuangan “BCA”", { exact: false })).toBeVisible()
   await expect(page.getByText(accountId)).toHaveCount(0)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  await banner.getByRole("button", { name: "Pakai server" }).click()
   await expect.poll(() => page.evaluate((storagePrefix) => localStorage.getItem(`${storagePrefix}jornal.sync-conflicts.v1`), prefix)).toBe("[]")
-  await expect(banner).toHaveCount(0)
+  await expect(page.locator("aside[aria-live='polite']")).toHaveCount(0)
 
   const afterRemote = await request.get(`${backend}/api/collections/jornal_records/records?filter=${encodeURIComponent(`company_id = '${company.id}' && entity = 'accounts' && app_id = '${accountId}'`)}&check=remote`, { headers: { Authorization: auth.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": company.id, "Cache-Control": "no-cache" } })
   expect(Number(((await afterRemote.json() as { items: Array<{ payload: { openingBalance: number } }> }).items[0].payload.openingBalance))).toBe(0)
 
-  const nextConflicts = [
-    conflict("local-choice"),
-    conflict("second-server-choice", secondAccountId, secondLocalAccount, secondRemoteAccount, secondRemoteRecord.revision),
-  ]
+  const nextConflicts = [conflict("first-server-choice"), conflict("second-server-choice", secondAccountId, secondLocalAccount, secondRemoteAccount, secondRemoteRecord.revision)]
   // Seed on the next document before the app initializes. Vite can trigger a
   // dependency-optimization reload in CI, so mutating the current execution
   // context here is inherently racy.
@@ -106,22 +100,17 @@ test("resolves sequential account conflicts from both buttons without exposing i
     localStorage.setItem(`${storagePrefix}jornal.sync-conflicts.v1`, JSON.stringify(conflicts))
   }, { storagePrefix: prefix, locals: [localAccount, secondLocalAccount], conflicts: nextConflicts })
   await page.reload()
-  await expect(banner.getByRole("button", { name: "Pakai perangkat" })).toBeVisible()
-  await banner.getByRole("button", { name: "Pakai perangkat" }).click()
   await expect.poll(() => page.evaluate((storagePrefix) => {
     return JSON.parse(localStorage.getItem(`${storagePrefix}jornal.sync-conflicts.v1`) || "[]").length
-  }, prefix)).toBe(1)
-  await expect(banner.getByText("akun keuangan “Mandiri”", { exact: false })).toBeVisible()
-  await banner.getByRole("button", { name: "Pakai server" }).click()
-  await expect.poll(() => page.evaluate((storagePrefix) => localStorage.getItem(`${storagePrefix}jornal.sync-conflicts.v1`), prefix)).toBe("[]")
-  await expect(banner).toHaveCount(0)
-  expect(await page.evaluate((storagePrefix) => {
-    const accounts = JSON.parse(localStorage.getItem(`${storagePrefix}jornal.accounts.v1`) || "[]") as Array<{ openingBalance: number }>
-    return accounts[0]?.openingBalance
-  }, prefix)).toBe(12_345_678)
+  }, prefix)).toBe(0)
+  await expect(page.locator("aside[aria-live='polite']")).toHaveCount(0)
+  expect(await page.evaluate(({ storagePrefix, id }) => {
+    const accounts = JSON.parse(localStorage.getItem(`${storagePrefix}jornal.accounts.v1`) || "[]") as Array<{ id: string; openingBalance: number }>
+    return accounts.find((account) => account.id === id)?.openingBalance
+  }, { storagePrefix: prefix, id: accountId })).toBe(0)
 
   const afterLocal = await request.get(`${backend}/api/collections/jornal_records/records?filter=${encodeURIComponent(`company_id = '${company.id}' && entity = 'accounts' && app_id = '${accountId}'`)}&check=local`, { headers: { Authorization: auth.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": company.id, "Cache-Control": "no-cache" } })
-  expect(Number(((await afterLocal.json() as { items: Array<{ payload: { openingBalance: number } }> }).items[0].payload.openingBalance))).toBe(12_345_678)
+  expect(Number(((await afterLocal.json() as { items: Array<{ payload: { openingBalance: number } }> }).items[0].payload.openingBalance))).toBe(0)
 
   // A protected-route click must reuse the successful session bootstrap.
   // A transient bootstrap outage used to redirect an already-loaded user to
