@@ -116,7 +116,7 @@ function invoiceResponse(record) {
     issueDate: record.getString("issue_date"), dueDate: record.getString("due_date"), timezone: record.getString("timezone"),
     customerSnapshot: json(record, "customer_snapshot", null), senderSnapshot: json(record, "sender_snapshot", null), paymentInstructionsSnapshot: json(record, "payment_instructions_snapshot", null),
     items: json(record, "items", []), shippingMethod: record.getString("shipping_method") || null, subtotal: record.getInt("subtotal"), discountAmount: record.getInt("discount_amount"),
-    shippingAmount: record.getInt("shipping_amount"), taxRateBps: record.getInt("tax_rate_bps"), taxAmount: record.getInt("tax_amount"), grandTotal: record.getInt("grand_total"),
+    shippingAmount: record.getInt("shipping_amount"), taxRateBps: record.getInt("tax_rate_bps"), taxAmount: record.getInt("tax_amount"), grandTotal: record.getInt("grand_total"), paidAmount: record.getInt("paid_amount"), remainingAmount: Math.max(0, record.getInt("grand_total") - record.getInt("paid_amount")),
     currency: record.getString("currency"), paidAt: record.getString("paid_at") || null, voidReason: record.getString("void_reason") || null, replacedInvoiceId: record.getString("replaced_invoice_id") || null,
     revision: record.getInt("revision"), createdAt: record.getString("created"), updatedAt: record.getString("updated"),
   }
@@ -166,6 +166,16 @@ function settingsResponse(record) {
 }
 function paymentResponse(record) {
   return { id: record.id, invoiceId: record.getString("invoice_id"), amount: record.getInt("amount"), paidOn: record.getString("paid_on"), accountId: record.getString("account_id") || null, ledgerTransactionId: record.getString("ledger_transaction_id"), origin: record.getString("origin"), status: record.getString("status"), reference: record.getString("reference") || null, revision: record.getInt("revision") }
+}
+function invoiceRecordedTax(app, invoice) {
+  const payments = findAllRecords(app, "invoice_payments", "invoice_id = {:invoice} && status = 'ACTIVE'", "", { invoice: invoice.id })
+  return payments.reduce((sum, payment) => {
+    let ledger
+    try {
+      ledger = app.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'transactions' && app_id = {:id}", { tenant: invoice.getString("tenant_id"), company: invoice.getString("company_id"), epoch: invoice.getInt("data_epoch"), id: payment.getString("ledger_transaction_id") })
+    } catch { throw new ApiError(409, "Transaksi pembayaran tidak ditemukan") }
+    return sum + Number(json(ledger, "payload", {}).invoiceTaxAmount || 0)
+  }, 0)
 }
 function roundHalfUp(numerator, divisor) {
   if (!Number.isSafeInteger(numerator) || numerator < 0 || !Number.isSafeInteger(divisor) || divisor <= 0 || numerator > Number.MAX_SAFE_INTEGER - Math.floor(divisor / 2)) throw new ApiError(400, "Nilai invoice terlalu besar")
@@ -253,4 +263,4 @@ function ensureSettings(tx, tenantId, companyId, epoch, senderName) {
   return settings
 }
 
-module.exports = { DEFAULT_UNITS, activePaymentInstructions, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceNumberForDisplay, invoiceResponse, invoiceResponseWithContactFallback, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentInstructionsInput, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }
+module.exports = { DEFAULT_UNITS, activePaymentInstructions, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceNumberForDisplay, invoiceRecordedTax, invoiceResponse, invoiceResponseWithContactFallback, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentInstructionsInput, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }

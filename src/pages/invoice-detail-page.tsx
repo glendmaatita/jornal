@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  ArrowUpRight,
   BadgeCheck,
   Ban,
   CircleCheck,
@@ -45,7 +46,7 @@ import {
   invoicePng,
   printInvoice,
 } from "@/lib/invoice-export";
-import { formatDateLong, formatDateShort, formatInvoiceNumber, todayIsoDate } from "@/lib/format";
+import { formatDateLong, formatDateShort, formatInvoiceNumber, formatRupiah, todayIsoDate } from "@/lib/format";
 import { useAccounts } from "@/lib/queries";
 import { activeCompany, loadCompanyLogo } from "@/lib/companies";
 import { isAccountEnabled } from "@/lib/types";
@@ -76,6 +77,7 @@ export function InvoiceDetailPage({
   const { data: accounts = [] } = useAccounts();
   const documentRef = useRef<HTMLDivElement>(null);
   const [paidOn, setPaidOn] = useState(todayIsoDate());
+  const [paymentAmount, setPaymentAmount] = useState("");
   const [accountId, setAccountId] = useState("");
   const [paymentMode, setPaymentMode] = useState<"CREATE" | "LINK_EXISTING">(
     "CREATE",
@@ -124,7 +126,9 @@ export function InvoiceDetailPage({
         {String(detail.error || "Invoice tidak ditemukan")}
       </p>
     );
-  const { invoice, payment } = detail.data;
+  const { invoice, payments = [] } = detail.data;
+  const remainingAmount = invoice.remainingAmount ?? invoice.grandTotal - (invoice.paidAmount ?? 0);
+  const enteredAmount = paymentAmount ? Number(paymentAmount.replace(/\D/g, "")) : remainingAmount;
   const displayedInvoiceNumber = formatInvoiceNumber(
     invoice.invoiceNumber,
     invoice.sequence,
@@ -144,10 +148,10 @@ export function InvoiceDetailPage({
                 {displayedInvoiceNumber || "Draft Invoice"}
               </h1>
               <p className="text-sm text-muted-foreground">
-                {invoice.status} · revisi {invoice.revision}
+                {invoice.status === "UNPAID" && (invoice.paidAmount ?? 0) > 0 ? "Dibayar sebagian" : invoice.status} · revisi {invoice.revision}
               </p>
             </div>
-            {(invoice.status === "DRAFT" || invoice.status === "UNPAID") && (
+            {(invoice.status === "DRAFT" || (invoice.status === "UNPAID" && !(invoice.paidAmount ?? 0))) && (
               <Link
                 to="/invoices/$invoiceId/edit"
                 params={{ invoiceId }}
@@ -212,7 +216,7 @@ export function InvoiceDetailPage({
               <Copy aria-hidden="true" />
               Duplikasi
             </Button>
-            {invoice.status === "UNPAID" && (
+            {invoice.status === "UNPAID" && !(invoice.paidAmount ?? 0) && (
               <Button
                 variant="outline"
                 disabled={busy || !reason.trim()}
@@ -227,8 +231,13 @@ export function InvoiceDetailPage({
             <section className="grid gap-3 rounded-xl border bg-white p-4">
               <h2 className="flex items-center gap-2 font-semibold">
                 <BadgeCheck className="size-4 text-primary" aria-hidden="true" />
-                Tandai Lunas
+                Catat pembayaran
               </h2>
+              <div className="grid gap-1 text-sm">
+                <p>Total invoice: <strong>{formatRupiah(invoice.grandTotal)}</strong></p>
+                <p>Sudah dibayar: <strong>{formatRupiah(invoice.paidAmount ?? 0)}</strong></p>
+                <p>Sisa tagihan: <strong>{formatRupiah(remainingAmount)}</strong></p>
+              </div>
               <SelectField
                 label="Cara mencatat"
                 icon={Receipt}
@@ -246,6 +255,15 @@ export function InvoiceDetailPage({
               />
               {paymentMode === "CREATE" ? (
                 <>
+                  <TextField
+                    label="Nominal pembayaran"
+                    type="amount"
+                    prefix="Rp"
+                    value={paymentAmount}
+                    onChange={setPaymentAmount}
+                    placeholder={formatRupiah(remainingAmount)}
+                    hint="Kosongkan untuk membayar seluruh sisa tagihan"
+                  />
                   <DateField
                     label="Tanggal diterima"
                     value={paidOn}
@@ -276,24 +294,26 @@ export function InvoiceDetailPage({
                   searchPlaceholder="Cari transaksi…"
                   options={(candidates.data?.items ?? []).map((item) => ({
                     value: item.transaction.id,
-                    label: `${formatDateShort(item.transaction.transactionDate)} · ${item.transaction.description}`,
+                    label: `${formatDateShort(item.transaction.transactionDate)} · ${formatRupiah(item.transaction.amount)} · ${item.transaction.description}`,
                   }))}
                 />
               )}
               <Button
                 disabled={
-                  busy || (paymentMode === "LINK_EXISTING" && !candidate)
+                  busy || (paymentMode === "LINK_EXISTING" && !candidate) || (paymentMode === "CREATE" && (!Number.isSafeInteger(enteredAmount) || enteredAmount <= 0 || enteredAmount > remainingAmount))
                 }
                 onClick={() =>
                   void run(() =>
                     paymentMode === "CREATE"
                       ? markInvoicePaid(invoice, {
                           paidOn,
+                          amount: enteredAmount,
                           accountId: effectiveAccountId || null,
                         })
                       : markInvoicePaid(invoice, {
                           mode: "LINK_EXISTING",
                           transactionId: candidate!.transaction.id,
+                          amount: candidate!.transaction.amount,
                           expectedTransactionRevision: candidate!.revision,
                           paidOn: "",
                         }),
@@ -301,21 +321,45 @@ export function InvoiceDetailPage({
                 }
               >
                 <BadgeCheck aria-hidden="true" />
-                Konfirmasi pelunasan
+                Catat pembayaran
               </Button>
-              <TextField
+              {!(invoice.paidAmount ?? 0) && <TextField
                 label="Alasan bila membatalkan invoice"
                 icon={MessageSquare}
                 value={reason}
                 onChange={setReason}
-              />
+              />}
             </section>
           )}
-          {invoice.status === "PAID" && payment && (
+          {invoice.status === "PAID" && (
+            <section className="grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <h2 className="flex items-center gap-2 font-semibold text-emerald-800">
+                <CircleCheck className="size-4" aria-hidden="true" />
+                Invoice lunas
+              </h2>
+              <p className="text-sm text-emerald-900">
+                Jika hasil pembayaran invoice ini dipakai untuk membayar supplier, catat transfer uang keluarnya sekarang.
+              </p>
+              <Link
+                to="/add"
+                search={{
+                  supplierInvoiceId: invoice.id,
+                  direction: "MONEY_OUT",
+                  description: `Bayar supplier untuk invoice ${displayedInvoiceNumber || invoice.id}`,
+                  account: payments[payments.length - 1]?.accountId || undefined,
+                }}
+                className="inline-flex min-h-10 w-fit items-center gap-2 rounded-[10px] bg-[var(--main-dark)] px-4 py-2 text-sm font-semibold text-white"
+              >
+                <ArrowUpRight className="size-4" aria-hidden="true" />
+                Catat transfer ke supplier
+              </Link>
+            </section>
+          )}
+          {payments.length > 0 && (
             <section className="grid gap-3 rounded-xl border bg-white p-4">
               <p className="flex items-center gap-2 font-semibold text-emerald-700">
                 <CircleCheck className="size-4" aria-hidden="true" />
-                Pembayaran tercatat pada {formatDateLong(payment.paidOn)}
+                Riwayat pembayaran
               </p>
               <TextField
                 label="Alasan koreksi pembayaran"
@@ -323,16 +367,19 @@ export function InvoiceDetailPage({
                 value={reason}
                 onChange={setReason}
               />
-              <Button
-                variant="outline"
-                disabled={busy || !reason.trim()}
-                onClick={() =>
-                  void run(() => correctInvoicePayment(payment, reason))
-                }
-              >
-                <Undo2 aria-hidden="true" />
-                Koreksi Pembayaran
-              </Button>
+              {payments.map((payment) => (
+                <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
+                  <span>{formatDateLong(payment.paidOn)} · {formatRupiah(payment.amount)}</span>
+                  <Button
+                    variant="outline"
+                    disabled={busy || !reason.trim()}
+                    onClick={() => void run(() => correctInvoicePayment(payment, reason))}
+                  >
+                    <Undo2 aria-hidden="true" />
+                    Koreksi
+                  </Button>
+                </div>
+              ))}
             </section>
           )}
           <div className="flex gap-2">

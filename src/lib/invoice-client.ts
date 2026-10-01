@@ -407,7 +407,7 @@ export function listInvoiceProducts(search: string) {
 }
 export function getInvoice(id: string) {
   return cached(`invoice.${id}`, () =>
-    send<{ invoice: Invoice; payment: InvoicePayment | null }>(
+    send<{ invoice: Invoice; payments: InvoicePayment[]; payment: InvoicePayment | null }>(
       `/api/jornal/invoicing/invoices/${encodeURIComponent(id)}?${query(scope())}`,
     ),
   );
@@ -502,6 +502,7 @@ export async function markInvoicePaid(
   input: {
     transactionId?: string;
     paidOn: string;
+    amount?: number;
     accountId?: string | null;
     paymentMethod?: string;
     reference?: string;

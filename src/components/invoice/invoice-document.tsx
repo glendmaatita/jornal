@@ -133,6 +133,12 @@ export function InvoiceDocument({ invoice, customer, logoDataUrl }: { invoice: I
         <span>Total Keseluruhan</span>
         <span>{formatInvoicePrice(invoice.grandTotal)}</span>
       </section>
+      {(invoice.paidAmount ?? 0) > 0 && (
+        <section className="invoice-payment-balance">
+          <span>Sudah dibayar</span><span>{formatInvoicePrice(invoice.paidAmount ?? 0)}</span>
+          <strong>Sisa tagihan</strong><strong>{formatInvoicePrice(invoice.remainingAmount ?? invoice.grandTotal - (invoice.paidAmount ?? 0))}</strong>
+        </section>
+      )}
 
       <footer className="invoice-footer">
         <div className="invoice-payment-confirm">
@@ -192,6 +198,10 @@ export const INVOICE_CSS = `
 .invoice-total-line span:last-child{text-align:right;white-space:nowrap}
 .invoice-grand-total{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10mm;margin-top:1mm;padding:4.5mm 5mm;background:#d9d9d9}
 .invoice-grand-total span{color:#000;font-size:22px;font-weight:900;line-height:1}
+.invoice-payment-balance{display:grid;grid-template-columns:1fr auto;gap:1.5mm 7mm;margin:3mm 5mm 0;font-size:13px}
+.invoice-payment-balance span:last-of-type,.invoice-payment-balance strong:last-of-type{text-align:right}
+.invoice-payment-balance strong{font-size:15px}
+.invoice-payment-balance+.invoice-footer{margin-top:16mm}
 .invoice-footer{display:flex;justify-content:space-between;align-items:flex-start;gap:15mm;margin-top:29mm;padding:0 5mm}
 .invoice-payment-confirm{font-size:14px}
 .invoice-payment-confirm strong{display:block;font-size:15px;font-weight:900}
@@ -209,6 +219,7 @@ export const INVOICE_CSS = `
 .invoice-paper-compact .invoice-totals{row-gap:3.4mm;font-size:17px}
 .invoice-paper-compact .invoice-grand-total{padding-top:4mm;padding-bottom:4mm}
 .invoice-paper-compact .invoice-footer{margin-top:16mm}
+.invoice-paper-compact .invoice-payment-balance+.invoice-footer{margin-top:10mm}
 .invoice-paper-dense{padding-top:7mm;padding-bottom:10mm}
 .invoice-paper-dense .invoice-topbar{gap:14mm}
 .invoice-paper-dense .invoice-logo-wrap{min-height:20mm}
@@ -240,8 +251,9 @@ export const INVOICE_CSS = `
 .invoice-paper-dense .invoice-grand-total{margin-top:.5mm;padding:3mm}
 .invoice-paper-dense .invoice-grand-total span{font-size:18px}
 .invoice-paper-dense .invoice-footer{margin-top:7mm;padding:0 3mm}
+.invoice-paper-dense .invoice-payment-balance+.invoice-footer{margin-top:5mm}
 .invoice-paper-dense .invoice-payment-confirm{font-size:12px}
 .invoice-paper-dense .invoice-payment-confirm strong,.invoice-paper-dense .invoice-footer-email{font-size:13px}
 @media(max-width:850px){.invoice-paper{transform-origin:top left}}
-@media print{@page{size:A4 portrait;margin:8mm 21mm 16mm}html,body{width:auto;min-height:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.invoice-paper{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}.invoice-date-card,.invoice-items-table thead tr,.invoice-items-table th,.invoice-summary-divider,.invoice-grand-total{background-color:#d9d9d9;-webkit-print-color-adjust:exact;print-color-adjust:exact}.invoice-items-table{break-inside:auto;page-break-inside:auto}.invoice-summary-divider{break-after:avoid;page-break-after:avoid}.invoice-topbar,.invoice-info-row,.invoice-summary-row,.invoice-grand-total,.invoice-footer{break-inside:avoid;page-break-inside:avoid}}
+@media print{@page{size:A4 portrait;margin:8mm 21mm 16mm}html,body{width:auto;min-height:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.invoice-paper{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}.invoice-date-card,.invoice-items-table thead tr,.invoice-items-table th,.invoice-summary-divider,.invoice-grand-total{background-color:#d9d9d9;-webkit-print-color-adjust:exact;print-color-adjust:exact}.invoice-items-table{break-inside:auto;page-break-inside:auto}.invoice-summary-divider{break-after:avoid;page-break-after:avoid}.invoice-topbar,.invoice-info-row,.invoice-summary-row,.invoice-grand-total,.invoice-payment-balance,.invoice-footer{break-inside:avoid;page-break-inside:avoid}}
 `

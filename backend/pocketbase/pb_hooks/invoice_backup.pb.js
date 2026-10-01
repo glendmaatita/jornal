@@ -535,6 +535,7 @@ routerAdd(
             "tax_rate_bps",
             "tax_amount",
             "grand_total",
+            "paid_amount",
             "currency",
             "template_version",
             "issued_at",
@@ -544,6 +545,8 @@ routerAdd(
             "revision",
             "deleted_at",
           ]);
+          if (item.paid_amount === undefined && item.status === "PAID")
+            record.set("paid_amount", Number(item.grand_total || 0));
           const sender = { ...(item.sender_snapshot || {}) };
           if (sender.logoAssetId)
             sender.logoAssetId =
@@ -619,12 +622,12 @@ routerAdd(
         }
         let record = find(
           "invoice_payments",
-          "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && invoice_id = {:invoice} && status = {:status}",
+          "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && ledger_transaction_id = {:ledger} && status = {:status}",
           {
             tenant: scope.tenantId,
             company: scope.companyId,
             epoch: scope.epoch,
-            invoice: invoiceId,
+            ledger: ledgerId,
             status: String(item.status || "ACTIVE"),
           },
         );

@@ -51,6 +51,7 @@ export function TransactionFormPage() {
 
   const editing = useMemo(() => transactions.find((transaction) => transaction.id === transactionId) ?? null, [transactions, transactionId])
   const receivableIdFromUrl = new URLSearchParams(window.location.search).get("receivable")
+  const supplierInvoiceIdFromUrl = new URLSearchParams(window.location.search).get("supplierInvoiceId")
   const repaymentSource = useMemo(
     () => receivableIdFromUrl && receivableIdFromUrl !== "new" ? transactions.find((transaction) => transaction.id === receivableIdFromUrl && transaction.classification === "RECEIVABLE_CREATED") ?? null : null,
     [receivableIdFromUrl, transactions],
@@ -66,16 +67,16 @@ export function TransactionFormPage() {
   const [description, setDescription] = useState(() => new URLSearchParams(window.location.search).get("description") || "")
   const [transactionDate, setTransactionDate] = useState(() => new URLSearchParams(window.location.search).get("date") || todayIsoDate())
   const [categoryId, setCategoryId] = useState<string | null>(null)
-  const [accountId, setAccountId] = useState<string | null>(() => readEntryPreference("account"))
+  const [accountId, setAccountId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("account") || readEntryPreference("account"))
   const [transferAccountId, setTransferAccountId] = useState<string | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState(() => readEntryPreference("payment") || "Transfer")
+  const [paymentMethod, setPaymentMethod] = useState(() => supplierInvoiceIdFromUrl ? "Transfer" : readEntryPreference("payment") || "Transfer")
   const [supplierCustomer, setSupplierCustomer] = useState("")
   const [tags, setTags] = useState("")
   const [notes, setNotes] = useState("")
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
   const [attachmentDataUrl, setAttachmentDataUrl] = useState<string | null>(null)
   const [attachmentRemoved, setAttachmentRemoved] = useState(false)
-  const [showMore, setShowMore] = useState(() => new URLSearchParams(window.location.search).get("receivable") === "new")
+  const [showMore, setShowMore] = useState(() => new URLSearchParams(window.location.search).get("receivable") === "new" || Boolean(new URLSearchParams(window.location.search).get("supplierInvoiceId")))
   const [captureRequested, setCaptureRequested] = useState(false)
   const [classificationOverride, setClassificationOverride] = useState<TransactionClassification | null>(null)
   const [receivableDueDate, setReceivableDueDate] = useState<string | null>(null)
@@ -96,7 +97,7 @@ export function TransactionFormPage() {
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const [paymentMethodListId] = useState(() => `payment-methods-${crypto.randomUUID()}`)
   const [supplierCustomerListId] = useState(() => `supplier-customer-${crypto.randomUUID()}`)
-  const draftKey = scopedStorageKey(`jornal.transaction-draft.${transactionId ?? "new"}.v1`)
+  const draftKey = scopedStorageKey(`jornal.transaction-draft.${transactionId ?? (supplierInvoiceIdFromUrl ? `supplier-${supplierInvoiceIdFromUrl}` : "new")}.v1`)
   const draftRestoredRef = useRef(false)
 
   // Keep an unfinished entry available across navigation, refresh, and a
@@ -269,16 +270,18 @@ export function TransactionFormPage() {
       : undefined
   const descriptionError = mode !== "transfer" && !description.trim() ? "Keterangan wajib diisi." : undefined
   const debtorError = isReceivableCreation && !supplierCustomer.trim() ? "Masukkan nama orang yang meminjam." : undefined
+  const supplierError = supplierInvoiceIdFromUrl && !supplierCustomer.trim() ? "Nama supplier wajib diisi." : undefined
+  const supplierAccountError = supplierInvoiceIdFromUrl && !selectedAccountId ? "Pilih rekening asal transfer." : undefined
   const repaymentError = isReceivablePayment && repaymentRemaining !== null && amountValue > repaymentRemaining
     ? `Pembayaran melebihi sisa piutang (${formatNumberInput(repaymentRemaining)}).`
     : undefined
-  const canSave = !amountError && !transferError && !descriptionError && !debtorError && !repaymentError
+  const canSave = !amountError && !transferError && !descriptionError && !debtorError && !supplierError && !supplierAccountError && !repaymentError
 
   useEffect(() => {
     if (!showErrors) return
     const firstInvalid = document.querySelector<HTMLElement>('[aria-invalid="true"]')
     firstInvalid?.focus()
-  }, [showErrors, amountError, transferError, descriptionError])
+  }, [showErrors, amountError, transferError, descriptionError, supplierError, supplierAccountError])
 
   const applySmartInput = () => {
     const parsed = parseTransactionInput(smartText)
@@ -365,6 +368,7 @@ export function TransactionFormPage() {
     if (save.isPending) return
     if (!canSave) {
       setShowErrors(true)
+      if (supplierInvoiceIdFromUrl) setShowMore(true)
       return
     }
     save.mutate()
@@ -390,7 +394,7 @@ export function TransactionFormPage() {
         <span className="min-w-0 text-right text-xs text-muted-foreground"><span className="block">{editing ? "Ubah transaksi" : "Transaksi baru"}</span><span className="block truncate">{activeCompany()?.name}</span></span>
       </div>
 
-      {!editing && (
+      {!editing && !supplierInvoiceIdFromUrl && (
         <button
           type="button"
           onClick={() => setShowSmart((current) => !current)}
@@ -400,7 +404,7 @@ export function TransactionFormPage() {
           Tulis cepat: "bayar iklan meta 3jt"
         </button>
       )}
-      {showSmart && !editing && (
+      {showSmart && !editing && !supplierInvoiceIdFromUrl && (
         <Card className="mb-3">
           <CardContent className="p-3">
             <TextField
@@ -419,7 +423,7 @@ export function TransactionFormPage() {
       )}
 
       {/* Transaction type (§12) */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+      {!supplierInvoiceIdFromUrl && <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <button
           type="button"
           onClick={() => {
@@ -506,11 +510,17 @@ export function TransactionFormPage() {
           <ArrowLeftRight className="size-4" aria-hidden="true" />
           Transfer
         </button>
-      </div>
+      </div>}
 
       {isReceivablePayment && repaymentSource && (
         <div className="mb-4 rounded-[10px] border border-[#df1769]/25 bg-[#fff1f7] p-3 text-sm text-[#8c1249]">
           Mencatat pelunasan dari <strong>{repaymentSource.supplierCustomer || repaymentSource.description}</strong>. Sisa piutang {formatRupiah(repaymentRemaining ?? repaymentSource.amount)}. Ini bukan omzet.
+        </div>
+      )}
+
+      {supplierInvoiceIdFromUrl && !editing && (
+        <div className="mb-4 rounded-[10px] border border-[#16579d]/25 bg-[#f1f5fd] p-3 text-sm text-[#16579d]">
+          Catat uang keluar untuk supplier setelah invoice lunas. Isi nominal dan nama supplier, lalu periksa rekening asal sebelum menyimpan. <Link to="/invoices/$invoiceId" params={{ invoiceId: supplierInvoiceIdFromUrl }} className="font-semibold underline">Lihat invoice</Link>
         </div>
       )}
 
@@ -570,7 +580,7 @@ export function TransactionFormPage() {
               onChange={(value) => {
                 setDescription(value)
                 const detected = detectDirection(value)
-                if (detected && mode !== "owner_withdrawal") {
+                if (detected && mode !== "owner_withdrawal" && !supplierInvoiceIdFromUrl) {
                   setMode(detected === "MONEY_IN" ? "money_in" : "money_out")
                 }
                 setClassificationOverride(null)
@@ -650,7 +660,7 @@ export function TransactionFormPage() {
                       options={(direction === "MONEY_IN"
                         ? ["REVENUE", "CAPITAL_INJECTION", "LOAN_RECEIVED", "REFUND", "OTHER_INCOME", "INTERNAL_TRANSFER"]
                         : ["OPERATING_EXPENSE", "OWNER_WITHDRAWAL", "ASSET_PURCHASE", "LOAN_PAYMENT", "TAX_PAYMENT", "OTHER_OUTFLOW", "INTERNAL_TRANSFER"]
-                      ).map((classification) => ({ value: classification, label: CLASSIFICATION_LABELS[classification as TransactionClassification] }))}
+                      ).filter((classification) => !supplierInvoiceIdFromUrl || !["INTERNAL_TRANSFER", "OWNER_WITHDRAWAL"].includes(classification)).map((classification) => ({ value: classification, label: CLASSIFICATION_LABELS[classification as TransactionClassification] }))}
                     />
                     {effectiveClassification === "INTERNAL_TRANSFER" && (
                       <button
@@ -665,13 +675,14 @@ export function TransactionFormPage() {
                 </>
               )}
               <SelectField
-                label="Akun"
+                label={supplierInvoiceIdFromUrl ? "Rekening asal" : "Akun"}
                 value={accountId ?? ""}
                 onChange={(value) => setAccountId(value || null)}
-                placeholder="Tanpa akun"
+                placeholder={supplierInvoiceIdFromUrl ? "Pilih rekening" : "Tanpa akun"}
                 searchable
                 searchPlaceholder="Cari akun…"
                 options={selectableAccounts.map((account) => ({ value: account.id, label: accountOptionLabel(account) }))}
+                error={showErrors ? supplierAccountError : undefined}
               />
               <TextField
                 label="Metode pembayaran"
@@ -687,12 +698,13 @@ export function TransactionFormPage() {
                 ))}
               </datalist>
               <TextField
-                label="Supplier / Customer"
+                label={supplierInvoiceIdFromUrl ? "Nama supplier" : "Supplier / Customer"}
                 icon={User}
                 value={supplierCustomer}
                 onChange={setSupplierCustomer}
-                placeholder={isReceivableCreation ? "Nama orang yang meminjam" : "Nama supplier atau pelanggan"}
+                placeholder={isReceivableCreation ? "Nama orang yang meminjam" : supplierInvoiceIdFromUrl ? "Nama supplier" : "Nama supplier atau pelanggan"}
                 list={supplierCustomerListId}
+                error={showErrors ? supplierError : undefined}
               />
               {showErrors && debtorError && <p className="field-error">{debtorError}</p>}
               <datalist id={supplierCustomerListId}>

@@ -118,6 +118,8 @@ export interface Invoice {
   taxRateBps: number
   taxAmount: number
   grandTotal: number
+  paidAmount?: number
+  remainingAmount?: number
   currency: typeof INVOICE_CURRENCY
   paidAt: string | null
   voidReason: string | null

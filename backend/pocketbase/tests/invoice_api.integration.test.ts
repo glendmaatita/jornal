@@ -477,6 +477,97 @@ integrationTest(
     expect((correction.data.invoice as Record<string, unknown>).status).toBe(
       "UNPAID",
     );
+    const partial = await send(
+      `/api/jornal/invoicing/invoices/${invoice.id}/mark-paid`,
+      {
+        method: "POST",
+        headers: headers(owner.token),
+        body: JSON.stringify({
+          ...base,
+          commandKey: "pay-partial-1",
+          expectedRevision: (correction.data.invoice as Record<string, unknown>).revision,
+          paidOn: today,
+          transactionId: "invoice-partial-1",
+          amount: 80_000,
+          mode: "CREATE",
+        }),
+      },
+    );
+    expect(partial.response.status).toBe(200);
+    expect((partial.data.invoice as Record<string, unknown>).status).toBe("UNPAID");
+    expect((partial.data.invoice as Record<string, unknown>).paidAmount).toBe(80_000);
+    expect((partial.data.invoice as Record<string, unknown>).remainingAmount).toBe(120_000);
+    const partialSummary = await send(
+      `/api/jornal/invoicing/summary?companyId=${companyId}&dataEpoch=1`,
+      { headers: headers(owner.token) },
+    );
+    expect(partialSummary.data.unpaidTotal).toBe(120_000);
+    const partialCustomer = await send(
+      `/api/jornal/invoicing/customers/${customerId}?companyId=${companyId}&dataEpoch=1`,
+      { headers: headers(owner.token) },
+    );
+    expect((partialCustomer.data.summary as Record<string, unknown>).paidTotal).toBe(80_000);
+    expect((partialCustomer.data.summary as Record<string, unknown>).unpaidTotal).toBe(120_000);
+    const overpayment = await send(
+      `/api/jornal/invoicing/invoices/${invoice.id}/mark-paid`,
+      {
+        method: "POST",
+        headers: headers(owner.token),
+        body: JSON.stringify({
+          ...base,
+          commandKey: "pay-overpayment-rejected",
+          expectedRevision: (partial.data.invoice as Record<string, unknown>).revision,
+          paidOn: today,
+          transactionId: "invoice-overpayment-rejected",
+          amount: 130_000,
+          mode: "CREATE",
+        }),
+      },
+    );
+    expect(overpayment.response.status).toBe(400);
+    const completed = await send(
+      `/api/jornal/invoicing/invoices/${invoice.id}/mark-paid`,
+      {
+        method: "POST",
+        headers: headers(owner.token),
+        body: JSON.stringify({
+          ...base,
+          commandKey: "pay-partial-2",
+          expectedRevision: (partial.data.invoice as Record<string, unknown>).revision,
+          paidOn: today,
+          transactionId: "invoice-partial-2",
+          amount: 120_000,
+          mode: "CREATE",
+        }),
+      },
+    );
+    expect(completed.response.status).toBe(200);
+    expect((completed.data.invoice as Record<string, unknown>).status).toBe("PAID");
+    const detailWithPayments = await send(
+      `/api/jornal/invoicing/invoices/${invoice.id}?companyId=${companyId}&dataEpoch=1`,
+      { headers: headers(owner.token) },
+    );
+    expect((detailWithPayments.data.payments as unknown[]).length).toBe(2);
+    const correctedPartial = await send(
+      `/api/jornal/invoicing/payments/${(partial.data.payment as Record<string, unknown>).id}/correct`,
+      {
+        method: "POST",
+        headers: headers(owner.token),
+        body: JSON.stringify({ ...base, commandKey: "correct-partial-1", expectedRevision: 1, reason: "Salah nominal" }),
+      },
+    );
+    expect(correctedPartial.response.status).toBe(200);
+    expect((correctedPartial.data.invoice as Record<string, unknown>).paidAmount).toBe(120_000);
+    const correctedLast = await send(
+      `/api/jornal/invoicing/payments/${(completed.data.payment as Record<string, unknown>).id}/correct`,
+      {
+        method: "POST",
+        headers: headers(owner.token),
+        body: JSON.stringify({ ...base, commandKey: "correct-partial-2", expectedRevision: 1, reason: "Salah nominal" }),
+      },
+    );
+    expect(correctedLast.response.status).toBe(200);
+    expect((correctedLast.data.invoice as Record<string, unknown>).paidAmount).toBe(0);
     const voided = await send(
       `/api/jornal/invoicing/invoices/${invoice.id}/void`,
       {
@@ -485,7 +576,7 @@ integrationTest(
         body: JSON.stringify({
           ...base,
           commandKey: "void-1",
-          expectedRevision: (correction.data.invoice as Record<string, unknown>)
+          expectedRevision: (correctedLast.data.invoice as Record<string, unknown>)
             .revision,
           reason: "Invoice diganti",
         }),
@@ -523,7 +614,7 @@ integrationTest(
       businessId: owner.id,
       companyId,
       direction: "MONEY_IN",
-      amount: 200_000,
+      amount: 80_000,
       currency: "IDR",
       transactionDate: today,
       description: "Transfer pelanggan",
@@ -581,6 +672,7 @@ integrationTest(
     expect((linked.data.payment as Record<string, unknown>).origin).toBe(
       "LINKED",
     );
+    expect((linked.data.invoice as Record<string, unknown>).remainingAmount).toBe(120_000);
     const linkedPayment = linked.data.payment as Record<string, unknown>;
     const unlink = await send(
       `/api/jornal/invoicing/payments/${linkedPayment.id}/correct`,
@@ -955,6 +1047,11 @@ integrationTest(
     const matchDocumentId = String(
       (matchDocument.data.document as Record<string, unknown>).id,
     );
+    const partialDocumentCandidates = await send(
+      `/api/jornal/documents/${matchDocumentId}/invoice-candidates?companyId=${companyId}&dataEpoch=1&amount=30000`,
+      { headers: headers(owner.token) },
+    );
+    expect((partialDocumentCandidates.data.items as Array<Record<string, unknown>>).some((item) => item.id === issuedOverdue.id)).toBe(true);
     const matched = await send(
       `/api/jornal/documents/${matchDocumentId}/confirm`,
       {
@@ -968,7 +1065,7 @@ integrationTest(
           invoiceId: issuedOverdue.id,
           expectedInvoiceRevision: issuedOverdue.revision,
           transactionId: "overdue-document-cash",
-          amount: 75_000,
+          amount: 30_000,
           transactionDate: today,
           description: "Bukti pembayaran invoice",
         }),
@@ -978,9 +1075,8 @@ integrationTest(
       throw new Error(
         `invoice document match failed ${matched.response.status}: ${JSON.stringify(matched.data)}`,
       );
-    expect((matched.data.invoice as Record<string, unknown>).status).toBe(
-      "PAID",
-    );
+    expect((matched.data.invoice as Record<string, unknown>).status).toBe("UNPAID");
+    expect((matched.data.invoice as Record<string, unknown>).remainingAmount).toBe(45_000);
     expect(
       (matched.data.document as Record<string, unknown>).linkedPaymentId,
     ).toBeTruthy();

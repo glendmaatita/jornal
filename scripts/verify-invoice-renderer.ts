@@ -21,6 +21,11 @@ try {
   }))
   const manyInvoice = { ...invoice, items: manyItems, subtotal: 3_600_000, grandTotal: 3_600_000 }
   const manyPdf = await render("pdf", manyInvoice); assert.equal(String.fromCharCode(...manyPdf.slice(0, 5)), "%PDF-")
+  const partialInvoice = { ...invoice, items: [{ ...invoice.items[0], quantityScaled: 1_000, unitPrice: 50_000_000, lineTotal: 50_000_000 }], subtotal: 50_000_000, grandTotal: 50_000_000, paidAmount: 20_000_000, remainingAmount: 30_000_000 }
+  const partialPdf = await render("pdf", partialInvoice); assert.equal(String.fromCharCode(...partialPdf.slice(0, 5)), "%PDF-")
+  if (process.env.INVOICE_RENDER_PARTIAL_PDF_OUTPUT) await Bun.write(process.env.INVOICE_RENDER_PARTIAL_PDF_OUTPUT, partialPdf)
+  const partialManyPdf = await render("pdf", { ...manyInvoice, paidAmount: 1_000_000, remainingAmount: 2_600_000 }); assert.equal(String.fromCharCode(...partialManyPdf.slice(0, 5)), "%PDF-")
+  if (process.env.INVOICE_RENDER_PARTIAL_MANY_PDF_OUTPUT) await Bun.write(process.env.INVOICE_RENDER_PARTIAL_MANY_PDF_OUTPUT, partialManyPdf)
   const manyPng = await render("png", manyInvoice); const manyView = new DataView(manyPng.buffer, manyPng.byteOffset, manyPng.byteLength); assert.equal(manyView.getUint32(16), 1240); assert.ok(manyView.getUint32(20) > 1754)
   if (process.env.INVOICE_RENDER_DENSE_OUTPUT) await Bun.write(process.env.INVOICE_RENDER_DENSE_OUTPUT, densePng)
   if (process.env.INVOICE_RENDER_MANY_PDF_OUTPUT) await Bun.write(process.env.INVOICE_RENDER_MANY_PDF_OUTPUT, manyPdf)

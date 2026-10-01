@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test"
 
 const backend = "http://127.0.0.1:8090"
-test("creates a customer, issues an invoice, and records payment once", async ({ page, request }) => {
+test("pays an invoice and offers a supplier money-out transfer", async ({ page, request }) => {
   await page.setViewportSize({ width: 360, height: 800 })
   const adminAuth = await request.post(`${backend}/api/collections/_superusers/auth-with-password`, { data: { identity: "e2e-admin@jornal.test", password: "StrongPass123!" } }); expect(adminAuth.ok()).toBeTruthy(); const admin = await adminAuth.json() as { token: string }
   const email = `invoice-e2e-${Date.now()}@example.com`; const createdUser = await request.post(`${backend}/api/collections/users/records`, { headers: { Authorization: admin.token }, data: { email, verified: true, password: "UserPass123!", passwordConfirm: "UserPass123!" } }); expect(createdUser.ok()).toBeTruthy(); const user = await createdUser.json() as { id: string; email: string; verified: boolean; collectionId: string; collectionName: string }; const impersonated = await request.post(`${backend}/api/collections/users/impersonate/${user.id}`, { headers: { Authorization: admin.token } }); const auth = await impersonated.json() as { token: string }
@@ -89,5 +89,20 @@ test("creates a customer, issues an invoice, and records payment once", async ({
   await page.getByRole("button", { name: "Simpan Revisi" }).click()
   await expect(page.getByRole("heading", { name: officialInvoiceNumber })).toBeVisible()
   await expect(page.getByText("Kurir revisi", { exact: false })).toBeVisible()
-  await page.getByRole("button", { name: "Konfirmasi pelunasan" }).click(); await expect(page.getByText(/Pembayaran tercatat/)).toBeVisible(); await page.goto(`/transactions?company=${company.id}`); await expect(page.getByText(`Pelunasan invoice ${officialInvoiceNumber}`, { exact: true })).toBeVisible(); await expect(page.getByRole("button", { name: "Pakai perangkat" })).toHaveCount(0)
+  await page.getByRole("combobox", { name: "Rekening" }).click()
+  await page.getByRole("option", { name: /BCA Operasional/ }).click()
+  await page.getByRole("button", { name: "Catat pembayaran" }).click()
+  await expect(page.getByRole("heading", { name: "Invoice lunas" })).toBeVisible()
+  await page.getByRole("link", { name: "Catat transfer ke supplier" }).click()
+  await expect(page).toHaveURL(/\/add/)
+  await expect(page.getByLabel("Keterangan")).toHaveValue(`Bayar supplier untuk invoice ${officialInvoiceNumber}`)
+  await expect(page.getByRole("combobox", { name: "Rekening asal" })).toContainText("BCA")
+  await page.getByRole("button", { name: "Simpan" }).click()
+  await expect(page.getByText("Nama supplier wajib diisi.")).toBeVisible()
+  await page.getByLabel("Jumlah").fill("50000")
+  await page.getByLabel("Nama supplier").fill("Supplier Browser")
+  await page.getByRole("button", { name: "Simpan" }).click()
+  await expect(page).toHaveURL(/\/transactions/)
+  await expect(page.getByText(`Bayar supplier untuk invoice ${officialInvoiceNumber}`, { exact: true })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Pakai perangkat" })).toHaveCount(0)
 })

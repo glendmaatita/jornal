@@ -30,7 +30,7 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
       </header>
       <div className="grid grid-cols-2 gap-3">
         <Card><CardContent className="p-4"><p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock className="size-3.5 text-amber-600" aria-hidden="true" />Belum dibayar</p><p className="mt-1 font-semibold tabular-nums">{formatRupiah(summary.unpaidTotal)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="flex items-center gap-1.5 text-xs text-muted-foreground"><CircleCheck className="size-3.5 text-emerald-600" aria-hidden="true" />Sudah lunas</p><p className="mt-1 font-semibold tabular-nums">{formatRupiah(summary.paidTotal)}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="flex items-center gap-1.5 text-xs text-muted-foreground"><CircleCheck className="size-3.5 text-emerald-600" aria-hidden="true" />Sudah dibayar</p><p className="mt-1 font-semibold tabular-nums">{formatRupiah(summary.paidTotal)}</p></CardContent></Card>
       </div>
       <Link to="/invoices/new" search={{ customer: customerId }} className="flex items-center justify-center gap-2 rounded-xl bg-[var(--main-dark)] p-3 text-center font-semibold text-white"><FilePlus2 className="size-4" aria-hidden="true" />Buat Invoice</Link>
       <Card>
@@ -43,8 +43,8 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
       {invoices.map((invoice) => (
         <Link key={invoice.id} to="/invoices/$invoiceId" params={{ invoiceId: invoice.id }} className="flex items-center gap-3 rounded-xl border bg-white p-3">
           <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="flex-1">{formatInvoiceNumber(invoice.invoiceNumber, invoice.sequence, invoice.issueDate) || "Draft"} · {invoice.status}</span>
-          <strong className="tabular-nums">{formatRupiah(invoice.grandTotal)}</strong>
+          <span className="flex-1">{formatInvoiceNumber(invoice.invoiceNumber, invoice.sequence, invoice.issueDate) || "Draft"} · {invoice.status === "UNPAID" && (invoice.paidAmount ?? 0) > 0 ? "Dibayar sebagian" : invoice.status}</span>
+          <strong className="tabular-nums">{formatRupiah(invoice.status === "UNPAID" ? invoice.remainingAmount ?? invoice.grandTotal : invoice.grandTotal)}</strong>
         </Link>
       ))}
     </div>
