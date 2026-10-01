@@ -180,6 +180,8 @@ describe("detectUpcomingObligations", () => {
 // ── AI reserve recommendations (§64 P2) ──
 
 describe("recommendReserves", () => {
+  const asOf = new Date("2026-09-15T00:00:00Z")
+
   test("recommends meaningful categories not already reserved", () => {
     const transactions = [
       makeTransaction({ transactionDate: "2026-06-10", amount: 20_000_000, classification: "OPERATING_EXPENSE", direction: "MONEY_OUT", categoryId: "exp-payroll" }),
@@ -187,8 +189,8 @@ describe("recommendReserves", () => {
       makeTransaction({ transactionDate: "2026-08-10", amount: 20_000_000, classification: "OPERATING_EXPENSE", direction: "MONEY_OUT", categoryId: "exp-payroll" }),
       makeTransaction({ transactionDate: "2026-08-11", amount: 100_000, classification: "OPERATING_EXPENSE", direction: "MONEY_OUT", categoryId: "exp-office" }),
     ]
-    const input = { transactions, accounts: [] as Account[], profile: makeProfile(), reserves: [], now: new Date("2026-09-15T00:00:00") }
-    const recommendations = recommendReserves(input)
+    const input = { transactions, accounts: [] as Account[], profile: makeProfile(), reserves: [] }
+    const recommendations = recommendReserves(input, asOf)
     expect(recommendations.length).toBe(1)
     expect(recommendations[0].name).toBe("Gaji & Upah")
     expect(recommendations[0].amount).toBe(20_000_000)
@@ -204,7 +206,7 @@ describe("recommendReserves", () => {
     const reserves: Reserve[] = [
       { id: "r1", name: "Gaji & Upah", amount: 20_000_000, dueDate: null, status: "ACTIVE", createdAt: "", updatedAt: "" },
     ]
-    const recommendations = recommendReserves({ transactions, accounts: [], profile: makeProfile(), reserves })
+    const recommendations = recommendReserves({ transactions, accounts: [], profile: makeProfile(), reserves }, asOf)
     expect(recommendations).toHaveLength(0)
   })
 
@@ -212,7 +214,7 @@ describe("recommendReserves", () => {
     const transactions = [
       makeTransaction({ transactionDate: "2026-08-10", amount: 20_000_000, classification: "OPERATING_EXPENSE", direction: "MONEY_OUT", categoryId: "exp-payroll" }),
     ]
-    const recommendations = recommendReserves({ transactions, accounts: [], profile: makeProfile(), reserves: [], now: new Date("2026-09-15T00:00:00") })
+    const recommendations = recommendReserves({ transactions, accounts: [], profile: makeProfile(), reserves: [] }, asOf)
     expect(recommendations).toHaveLength(0)
   })
 })
