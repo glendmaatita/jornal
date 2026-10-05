@@ -16,7 +16,7 @@ import {
   syncConflictLabel,
   syncToPocketBase,
 } from "./pocketbase-sync"
-import { persistState } from "./local-db"
+import { listOutbox, persistState } from "./local-db"
 import { KEYS, RESET_PENDING_KEY, scopedStorageKey, saveProfile, emptyProfile, createTransaction, updateTransaction } from "./store"
 import type { Transaction } from "./types"
 
@@ -478,6 +478,38 @@ describe("hydrateFromPocketBase", () => {
     expect(calls.some((call) => call.method === "PATCH")).toBe(false)
   })
 
+  test("manual refresh downloads transactions when a pending upload fails", async () => {
+    setEnv(undefined)
+    const local = createTransaction(transactionFixture("txn-local"))
+    await flushQueuedSync()
+    setEnv("http://pb.test")
+    const remote = record("transactions", "txn-remote", transactionFixture("txn-remote"), "pb-remote")
+    respond = (url, method) => {
+      if (method !== "GET") return { status: 400, body: { message: "Upload rejected" } }
+      const filter = new URL(url).searchParams.get("filter") ?? ""
+      return { status: 200, body: { items: filter.includes('entity = "transactions"') ? [remote] : [], totalPages: 1 } }
+    }
+
+    expect(await refreshPocketBaseFromServer()).toBe(true)
+    const transactions = JSON.parse(localStorageShim.getItem(KEYS.transactions) ?? "[]") as Transaction[]
+    expect(transactions.map((item) => item.id).sort()).toEqual([local.id, "txn-remote"].sort())
+  })
+
+  test("manual refresh does not hydrate a partially failed company reset", async () => {
+    setEnv("http://pb.test")
+    const resetKey = scopedStorageKey(RESET_PENDING_KEY)
+    localStorageShim.setItem(resetKey, new Date().toISOString())
+    respond = (url, method) => {
+      if (method === "DELETE") return { status: 400, body: { message: "Reset rejected" } }
+      const filter = new URL(url).searchParams.get("filter") ?? ""
+      return { status: 200, body: { items: filter.includes('entity = "profile"') ? [record("profile", "profile", emptyProfile(), "pb-profile")] : [], totalPages: 1 } }
+    }
+
+    expect(await refreshPocketBaseFromServer()).toBe(false)
+    expect(localStorageShim.getItem(resetKey)).not.toBeNull()
+    expect(calls.some((call) => new URL(call.url).searchParams.get("filter")?.includes('entity = "transactions"'))).toBe(false)
+  })
+
   test("writes remote payloads into local storage", async () => {
     setEnv("http://pb.test")
     const profileRecord = record("profile", "profile", { businessName: "Remote" }, "pb-3")
@@ -522,6 +554,25 @@ describe("hydrateFromPocketBase", () => {
 })
 
 describe("initializePocketBaseSync", () => {
+  test("loads server transactions even when a pending local upload is rejected", async () => {
+    setEnv(undefined)
+    const local = createTransaction(transactionFixture("txn-local"))
+    await flushQueuedSync()
+    setEnv("http://pb.test")
+    const remote = record("transactions", "txn-remote", transactionFixture("txn-remote"), "pb-remote")
+    respond = (url, method) => {
+      if (method !== "GET") return { status: 400, body: { message: "Upload rejected" } }
+      const filter = new URL(url).searchParams.get("filter") ?? ""
+      return { status: 200, body: { items: filter.includes('entity = "transactions"') ? [remote] : [], totalPages: 1 } }
+    }
+
+    expect(await initializePocketBaseSync()).toBe(true)
+    const transactions = JSON.parse(localStorageShim.getItem(KEYS.transactions) ?? "[]") as Transaction[]
+    expect(transactions.map((item) => item.id).sort()).toEqual([local.id, "txn-remote"].sort())
+    expect((await listOutbox()).some((row) => row.key === KEYS.transactions)).toBe(true)
+    expect(getHydrationState()).toBe("ready")
+  })
+
   test("reports completed hydration to later consumers without running it again", async () => {
     setEnv("http://pb.test")
     respond = () => ({ status: 200, body: { items: [], totalPages: 1 } })

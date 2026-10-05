@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
 import { faFilter } from "@fortawesome/free-solid-svg-icons/faFilter"
 import { faReceipt } from "@fortawesome/free-solid-svg-icons/faReceipt"
-import { Search, ShieldQuestion } from "lucide-react"
+import { RefreshCw, Search, ShieldQuestion } from "lucide-react"
 
 import { TransactionItem } from "@/components/transaction-item"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +16,7 @@ import { TextField } from "@/components/ui/text-field"
 import { categoriesForKind } from "@/lib/categories"
 import { formatGroupLabel, todayIsoDate } from "@/lib/format"
 import { queryKeys, useTransactions } from "@/lib/queries"
+import { refreshPocketBaseFromServer } from "@/lib/pocketbase-sync"
 import { resolveReview } from "@/lib/store"
 import type { TransactionClassification, TransactionDirection } from "@/lib/types"
 import { CLASSIFICATION_LABELS } from "@/lib/types"
@@ -59,7 +60,7 @@ export function TransactionsPage() {
   const search = useSearch({ from: "/_app/transactions" }) as { filter?: string }
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { data: transactions = [] } = useTransactions()
+  const { data: transactions = [], isPending, isError, refetch } = useTransactions()
 
   const [query, setQuery] = useState("")
   const [direction, setDirection] = useState<TransactionDirection | "">("")
@@ -69,8 +70,34 @@ export function TransactionsPage() {
   const [amountRange, setAmountRange] = useState<{ min: string; max: string } | null>(null)
   const [reviewOnly, setReviewOnly] = useState(false)
   const [visibleCount, setVisibleCount] = useState(100)
+  const [refreshing, setRefreshing] = useState(false)
 
   const isReviewMode = search.filter === "review"
+  const hasActiveFilters = Boolean(
+    query.trim() || direction || categoryId || classification || dateRange?.start || dateRange?.end
+    || amountRange?.min || amountRange?.max || reviewOnly,
+  )
+
+  const clearFilters = () => {
+    setQuery("")
+    setDirection("")
+    setCategoryId("")
+    setClassification("")
+    setDateRange(null)
+    setAmountRange(null)
+    setReviewOnly(false)
+    setVisibleCount(100)
+  }
+
+  const refreshTransactions = async () => {
+    setRefreshing(true)
+    try {
+      await refreshPocketBaseFromServer()
+      await refetch()
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     let result = [...transactions]
@@ -245,6 +272,12 @@ export function TransactionsPage() {
         </div>
       )}
 
+      {!isReviewMode && hasActiveFilters && !isPending && !isError && filtered.length > 0 && (
+        <p className="px-2 text-xs text-muted-foreground" role="status">
+          {filtered.length} dari {transactions.length} transaksi ditampilkan.
+        </p>
+      )}
+
       {!isReviewMode &&
         grouped.map(([date, items]) => (
           <section key={date}>
@@ -267,13 +300,38 @@ export function TransactionsPage() {
         </Button>
       )}
 
-      {!isReviewMode && filtered.length === 0 && (
+      {!isReviewMode && (isPending || isError || filtered.length === 0) && (
         <Card className="border-dashed">
           <CardContent className="p-8 text-center">
-            <p className="text-sm text-muted-foreground">Tidak ada transaksi yang cocok.</p>
-            <Link to="/add" className={cn("mt-3 inline-block text-sm font-medium text-primary underline")}>
-              Catat transaksi
-            </Link>
+            <p className="text-sm text-muted-foreground" role="status">
+              {isPending
+                ? "Memuat transaksi…"
+                : isError
+                  ? "Transaksi gagal dimuat. Coba segarkan data."
+                  : transactions.length === 0
+                    ? "Belum ada transaksi yang dimuat untuk perusahaan ini."
+                    : `Tidak ada transaksi yang cocok dengan filter ini (0 dari ${transactions.length}).`}
+            </p>
+            {!isPending && (
+              <div className="mt-3 flex flex-wrap justify-center gap-4">
+                {transactions.length > 0 && hasActiveFilters && (
+                  <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary underline">
+                    Hapus filter
+                  </button>
+                )}
+                {(transactions.length === 0 || isError) && (
+                  <button type="button" onClick={() => void refreshTransactions()} disabled={refreshing} className="inline-flex items-center gap-1 text-sm font-medium text-primary underline disabled:opacity-50">
+                    <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} aria-hidden="true" />
+                    {refreshing ? "Menyegarkan…" : "Segarkan data"}
+                  </button>
+                )}
+                {transactions.length === 0 && (
+                  <Link to="/add" className="text-sm font-medium text-primary underline">
+                    Catat transaksi
+                  </Link>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

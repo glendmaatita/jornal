@@ -910,6 +910,20 @@ async function syncWithRetry(scope = companyScope()) {
   }
 }
 
+async function syncBeforeHydration(scope: CompanyScope) {
+  const generation = syncGeneration
+  try {
+    await syncWithRetry(scope)
+  } catch (error) {
+    if (generation !== syncGeneration || !sameScope(scope)) throw error
+    // A failed company reset may have removed only some remote entities.
+    // Keep its marker and do not repopulate local state from that partial set.
+    if (window.localStorage.getItem(storageKeyForScope(scope, RESET_PENDING_KEY))) throw error
+    // Ordinary failed uploads stay in the outbox; they must not block a pull.
+  }
+  if (generation !== syncGeneration || !sameScope(scope)) throw new Error("Hydration cancelled: session changed")
+}
+
 export async function hydrateFromPocketBase(runScope = companyScope()) {
   if (!enabled() || typeof window === "undefined") return false
   const runGeneration = syncGeneration
@@ -1084,7 +1098,7 @@ export async function initializePocketBaseSync() {
       runtime.hydrationState = "ready"
       return false
     }
-    await syncWithRetry(runScope)
+    await syncBeforeHydration(runScope)
     await hydrateFromPocketBase(runScope)
     runtime.hydrationState = "ready"
     return true
@@ -1107,7 +1121,7 @@ export async function refreshPocketBaseFromServer(runScope = companyScope()) {
   if (runtime.hydration) return runtime.hydration
   const refresh = (async () => {
     try {
-      await syncWithRetry(runScope)
+      await syncBeforeHydration(runScope)
       await hydrateFromPocketBase(runScope)
       runtime.hydrationState = "ready"
       return true
