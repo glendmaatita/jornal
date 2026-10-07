@@ -3,7 +3,9 @@
 ARG BUN_VERSION=1.4.0
 ARG POCKETBASE_VERSION=0.40.2
 
-FROM oven/bun:${BUN_VERSION}-alpine AS dependencies
+# The SPA output is architecture-independent. Build it on the runner's native
+# platform so the arm64 image does not compile the frontend through QEMU.
+FROM --platform=$BUILDPLATFORM oven/bun:${BUN_VERSION}-alpine AS dependencies
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
@@ -16,21 +18,20 @@ ARG VITE_TAX_COMPLIANCE_ENABLED=true
 ENV VITE_POCKETBASE_URL=${VITE_POCKETBASE_URL}
 ENV VITE_MULTI_COMPANY_ENABLED=${VITE_MULTI_COMPANY_ENABLED}
 ENV VITE_TAX_COMPLIANCE_ENABLED=${VITE_TAX_COMPLIANCE_ENABLED}
-COPY . .
+# Keep backend, documentation, and e2e changes from invalidating the SPA build.
+COPY index.html server.ts vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
+COPY src ./src
+COPY public ./public
+COPY scripts ./scripts
 RUN bun run build
 
-# Single-container runtime: supervisord manages both the SPA server and
-# PocketBase. PocketBase is a static Go binary, downloaded per TARGETARCH.
-FROM oven/bun:${BUN_VERSION}-alpine AS runtime
+# Download the target-architecture PocketBase binary without running the
+# downloader and unzipper under emulation.
+FROM --platform=$BUILDPLATFORM oven/bun:${BUN_VERSION}-alpine AS pocketbase
 ARG POCKETBASE_VERSION
 ARG TARGETARCH
-WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3000
-
-RUN apk add --no-cache supervisor unzip curl
-
-RUN case "$TARGETARCH" in \
+RUN apk add --no-cache unzip curl \
+    && case "$TARGETARCH" in \
       amd64) PB_ARCH=amd64 ;; \
       arm64) PB_ARCH=arm64 ;; \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
@@ -40,6 +41,15 @@ RUN case "$TARGETARCH" in \
     && chmod +x /pb/pocketbase \
     && rm /tmp/pocketbase.zip
 
+# Single-container runtime: supervisord manages both the SPA server and
+# PocketBase. Only this small stage has to run on the target architecture.
+FROM oven/bun:${BUN_VERSION}-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+RUN apk add --no-cache supervisor
+
+COPY --from=pocketbase /pb/pocketbase /pb/pocketbase
 COPY backend/pocketbase/pb_migrations /pb/pb_migrations
 COPY backend/pocketbase/pb_hooks /pb/pb_hooks
 COPY supervisord.conf /etc/supervisord.conf

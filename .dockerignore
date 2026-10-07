@@ -1,8 +1,13 @@
 .git
 .github
+.env*
+.covtmp_*
+.v8cov_*
 node_modules
 dist
+dev-dist
 coverage
+test-results
 *.log
+*.tsbuildinfo
 .DS_Store
-
