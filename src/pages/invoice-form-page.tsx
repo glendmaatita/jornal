@@ -311,13 +311,14 @@ export function InvoiceFormPage({
         <TextField label="Total sudah dibayar setelah koreksi" type="amount" prefix="Rp" value={correctedPaidAmount} onChange={setCorrectedPaidAmount} placeholder="0 untuk belum bayar" />
         <TextField label="Alasan perubahan pembayaran" value={paymentCorrectionReason} onChange={setPaymentCorrectionReason} placeholder="Contoh: nominal transfer keliru" />
         {Number.isSafeInteger(nextPaid) && nextPaid > invoice.grandTotal && nextPaid <= MAX_INVOICE_TOTAL && <p className="text-sm font-medium text-amber-800">Lebih bayar {formatRupiah(nextPaid - invoice.grandTotal)}. Total invoice tetap {formatRupiah(invoice.grandTotal)}.</p>}
-        <p className="text-xs text-muted-foreground">Transaksi pemasukan yang dikoreksi akan ikut berubah. Isi 0 untuk membuka revisi isi invoice.</p>
+        <p className="text-xs text-muted-foreground">Transaksi pemasukan yang dikoreksi akan ikut berubah. Isi 0 untuk kembali ke belum bayar; isi invoice dapat direvisi setelahnya.</p>
         <Button disabled={busy || !correctedPaidAmount.trim() || !paymentCorrectionReason.trim() || !Number.isSafeInteger(nextPaid) || nextPaid < 0 || nextPaid > MAX_INVOICE_TOTAL || nextPaid === currentPaid} onClick={() => void (async () => {
           setBusy(true); setError("");
           try {
             const result = await setInvoicePaidAmount(invoice, nextPaid, paymentCorrectionReason.trim());
-            setInvoice(result.invoice); setCorrectedPaidAmount(""); setPaymentCorrectionReason("");
             await client.invalidateQueries({ queryKey: ["invoice"] });
+            try { sessionStorage.setItem("jornal.invoice-correction-saved", result.invoice.id); } catch { /* navigation still succeeds without a notice */ }
+            await navigate({ to: "/invoices/$invoiceId", params: { invoiceId: result.invoice.id }, replace: true });
           } catch (cause) { setError(cause instanceof Error ? cause.message : "Pembayaran gagal dikoreksi."); }
           finally { setBusy(false); }
         })()}><Undo2 aria-hidden="true" />Simpan koreksi pembayaran</Button>

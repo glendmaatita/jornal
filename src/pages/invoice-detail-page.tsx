@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -88,6 +88,17 @@ export function InvoiceDetailPage({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [correctionSaved, setCorrectionSaved] = useState(false);
+  useEffect(() => {
+    if (previewOnly) return;
+    try {
+      if (sessionStorage.getItem("jornal.invoice-correction-saved") !== invoiceId) return;
+      sessionStorage.removeItem("jornal.invoice-correction-saved");
+      // This one-time notice is transferred from the correction page.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCorrectionSaved(true);
+    } catch { /* the invoice remains available when storage is blocked */ }
+  }, [invoiceId, previewOnly]);
   const enabledAccounts = accounts.filter(isAccountEnabled);
   const selectedEnabledAccountId = accountId && enabledAccounts.some((account) => account.id === accountId)
     ? accountId
@@ -178,6 +189,7 @@ export function InvoiceDetailPage({
               </Link>
             )}
           </header>
+          {correctionSaved && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Koreksi pembayaran berhasil disimpan.</p>}
           {error && (
             <p className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
