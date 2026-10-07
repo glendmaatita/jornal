@@ -41,7 +41,7 @@ export function HomePage() {
 
   const period = useMemo(() => resolvePeriod(preset, custom), [preset, custom])
   const periodTransactions = useMemo(
-    () => transactions.filter((transaction) => inPeriod(transaction.transactionDate, period) && transaction.classification !== "INTERNAL_TRANSFER"),
+    () => transactions.filter((transaction) => inPeriod(transaction.transactionDate, period) && transaction.classification !== "INTERNAL_TRANSFER" && transaction.classification !== "OPENING_BALANCE"),
     [transactions, period],
   )
   const recent = useMemo(() => [...transactions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5), [transactions])

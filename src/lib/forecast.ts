@@ -14,6 +14,7 @@ import { detectRecurring, categoryMonthlyExpenses, monthlyTrends } from "./trend
 import { computeTaxOverviewAsOf } from "./tax"
 import { ALL_CATEGORIES } from "./categories"
 import { formatRupiah, toIsoDate, todayIsoDate } from "./format"
+import { assertMoney } from "./financial-validation"
 
 export type ExpectedFlowSource = "recurring" | "reserve" | "scenario"
 
@@ -42,12 +43,10 @@ function addDays(iso: string, days: number): string {
 
 /** Next monthly occurrence strictly after `fromIso`, assuming monthly cadence. */
 export function nextOccurrenceAfter(lastDate: string, fromIso: string): string {
-  let next = addMonths(lastDate, 1)
-  let guard = 0
-  while (next <= fromIso && guard < 36) {
-    next = addMonths(next, 1)
-    guard += 1
-  }
+  const [year, month] = lastDate.split("-").map(Number)
+  const [fromYear, fromMonth] = fromIso.split("-").map(Number)
+  let next = addMonths(lastDate, Math.max(1, (fromYear - year) * 12 + fromMonth - month))
+  if (next <= fromIso) next = addMonths(next, 1)
   return next
 }
 
@@ -63,7 +62,7 @@ export function collectExpectedFlows(
 ): ExpectedFlow[] {
   const flows: ExpectedFlow[] = []
 
-  for (const candidate of detectRecurring(input.transactions)) {
+  for (const candidate of detectRecurring(input.transactions, todayIso)) {
     let next = nextOccurrenceAfter(candidate.lastDate, todayIso)
     while (next <= horizonEnd) {
       flows.push({
@@ -155,6 +154,8 @@ export function computeForecast(
 ): ForecastResult {
   const horizonDays = options.horizonDays ?? 30
   const scenario = options.scenario ?? EMPTY_SCENARIO
+  if (!Number.isSafeInteger(horizonDays) || horizonDays < 1 || horizonDays > 366) throw new Error("Horizon proyeksi harus antara 1 dan 366 hari")
+  Object.values(scenario).forEach((value) => assertMoney(value, "Nominal skenario"))
   const todayIso = todayIsoDate(now)
   const horizonEnd = addDays(todayIso, horizonDays)
 
@@ -203,7 +204,7 @@ export function computeForecast(
     `Horizon proyeksi ${horizonDays} hari (sampai ${horizonEnd}).`,
     "Transaksi berulang diasumsikan terjadi bulanan dengan nominal serupa.",
     expectedIn > 0
-      ? `Pemasukan yang diharapkan dipotong pajak ${Math.round(rate * 100)}% lebih dulu (konservatif).`
+      ? `Pemasukan yang diharapkan dipotong pajak ${(rate * 100).toLocaleString("id-ID", { maximumFractionDigits: 2 })}% lebih dulu (konservatif).`
       : "Tidak ada pemasukan yang diharapkan dalam horizon.",
     "Kewajiban yang belum jatuh tempo tetap dihitung penuh sebagai reserve.",
     "Proyeksi adalah estimasi. Hasilnya bergantung pada data dan belum mencakup tagihan yang belum dicatat.",

@@ -73,8 +73,9 @@ function computeUmkm(input) {
   if (!input.dataComplete) return { amountState: "UNKNOWN", dataStatus: "INCOMPLETE", taxableBase: null, liabilityAmount: null }
   const allowance = input.subjectType === "INDIVIDUAL" ? 500000000 : 0
   const monthRevenue = Math.max(0, current + adjustment)
+  if (!Number.isSafeInteger(current + adjustment) || !Number.isSafeInteger(before + monthRevenue)) throw new ApiError(400, "Tax calculation exceeds the safe integer range")
   const taxableBase = Math.max(0, before + monthRevenue - allowance) - Math.max(0, before - allowance)
-  return { amountState: "CONFIRMED", dataStatus: "COMPLETE", taxableBase, liabilityAmount: Math.round(taxableBase * 0.005) }
+  return { amountState: "CONFIRMED", dataStatus: "COMPLETE", taxableBase, liabilityAmount: Math.floor(taxableBase / 200) + (taxableBase % 200 >= 100 ? 1 : 0) }
 }
 
 module.exports = { RULES, addMonthsClamped, computeUmkm, dueDate, ruleById, ruleByKindAt }

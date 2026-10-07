@@ -299,11 +299,11 @@ routerAdd("POST", "/api/jornal/invoicing/invoices/{id}/mark-paid", (event) => {
     if (mode === "LINK_EXISTING") {
       try { linkedLedgerRecord = tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'transactions' && app_id = {:id}", { tenant: tenantId, company: companyId, epoch, id: transactionId }) } catch { throw new ApiError(404, "Transaksi pemasukan tidak ditemukan") }
     }
-    const amount = Number(body.amount === undefined ? linkedLedgerRecord ? h.json(linkedLedgerRecord, "payload", {}).amount : remaining : body.amount)
+    const amount = h.int(body.amount === undefined ? linkedLedgerRecord ? h.json(linkedLedgerRecord, "payload", {}).amount : remaining : body.amount, "Nominal pembayaran", 1, remaining)
     if (!Number.isSafeInteger(amount) || amount <= 0 || amount > remaining) throw new ApiError(400, "Nominal pembayaran harus lebih dari nol dan tidak melebihi sisa tagihan")
     const now = new Date().toISOString(); let ledgerRecord; let ledgerTransaction; let originalLedgerSnapshot = null
     const taxBefore = h.invoiceRecordedTax(tx, invoice)
-    const taxAfter = Math.round((alreadyPaid + amount) * invoice.getInt("tax_amount") / invoice.getInt("grand_total"))
+    const taxAfter = h.proportionalAmount(alreadyPaid + amount, invoice.getInt("tax_amount"), invoice.getInt("grand_total"))
     const invoiceTaxAmount = taxAfter - taxBefore
     const invoiceMetadata = { invoiceId: invoice.id, invoiceNumber: invoice.getString("invoice_number"), customerId: customer.id, invoiceRevenueAmount: amount - invoiceTaxAmount, invoiceTaxAmount }
     if (mode === "CREATE") {
@@ -354,7 +354,7 @@ routerAdd("POST", "/api/jornal/invoicing/invoices/{id}/set-paid-amount", (event)
     if (replay) { response = replay.body; return }
     const invoice = h.ownedRecord(tx, "invoices", event.request.pathValue("id"), scope.tenantId, scope.companyId, scope.epoch, "Invoice")
     if (invoice.getInt("revision") !== Number(body.expectedRevision)) throw new ApiError(409, "Invoice telah berubah")
-    const before = h.invoiceResponse(invoice); const currentPaid = invoice.getInt("paid_amount"); const target = Number(body.paidAmount)
+    const before = h.invoiceResponse(invoice); const currentPaid = invoice.getInt("paid_amount"); const target = h.int(body.paidAmount, "Nominal pembayaran", 0, currentPaid)
     if (!["PAID", "UNPAID"].includes(invoice.getString("status")) || currentPaid <= 0 || !Number.isSafeInteger(target) || target < 0 || target >= currentPaid) throw new ApiError(400, "Jumlah pembayaran setelah koreksi tidak valid")
     const reason = h.requireText(body.reason, "Alasan koreksi", 500, true); const now = new Date().toISOString()
     const payments = h.findAllRecords(tx, "invoice_payments", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && invoice_id = {:invoice} && status = 'ACTIVE'", "-paid_on,-created", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, invoice: invoice.id })
@@ -402,9 +402,9 @@ routerAdd("POST", "/api/jornal/invoicing/invoices/{id}/set-paid-amount", (event)
     const remaining = h.findAllRecords(tx, "invoice_payments", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && invoice_id = {:invoice} && status = 'ACTIVE'", "paid_on,created", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, invoice: invoice.id })
     let cumulative = 0
     for (const payment of remaining) {
-      const beforeTax = Math.round(cumulative * invoice.getInt("tax_amount") / invoice.getInt("grand_total"))
+      const beforeTax = h.proportionalAmount(cumulative, invoice.getInt("tax_amount"), invoice.getInt("grand_total"))
       cumulative += payment.getInt("amount")
-      const taxAmount = Math.round(cumulative * invoice.getInt("tax_amount") / invoice.getInt("grand_total")) - beforeTax
+      const taxAmount = h.proportionalAmount(cumulative, invoice.getInt("tax_amount"), invoice.getInt("grand_total")) - beforeTax
       const ledger = ledgerFor(payment); const transaction = h.json(ledger, "payload", {})
       const updated = { ...transaction, amount: payment.getInt("amount"), invoiceTaxAmount: taxAmount, invoiceRevenueAmount: payment.getInt("amount") - taxAmount, updatedAt: now }
       if (transaction.amount !== updated.amount || transaction.invoiceTaxAmount !== updated.invoiceTaxAmount || transaction.invoiceRevenueAmount !== updated.invoiceRevenueAmount) {

@@ -323,7 +323,7 @@ describe("multi-element closure paths", () => {
 describe("remaining store functions", () => {
   test("needsReviewTransactions filters correctly", () => {
     store.createTransaction({
-      ...makeTransaction({ id: "txn-review" }),
+      ...makeTransaction({ id: "txn-review", amount: 100 }),
       reviewStatus: "NEEDS_REVIEW",
       classificationSource: "RULE",
       classificationConfidence: 0.4,
@@ -337,7 +337,7 @@ describe("store last uncovered function", () => {
   test("subscribeFinancialEvents delivers events", () => {
     const events: string[] = []
     const unsubscribe = store.subscribeFinancialEvents((event) => events.push(event))
-    store.createTransaction(makeTransaction({ id: "evt-1" }));
+    store.createTransaction(makeTransaction({ id: "evt-1", amount: 100 }));
     unsubscribe()
     expect(events.length).toBeGreaterThanOrEqual(1)
   })

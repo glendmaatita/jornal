@@ -4,7 +4,7 @@
 // (ROADMAP Phase 2 risk: don't show "naik 32%" from 2 thin data points).
 
 import { ALL_CATEGORIES } from "./categories"
-import { formatMonthYear, toIsoDate } from "./format"
+import { formatMonthYear, toIsoDate, todayIsoDate } from "./format"
 import { assertSingleCompany } from "./company-scope"
 import { transactionRevenueAmount } from "./transaction-revenue"
 import type { Transaction, TransactionDirection } from "./types"
@@ -42,7 +42,7 @@ export function monthlyTrends(transactions: Transaction[], months = 6, now = new
 
   for (const transaction of transactions) {
     const point = byKey.get(transaction.transactionDate.slice(0, 7))
-    if (!point || transaction.classification === "INTERNAL_TRANSFER" || transaction.classification === "OPENING_BALANCE") continue
+    if (!point || transaction.transactionDate > todayIsoDate(now) || transaction.classification === "INTERNAL_TRANSFER" || transaction.classification === "OPENING_BALANCE") continue
     if (transaction.direction === "MONEY_IN") point.moneyIn += transaction.amount
     else point.moneyOut += transaction.amount
     if (transaction.classification === "REVENUE") point.revenue += transactionRevenueAmount(transaction)
@@ -61,7 +61,7 @@ export function categoryMonthlyExpenses(transactions: Transaction[], months = 6,
   }
   const totals = new Map<string, number[]>()
   for (const transaction of transactions) {
-    if (transaction.classification !== "OPERATING_EXPENSE") continue
+    if (transaction.transactionDate > todayIsoDate(now) || transaction.classification !== "OPERATING_EXPENSE") continue
     const index = keys.indexOf(transaction.transactionDate.slice(0, 7))
     if (index < 0) continue
     const id = transaction.categoryId ?? "uncategorized"
@@ -97,10 +97,10 @@ function recurringKey(description: string): string {
  * Detect recurring patterns: same normalized description & direction, similar
  * amounts (±15%), appearing in ≥3 distinct months. Phase 3 adds auto-creation.
  */
-export function detectRecurring(transactions: Transaction[]): RecurringCandidate[] {
+export function detectRecurring(transactions: Transaction[], asOf = todayIsoDate()): RecurringCandidate[] {
   const groups = new Map<string, Transaction[]>()
   for (const transaction of transactions) {
-    if (transaction.classification === "INTERNAL_TRANSFER") continue
+    if (transaction.transactionDate > asOf || transaction.classification === "INTERNAL_TRANSFER" || transaction.classification === "OPENING_BALANCE") continue
     const key = `${transaction.direction}|${recurringKey(transaction.description)}`
     const list = groups.get(key) ?? []
     list.push(transaction)

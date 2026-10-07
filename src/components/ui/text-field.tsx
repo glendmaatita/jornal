@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react"
 
 import { FieldShell } from "@/components/ui/field-shell"
 import { cn } from "@/lib/utils"
+import { formatAmountEdit, formatNumberInput, parseAmountInput } from "@/lib/format"
 
 export interface TextFieldProps {
   label?: string
@@ -11,7 +12,7 @@ export interface TextFieldProps {
   value: string
   onChange: (value: string) => void
   onBlur?: () => void
-  type?: "text" | "numeric" | "amount"
+  type?: "text" | "numeric" | "amount" | "decimal"
   placeholder?: string
   error?: string
   hint?: string
@@ -26,13 +27,6 @@ export interface TextFieldProps {
   list?: string
 }
 
-/** Formatted display while typing amounts: 1500000 → 1.500.000 */
-function formatAmount(raw: string): string {
-  const digits = raw.replace(/[^\d]/g, "")
-  if (!digits) return ""
-  return Number(digits).toLocaleString("id-ID")
-}
-
 /**
  * Custom text field in the teofin style — replaces native `<Input>` chrome.
  * `numeric` strips non-digits; `amount` adds live thousand separators + Rp prefix.
@@ -45,7 +39,7 @@ export function TextField({
   onBlur,
   type = "text",
   placeholder,
-  error,
+  error: providedError,
   hint,
   required,
   disabled,
@@ -58,12 +52,15 @@ export function TextField({
 }: TextFieldProps) {
   const id = useId()
   const [focused, setFocused] = useState(false)
+  const error = providedError ?? (type === "amount" && value.trim() && !Number.isSafeInteger(parseAmountInput(value))
+    ? "Masukkan nominal rupiah utuh yang valid."
+    : undefined)
 
   const handleChange = (raw: string) => {
     if (type === "numeric") {
       onChange(raw.replace(/[^\d]/g, ""))
     } else if (type === "amount") {
-      onChange(formatAmount(raw))
+      onChange(formatAmountEdit(raw))
     } else {
       onChange(raw)
     }
@@ -88,9 +85,16 @@ export function TextField({
       )}
       <input
         id={id}
-        inputMode={type === "text" ? "text" : "numeric"}
+        inputMode={type === "text" ? "text" : type === "decimal" ? "decimal" : "numeric"}
         value={value}
         onChange={(event) => handleChange(event.target.value)}
+        onPaste={(event) => {
+          if (type !== "amount") return
+          event.preventDefault()
+          const input = event.currentTarget
+          const next = value.slice(0, input.selectionStart ?? 0) + event.clipboardData.getData("text") + value.slice(input.selectionEnd ?? value.length)
+          onChange(formatNumberInput(next))
+        }}
         onBlur={() => {
           setFocused(false)
           onBlur?.()

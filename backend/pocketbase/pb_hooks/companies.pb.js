@@ -12,6 +12,13 @@ routerAdd("POST", "/api/jornal/companies/setup", (event) => {
   if (!name || !requestedCreationKey || !body.profile || !Array.isArray(body.accounts)) {
     throw event.badRequestError("Invalid company setup", {})
   }
+  try {
+    const { validateFinancialRecord } = require(`${__hooks}/financial_validation.js`)
+    body.profile = Object.assign({ openingBalance: 0, taxReserveConfirmed: 0, fiscalYear: new Date().getFullYear() }, body.profile)
+    validateFinancialRecord("profile", body.profile)
+    body.accounts.forEach((account) => validateFinancialRecord("accounts", account))
+    if (body.settings !== undefined) validateFinancialRecord("settings", body.settings)
+  } catch (error) { throw event.badRequestError(String(error.message || error), {}) }
   let company
   if (body.companyId) {
     try { company = $app.findRecordById("companies", String(body.companyId)) } catch { throw event.notFoundError("Company not found", {}) }

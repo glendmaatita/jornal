@@ -4,6 +4,7 @@
 // across tabs.
 
 import { CHANGED_EVENT } from "./types"
+import { validateFinancialRecord } from "./financial-validation"
 import { schedulePocketBaseSync } from "./pocketbase-sync"
 import type {
   Account,
@@ -150,6 +151,7 @@ function read<T>(key: string, fallback: T): T {
 }
 
 function write<T>(key: string, value: T) {
+  validateStoredFinancialData(key, value)
   const storageKey = scopedStorageKey(key)
   const serialized = JSON.stringify(value)
   memoryState.set(storageKey, { raw: serialized, value })
@@ -162,6 +164,13 @@ function write<T>(key: string, value: T) {
   // IndexedDB is asynchronous and unavailable in the test/SSR shims; it is a
   // durable second copy for browser restarts and quota recovery.
   void persistState(storageKey, value).catch(() => notifyStorageWarning())
+}
+
+function validateStoredFinancialData(key: string, value: unknown) {
+  if (value === null) return
+  const entity = Object.entries(KEYS).find(([, storageKey]) => storageKey === key)?.[0]
+  if (!entity || !["profile", "settings", "accounts", "transactions", "reserves", "recurringRules", "profileHistory", "accountHistory", "transactionHistory", "reserveHistory"].includes(entity)) return
+  for (const item of Array.isArray(value) ? value : [value]) validateFinancialRecord(entity, item)
 }
 
 // ── Event architecture (§57) ──
@@ -337,6 +346,7 @@ export function loadAccountHistory(): VersionRecord<Account>[] {
 
 export function upsertAccount(account: Omit<Account, "id" | "createdAt" | "updatedAt"> & { id?: string }) {
   assertCompanyWritable()
+  validateFinancialRecord("accounts", account)
   const accounts = loadAccounts()
   const existingIndex = account.id ? accounts.findIndex((candidate) => candidate.id === account.id) : -1
   if (existingIndex >= 0) {
@@ -488,6 +498,7 @@ export function updateTransaction(id: string, patch: Partial<NewTransaction>): T
   const index = transactions.findIndex((candidate) => candidate.id === id)
   if (index < 0) return null
   const before = transactions[index]
+  validateFinancialRecord("transactions", { ...before, ...patch })
   validateTransactionLinks({ ...before, ...patch }, id)
   const updated = normalizeTransaction({
     ...before,
@@ -693,6 +704,7 @@ export function updateReserve(id: string, patch: Partial<Pick<Reserve, "name" | 
   const reserves = loadReserves()
   const index = reserves.findIndex((reserve) => reserve.id === id)
   if (index < 0) return null
+  validateFinancialRecord("reserves", { ...reserves[index], ...patch })
   reserves[index] = { ...reserves[index], ...patch, updatedAt: nowIso() }
   write(KEYS.reserves, reserves)
   appendReserveVersion(reserves[index])
@@ -747,6 +759,7 @@ export function updateRecurringRule(id: string, patch: Partial<Pick<RecurringRul
   const rules = loadRecurringRules()
   const index = rules.findIndex((rule) => rule.id === id)
   if (index < 0) return null
+  validateFinancialRecord("recurringRules", { ...rules[index], ...patch })
   rules[index] = { ...rules[index], ...patch, updatedAt: nowIso() }
   persistRecurringRules(rules)
   schedulePocketBaseSync()
@@ -972,6 +985,7 @@ export function importLocalData(candidate: unknown): { imported: number } {
         ? Array.isArray(value)
         : typeof value === "object" && !Array.isArray(value))
     if (!valid) throw new Error(`Data backup untuk ${storageKey} tidak valid`)
+    validateStoredFinancialData(storageKey, value)
   }
   const data = envelope.data
   const accounts = Array.isArray(data[KEYS.accounts]) ? data[KEYS.accounts] as Array<{ id?: unknown }> : []

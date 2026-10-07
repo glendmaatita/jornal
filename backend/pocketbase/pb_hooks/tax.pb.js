@@ -307,7 +307,7 @@ routerAdd("POST", "/api/jornal/tax/obligations/generate", (event) => {
         const settlements = obligation.getInt("settled_by_third_party") + obligation.getInt("allocated_payments")
         const remaining = liability === null ? null : Math.max(0, liability - settlements)
         const overpaid = liability === null ? 0 : Math.max(0, settlements - liability)
-        const paymentStatus = liability === null ? "UNKNOWN" : liability === 0 ? "NOT_REQUIRED" : settlements === 0 ? (effectiveDue && effectiveDue >= new Date().toISOString().slice(0, 10) ? "NOT_DUE" : "UNPAID") : settlements < liability ? "PARTIAL" : settlements === liability ? "PAID" : "OVERPAID"
+        const paymentStatus = liability === null ? "UNKNOWN" : settlements > liability ? "OVERPAID" : liability === 0 ? "NOT_REQUIRED" : settlements === 0 ? (effectiveDue && effectiveDue >= new Date().toISOString().slice(0, 10) ? "NOT_DUE" : "UNPAID") : settlements < liability ? "PARTIAL" : settlements === liability ? "PAID" : "OVERPAID"
         obligation.set("amount_state", amountState); obligation.set("liability_amount", liability === null ? 0 : liability)
         obligation.set("has_liability_amount", liability !== null)
         if (!automaticChanged) { obligation.set("proposed_liability_amount", 0); obligation.set("has_proposed_liability_amount", false) }
@@ -518,7 +518,7 @@ routerAdd("POST", "/api/jornal/tax/settlements", (event) => {
         const settled = thirdParty + ownPayments
         const remaining = known ? Math.max(0, liability - settled) : null
         const overpaid = known ? Math.max(0, settled - liability) : 0
-        const status = !known ? "UNKNOWN" : liability === 0 ? "NOT_REQUIRED" : settled === 0 ? "UNPAID" : settled < liability ? "PARTIAL" : settled === liability ? "PAID" : "OVERPAID"
+        const status = !known ? "UNKNOWN" : settled > liability ? "OVERPAID" : liability === 0 ? "NOT_REQUIRED" : settled === 0 ? "UNPAID" : settled < liability ? "PARTIAL" : settled === liability ? "PAID" : "OVERPAID"
         obligation.set("settled_by_third_party", thirdParty); obligation.set("allocated_payments", ownPayments)
         obligation.set("remaining_payable", remaining === null ? 0 : remaining); obligation.set("has_remaining_payable", remaining !== null)
         obligation.set("overpaid_amount", overpaid); obligation.set("payment_status", status); obligation.set("revision", obligation.getInt("revision") + 1)
@@ -665,7 +665,7 @@ routerAdd("POST", "/api/jornal/tax/settlements/{id}/reverse", (event) => {
         }
         const known = obligation.getBool("has_liability_amount"); const liability = obligation.getInt("liability_amount"); const settled = thirdParty + ownPayments
         const remaining = known ? Math.max(0, liability - settled) : null; const overpaid = known ? Math.max(0, settled - liability) : 0
-        const status = !known ? "UNKNOWN" : liability === 0 ? "NOT_REQUIRED" : settled === 0 ? "UNPAID" : settled < liability ? "PARTIAL" : settled === liability ? "PAID" : "OVERPAID"
+        const status = !known ? "UNKNOWN" : settled > liability ? "OVERPAID" : liability === 0 ? "NOT_REQUIRED" : settled === 0 ? "UNPAID" : settled < liability ? "PARTIAL" : settled === liability ? "PAID" : "OVERPAID"
         obligation.set("settled_by_third_party", thirdParty); obligation.set("allocated_payments", ownPayments)
         obligation.set("remaining_payable", remaining === null ? 0 : remaining); obligation.set("has_remaining_payable", remaining !== null)
         obligation.set("overpaid_amount", overpaid); obligation.set("payment_status", status); obligation.set("revision", obligation.getInt("revision") + 1); tx.save(obligation)
@@ -740,7 +740,7 @@ routerAdd("POST", "/api/jornal/tax/obligations/{id}/amount", (event) => {
       const before = helpers.obligationResponse(obligation)
       const settled = obligation.getInt("settled_by_third_party") + obligation.getInt("allocated_payments")
       const remaining = Math.max(0, amount - settled); const overpaid = Math.max(0, settled - amount)
-      const status = amount === 0 ? "NOT_REQUIRED" : settled === 0 ? "UNPAID" : settled < amount ? "PARTIAL" : settled === amount ? "PAID" : "OVERPAID"
+      const status = settled > amount ? "OVERPAID" : amount === 0 ? "NOT_REQUIRED" : settled === 0 ? "UNPAID" : settled < amount ? "PARTIAL" : settled === amount ? "PAID" : "OVERPAID"
       obligation.set("liability_amount", amount); obligation.set("has_liability_amount", true); obligation.set("amount_state", "CONFIRMED")
       obligation.set("proposed_liability_amount", 0); obligation.set("has_proposed_liability_amount", false)
       obligation.set("remaining_payable", remaining); obligation.set("has_remaining_payable", true); obligation.set("overpaid_amount", overpaid)

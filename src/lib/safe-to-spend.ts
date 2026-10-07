@@ -62,35 +62,21 @@ export function computeCashPosition(
   assertSingleCompany(transactions, profile)
   let position = openingBalanceTotal(accounts, profile)
   const currentTransactions = asOfIso ? transactionsOnOrBefore(transactions, asOfIso) : transactions
+  const excludedAccounts = new Set(accounts.filter((account) => !account.includedInCash).map((account) => account.id))
   for (const transaction of currentTransactions) {
-    switch (transaction.classification) {
-      // Internal transfers move money between accounts — net zero on total position (§32, §46.3)
-      case "INTERNAL_TRANSFER":
-        break
-      case "OPENING_BALANCE":
-        break // already included via account/profile opening balances
-      case "TAX_PAYMENT":
-      case "OWNER_WITHDRAWAL":
-      case "ASSET_PURCHASE":
-      case "LOAN_PAYMENT":
-      case "RECEIVABLE_CREATED":
-      case "OTHER_OUTFLOW":
-      case "OPERATING_EXPENSE":
-        position -= transaction.amount
-        break
-      case "REVENUE":
-      case "CAPITAL_INJECTION":
-      case "LOAN_RECEIVED":
-      case "REFUND":
-      case "OTHER_INCOME":
-      case "RECEIVABLE_PAYMENT":
-        position += transaction.amount
-        break
-      case "UNKNOWN":
-        // Unresolved direction still moves money; use recorded direction
-        position += transaction.direction === "MONEY_IN" ? transaction.amount : -transaction.amount
-        break
+    if (profile.useAccountTracking) {
+      const sourceIncluded = !transaction.accountId || !excludedAccounts.has(transaction.accountId)
+      const targetIncluded = Boolean(transaction.transferAccountId && !excludedAccounts.has(transaction.transferAccountId))
+      if (transaction.classification === "INTERNAL_TRANSFER") {
+        if (sourceIncluded) position -= transaction.amount
+        if (targetIncluded) position += transaction.amount
+        continue
+      }
+      if (!sourceIncluded) continue
     }
+    if (transaction.classification === "INTERNAL_TRANSFER" || transaction.classification === "OPENING_BALANCE") continue
+    // Direction records the actual cash movement, including refunds paid out.
+    position += transaction.direction === "MONEY_IN" ? transaction.amount : -transaction.amount
   }
   return position
 }

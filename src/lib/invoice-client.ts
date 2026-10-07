@@ -1,3 +1,4 @@
+import { assertFiniteNumbers, assertMoney } from "./financial-validation";
 import { activeCompany } from "./companies";
 import { loadCachedCompanies } from "./companies";
 import { clearMirroredState, mirrorState, restoreState } from "./local-db";
@@ -78,6 +79,7 @@ async function send<T>(
   options: { method?: string; body?: unknown } = {},
 ) {
   if (!pocketBaseConfigured) throw new Error("Server invoice belum tersedia");
+  assertFiniteNumbers(options.body);
   const result = await pb.send<T>(path, { ...options, headers: { "X-Jornal-Protocol": "3" } });
   if (options.method && options.method !== "GET") await clearPersistentCachePrefix(cachePrefix());
   return result;
@@ -511,6 +513,7 @@ export async function markInvoicePaid(
     expectedTransactionRevision?: number;
   },
 ) {
+  if (input.amount !== undefined) assertMoney(input.amount, "Nominal pembayaran", 1);
   const result = await send<{
     invoice: Invoice;
     payment: InvoicePayment;
@@ -564,6 +567,7 @@ export async function correctInvoicePayment(
 }
 
 export async function setInvoicePaidAmount(invoice: Invoice, paidAmount: number, reason: string) {
+  assertMoney(paidAmount, "Nominal pembayaran");
   const result = await send<{
     invoice: Invoice;
     ledgerChanges: Array<{ transaction: Transaction; ledgerRevision: number; ledgerDeleted: boolean }>;

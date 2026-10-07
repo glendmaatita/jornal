@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
 import { TextField } from "@/components/ui/text-field"
-import { formatRupiah, formatDateShort, parseAmountInput } from "@/lib/format"
+import { formatRupiah, formatDateShort, parseAmountInput, todayIsoDate } from "@/lib/format"
 import { formatWeeklyChangeText, stsWeeklyChange } from "@/lib/history"
 import { recommendReserves } from "@/lib/forecast"
 import { detectRecurring } from "@/lib/trends"
@@ -51,7 +51,7 @@ export function SafeToSpendPage() {
       const actual = parseAmountInput(actualBalance ?? "")
       saveProfile({
         ...profile,
-        lastBalanceCheckIn: new Date().toISOString().slice(0, 10),
+        lastBalanceCheckIn: todayIsoDate(),
         lastCheckedBalance: actual,
         lastCheckInDelta: actual - result.cashPosition,
       })
@@ -79,7 +79,9 @@ export function SafeToSpendPage() {
   const saveConfirmed = useMutation({
     mutationFn: async () => {
       if (!profile) return
-      saveProfile({ ...profile, taxReserveConfirmed: parseAmountInput(confirmedReserve ?? String(profile.taxReserveConfirmed)) })
+      const amount = parseAmountInput(confirmedReserve ?? String(profile.taxReserveConfirmed))
+      if (!Number.isSafeInteger(amount) || amount < 0) return
+      saveProfile({ ...profile, taxReserveConfirmed: amount })
     },
     onSuccess: invalidate,
   })
@@ -266,7 +268,7 @@ export function SafeToSpendPage() {
               onChange={setActualBalance}
               hint="Masukkan total saldo dari rekening & kas Anda"
             />
-            <Button className="mt-2 w-full" onClick={() => checkInBalance.mutate()} disabled={parseAmountInput(actualBalance ?? "") <= 0}>
+            <Button className="mt-2 w-full" onClick={() => checkInBalance.mutate()} disabled={!actualBalance?.trim() || !Number.isSafeInteger(parseAmountInput(actualBalance))}>
               Cek
             </Button>
           </div>
@@ -439,7 +441,7 @@ export function SafeToSpendPage() {
           </div>
           <div className="mt-2 grid grid-cols-1 items-end gap-2 sm:grid-cols-2">
             <DateField label="Jatuh tempo (opsional)" value={dueDate} onChange={setDueDate} />
-            <Button className="h-[50px]" onClick={() => addReserve.mutate()} disabled={parseAmountInput(amount) <= 0}>
+            <Button className="h-[50px]" onClick={() => addReserve.mutate()} disabled={!Number.isSafeInteger(parseAmountInput(amount)) || parseAmountInput(amount) <= 0}>
               <Plus aria-hidden="true" />
               Tambah Reserve
             </Button>

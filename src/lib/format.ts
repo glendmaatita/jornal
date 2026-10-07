@@ -42,15 +42,37 @@ function trim(value: string) {
 /** "Rp1.500.000" / "1500000" → number; tolerant of thousand separators */
 export function parseAmountInput(value: string): number {
   if (!value.trim()) return 0
-  const cleaned = value.replace(/[^\d]/g, "")
-  const parsed = Number(cleaned)
-  return Number.isFinite(parsed) ? parsed : 0
+  const cleaned = value.trim().replace(/^Rp\s*/i, "")
+  // IDR is stored in whole rupiah. Never turn decimal cents, signs, or
+  // arbitrary text into a different positive amount by deleting characters.
+  if (!/^-?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,0+)?$/.test(cleaned)) return Number.NaN
+  const parsed = Number(cleaned.replace(/\./g, "").replace(/,0+$/, ""))
+  return Number.isSafeInteger(parsed) ? parsed : Number.NaN
 }
 
 /** Format while typing: "1500000" → "1.500.000" */
 export function formatNumberInput(value: number | string): string {
   const parsed = typeof value === "number" ? value : parseAmountInput(value)
+  if (!Number.isFinite(parsed)) return typeof value === "string" ? value : ""
   return parsed === 0 ? "" : formatIdNumber(parsed)
+}
+
+/** Group digit edits without passing through floating-point conversion. */
+export function formatAmountEdit(raw: string): string {
+  if (!/^-?[\d.]*$/.test(raw)) return raw
+  const sign = raw.startsWith("-") ? "-" : ""
+  const digits = raw.replace(/[-.]/g, "").replace(/^0+(?=\d)/, "")
+  return sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".")
+}
+
+/** Parse a decimal quantity/rate into exact integer units without rounding. */
+export function parseScaledDecimal(value: string, digits: number): number {
+  const match = /^(\d+)(?:[.,](\d*))?$/.exec(value.trim())
+  if (!match) return Number.NaN
+  const fraction = (match[2] ?? "").replace(/0+$/, "")
+  if (fraction.length > digits) return Number.NaN
+  const scaled = Number(match[1] + fraction.padEnd(digits, "0"))
+  return Number.isSafeInteger(scaled) ? scaled : Number.NaN
 }
 
 /** Alias used by the custom fields */

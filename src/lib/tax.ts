@@ -398,6 +398,7 @@ export function taxAlerts(profile: { taxScheme: TaxScheme; businessType: Busines
   const alerts: TaxAlert[] = []
   if (profile.taxScheme === "NOT_CALCULATED") return alerts
 
+  transactions = transactions.filter((transaction) => transaction.transactionDate <= todayIsoDate(now))
   const year = now.getFullYear()
   const ytd = revenueYTD(transactions, year)
   const overview = computeTaxOverview({

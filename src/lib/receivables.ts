@@ -1,4 +1,5 @@
 import type { Transaction } from "./types"
+import { todayIsoDate } from "./format"
 
 export interface ReceivableSummary {
   transaction: Transaction
@@ -7,7 +8,8 @@ export interface ReceivableSummary {
 }
 
 /** Derive every receivable from the transaction ledger; no separate balance is stored. */
-export function receivablesFromTransactions(transactions: Transaction[]): ReceivableSummary[] {
+export function receivablesFromTransactions(transactions: Transaction[], asOf = todayIsoDate()): ReceivableSummary[] {
+  transactions = transactions.filter((transaction) => transaction.transactionDate <= asOf)
   const paidByReceivable = new Map<string, number>()
   for (const transaction of transactions) {
     if (transaction.classification !== "RECEIVABLE_PAYMENT" || !transaction.receivableTransactionId) continue

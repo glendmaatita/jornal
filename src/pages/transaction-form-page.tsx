@@ -286,7 +286,7 @@ export function TransactionFormPage() {
 
   // Validation (shown after first submit attempt)
   const amountValue = parseNumberValue(amount)
-  const amountError = amountValue <= 0 ? "Jumlah wajib diisi (lebih dari nol)." : undefined
+  const amountError = !Number.isSafeInteger(amountValue) || amountValue <= 0 ? "Jumlah harus berupa rupiah utuh yang valid dan lebih dari nol." : undefined
   const selectedAccountId = accountId && selectableAccounts.some((account) => account.id === accountId) ? accountId : null
   const selectedTransferAccountId = transferAccountId && selectableAccounts.some((account) => account.id === transferAccountId) ? transferAccountId : null
   const transferError =

@@ -119,7 +119,7 @@ function ownedObligation(app, tenantId, obligationId) {
 
 function nonNegativeMoney(value, name, nullable) {
   if (nullable && (value === null || value === undefined || value === "")) return null
-  const amount = Number(value)
+  const amount = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN
   if (!Number.isSafeInteger(amount) || amount < 0) throw new ApiError(400, `${name} must be a non-negative integer`)
   return amount
 }

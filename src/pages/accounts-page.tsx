@@ -116,6 +116,7 @@ export function AccountsPage() {
   const needsIdentity = requiresPaymentIdentity(draft.type)
   const formComplete = Boolean(
     draft.name.trim()
+    && Number.isSafeInteger(parseAmountInput(draft.openingBalance))
     && (!needsIdentity || (draft.bankName.trim() && draft.accountHolder.trim() && draft.accountNumber.trim())),
   )
 

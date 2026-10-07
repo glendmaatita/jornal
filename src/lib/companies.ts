@@ -1,3 +1,4 @@
+import { validateFinancialRecord } from "./financial-validation"
 import { copyOutboxByPrefix, listMirroredStateByPrefix, listOutbox, mirrorState, persistState, quarantineOutboxByPrefix, restoreState } from "./local-db"
 import { pb } from "./pb"
 import { getCompanyScope, KEYS, RESET_PENDING_KEY, setCompanyDisplayName, setCompanyLegacyDefault, setCompanyScope, setCompanyWritable } from "./store"
@@ -170,6 +171,8 @@ interface CreateCompanyInput {
 }
 
 export async function createCompanyWithSetup(input: CreateCompanyInput): Promise<Company> {
+  validateFinancialRecord("profile", input.profile)
+  input.accounts.forEach((account) => validateFinancialRecord("accounts", account))
   const response = await fetch(`${pb.baseURL.replace(/\/$/, "")}/api/jornal/companies/setup`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: pb.authStore.token },

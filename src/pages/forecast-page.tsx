@@ -5,8 +5,8 @@ import { ArrowLeft, CalendarClock, FlaskConical, ShieldCheck, Telescope } from "
 import { Card, CardContent } from "@/components/ui/card"
 import { PageLoading } from "@/components/loading-screen"
 import { TextField } from "@/components/ui/text-field"
-import { formatRupiah, formatDateShort, formatNumberInput, parseAmountInput } from "@/lib/format"
-import { computeForecast, detectUpcomingObligations, EMPTY_SCENARIO, type ScenarioInput } from "@/lib/forecast"
+import { formatRupiah, formatDateShort, parseAmountInput } from "@/lib/format"
+import { computeForecast, detectUpcomingObligations, type ScenarioInput } from "@/lib/forecast"
 import { useAccounts, useProfile, useReserves, useTaxComplianceSnapshot, useTransactions } from "@/lib/queries"
 import { cn } from "@/lib/utils"
 
@@ -24,7 +24,13 @@ export function ForecastPage() {
   const taxCompliance = useTaxComplianceSnapshot()
 
   const [horizonDays, setHorizonDays] = useState(30)
-  const [scenario, setScenario] = useState<ScenarioInput>(EMPTY_SCENARIO)
+  const [scenarioDraft, setScenarioDraft] = useState({ extraIncome: "", extraExpense: "", extraReserve: "" })
+  const scenario = useMemo<ScenarioInput>(() => ({
+    extraIncome: parseAmountInput(scenarioDraft.extraIncome),
+    extraExpense: parseAmountInput(scenarioDraft.extraExpense),
+    extraReserve: parseAmountInput(scenarioDraft.extraReserve),
+  }), [scenarioDraft])
+  const scenarioValid = Object.values(scenario).every((value) => Number.isSafeInteger(value) && value >= 0)
 
   const input = useMemo(
     () => (profile ? { transactions, accounts, profile, reserves, taxCompliance } : null),
@@ -38,8 +44,8 @@ export function ForecastPage() {
   const withScenario = useMemo(() => {
     const active =
       scenario.extraIncome > 0 || scenario.extraExpense > 0 || scenario.extraReserve > 0
-    return input && active ? computeForecast(input, { horizonDays, scenario }) : null
-  }, [input, horizonDays, scenario])
+    return input && active && scenarioValid ? computeForecast(input, { horizonDays, scenario }) : null
+  }, [input, horizonDays, scenario, scenarioValid])
 
   const obligations = useMemo(
     () => (input ? detectUpcomingObligations(input, horizonDays) : []),
@@ -177,22 +183,22 @@ export function ForecastPage() {
               label="Pemasukan ekstra"
               type="amount"
               prefix="Rp"
-              value={scenario.extraIncome ? formatNumberInput(scenario.extraIncome) : ""}
-              onChange={(value) => setScenario((current) => ({ ...current, extraIncome: parseAmountInput(value) }))}
+              value={scenarioDraft.extraIncome}
+              onChange={(value) => setScenarioDraft((current) => ({ ...current, extraIncome: value }))}
             />
             <TextField
               label="Pengeluaran ekstra"
               type="amount"
               prefix="Rp"
-              value={scenario.extraExpense ? formatNumberInput(scenario.extraExpense) : ""}
-              onChange={(value) => setScenario((current) => ({ ...current, extraExpense: parseAmountInput(value) }))}
+              value={scenarioDraft.extraExpense}
+              onChange={(value) => setScenarioDraft((current) => ({ ...current, extraExpense: value }))}
             />
             <TextField
               label="Reserve baru"
               type="amount"
               prefix="Rp"
-              value={scenario.extraReserve ? formatNumberInput(scenario.extraReserve) : ""}
-              onChange={(value) => setScenario((current) => ({ ...current, extraReserve: parseAmountInput(value) }))}
+              value={scenarioDraft.extraReserve}
+              onChange={(value) => setScenarioDraft((current) => ({ ...current, extraReserve: value }))}
             />
           </div>
 

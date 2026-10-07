@@ -27,6 +27,7 @@ import { InvoiceProductField } from "@/components/invoice/invoice-product-field"
 import { DateField } from "@/components/ui/date-field";
 import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
+import { MoneyField, ScaledNumberField } from "@/components/ui/scaled-number-field";
 import { calculateInvoiceTotals } from "@/lib/invoice-math";
 import {
   createInvoice,
@@ -227,9 +228,9 @@ export function InvoiceFormPage({
     try {
       return calculateInvoiceTotals(
         form.items,
-        form.discountAmount || 0,
-        form.shippingAmount || 0,
-        form.taxRateBps || 0,
+        form.discountAmount === undefined ? 0 : form.discountAmount,
+        form.shippingAmount === undefined ? 0 : form.shippingAmount,
+        form.taxRateBps === undefined ? 0 : form.taxRateBps,
       ).totals;
     } catch {
       return null;
@@ -310,7 +311,7 @@ export function InvoiceFormPage({
         <TextField label="Total sudah dibayar setelah koreksi" type="amount" prefix="Rp" value={correctedPaidAmount} onChange={setCorrectedPaidAmount} placeholder="0 untuk belum bayar" />
         <TextField label="Alasan perubahan pembayaran" value={paymentCorrectionReason} onChange={setPaymentCorrectionReason} placeholder="Contoh: nominal transfer keliru" />
         <p className="text-xs text-muted-foreground">Transaksi pemasukan yang dikoreksi akan ikut berubah. Isi 0 untuk membuka revisi isi invoice.</p>
-        <Button disabled={busy || !correctedPaidAmount.trim() || !paymentCorrectionReason.trim() || nextPaid >= currentPaid} onClick={() => void (async () => {
+        <Button disabled={busy || !correctedPaidAmount.trim() || !paymentCorrectionReason.trim() || !Number.isSafeInteger(nextPaid) || nextPaid < 0 || nextPaid >= currentPaid} onClick={() => void (async () => {
           setBusy(true); setError("");
           try {
             const result = await setInvoicePaidAmount(invoice, nextPaid, paymentCorrectionReason.trim());
@@ -454,15 +455,15 @@ export function InvoiceFormPage({
               })}
             />
             <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3">
-              <TextField
+              <ScaledNumberField
                 label="Jumlah"
                 icon={Hash}
                 className="min-w-0"
-                value={String(item.quantityScaled / 1000)}
+                digits={3}
+                value={item.quantityScaled}
                 onChange={(value) =>
                   setItem(index, {
-                    quantityScaled:
-                      Math.round(Number(value.replace(",", ".")) * 1000) || 0,
+                    quantityScaled: value,
                   })
                 }
               />
@@ -475,16 +476,13 @@ export function InvoiceFormPage({
                 searchPlaceholder="Cari satuan…"
                 options={units.map((unit) => ({ value: unit, label: unit }))}
               />
-              <TextField
+              <MoneyField
                 label="Harga/unit"
                 icon={Banknote}
                 className="col-span-2 min-w-0 sm:col-span-1"
-                type="amount"
-                value={
-                  item.unitPrice ? item.unitPrice.toLocaleString("id-ID") : ""
-                }
+                value={item.unitPrice === undefined ? 0 : item.unitPrice}
                 onChange={(value) =>
-                  setItem(index, { unitPrice: parseAmountInput(value) })
+                  setItem(index, { unitPrice: value })
                 }
               />
             </div>
@@ -511,47 +509,37 @@ export function InvoiceFormPage({
       <Card>
         <CardContent className="grid gap-3 p-4">
           <div className="grid min-w-0 gap-3 min-[420px]:grid-cols-2">
-            <TextField
+            <MoneyField
               label="Diskon"
               icon={Tag}
-              type="amount"
-              value={
-                form.discountAmount
-                  ? form.discountAmount.toLocaleString("id-ID")
-                  : ""
-              }
+              value={form.discountAmount === undefined ? 0 : form.discountAmount}
               onChange={(value) =>
                 updateForm((current) => ({
                   ...current,
-                  discountAmount: parseAmountInput(value),
+                  discountAmount: value,
                 }))
               }
             />
-            <TextField
+            <MoneyField
               label="Ongkir"
               icon={Truck}
-              type="amount"
-              value={
-                form.shippingAmount
-                  ? form.shippingAmount.toLocaleString("id-ID")
-                  : ""
-              }
+              value={form.shippingAmount === undefined ? 0 : form.shippingAmount}
               onChange={(value) =>
                 updateForm((current) => ({
                   ...current,
-                  shippingAmount: parseAmountInput(value),
+                  shippingAmount: value,
                 }))
               }
             />
-            <TextField
+            <ScaledNumberField
               label="Pajak (%)"
               icon={Percent}
-              value={String((form.taxRateBps || 0) / 100)}
+              digits={2}
+              value={form.taxRateBps === undefined ? 0 : form.taxRateBps}
               onChange={(value) =>
                 updateForm((current) => ({
                   ...current,
-                  taxRateBps:
-                    Math.round(Number(value.replace(",", ".")) * 100) || 0,
+                  taxRateBps: value,
                 }))
               }
             />

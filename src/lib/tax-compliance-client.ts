@@ -1,4 +1,5 @@
 import { pb, pocketBaseConfigured } from "./pb"
+import { assertFiniteNumbers } from "./financial-validation"
 import { clearPersistentCachePrefix, readPersistentCache, staleWhileRevalidate } from "./persistent-cache"
 import { reconcileServerTransaction } from "./store"
 import { acceptServerTransactionRevision } from "./pocketbase-sync"
@@ -39,6 +40,7 @@ function taxCachePrefix(ownerId = getDataScope()) { return `jornal.v3.${ownerId}
 
 async function send<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   if (!pocketBaseConfigured || !taxComplianceEnabled) throw new Error("Modul agenda pajak belum tersedia pada server ini.")
+  assertFiniteNumbers(options.body)
   const result = await pb.send<T>(path, { ...options, headers: { "X-Jornal-Company": getCompanyScope().companyId, "X-Jornal-Protocol": "3" } })
   if (options.method && options.method !== "GET") await clearPersistentCachePrefix(taxCachePrefix())
   return result

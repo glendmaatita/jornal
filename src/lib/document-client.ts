@@ -1,3 +1,4 @@
+import { assertFiniteNumbers } from "./financial-validation"
 import { activeCompany } from "./companies"
 import { markLocalDocumentUploaded, saveLocalDocument } from "./document-local-store"
 import type { DocumentExtraction, DocumentSource, ServerDocument } from "./document-types"
@@ -13,7 +14,7 @@ function scope() { const company = activeCompany(); if (!company) throw new Erro
 function params() { return new URLSearchParams(Object.entries(scope()).map(([key, value]) => [key, String(value)])).toString() }
 function documentCachePrefix() { const current = activeCompany(); return `jornal.${pb.authStore.record?.id || "local"}.${current?.id || "none"}.${current?.dataEpoch || 0}.documents.` }
 function documentCacheKey(name: string) { return `${documentCachePrefix()}${name}.v1` }
-async function send<T>(path: string, options: { method?: string; body?: unknown } = {}) { const result = await pb.send<T>(path, { ...options, headers: { "X-Jornal-Protocol": "3" } }); if (options.method && options.method !== "GET") await clearPersistentCachePrefix(documentCachePrefix()); return result }
+async function send<T>(path: string, options: { method?: string; body?: unknown } = {}) { assertFiniteNumbers(options.body); const result = await pb.send<T>(path, { ...options, headers: { "X-Jornal-Protocol": "3" } }); if (options.method && options.method !== "GET") await clearPersistentCachePrefix(documentCachePrefix()); return result }
 async function base64(file: Blob) { const bytes = new Uint8Array(await file.arrayBuffer()); let binary = ""; for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000)); return btoa(binary) }
 async function uploadLocal(draft: LocalDocumentDraft, file: Blob) { const form = new FormData(); const currentScope = scope(); form.set("companyId", currentScope.companyId); form.set("dataEpoch", String(currentScope.dataEpoch)); form.set("source", draft.source); form.set("filename", draft.filename); form.set("contentBase64", await base64(file)); form.set("file", file, draft.filename); const upload = await fetch(`${pb.baseURL.replace(/\/$/, "")}/api/jornal/documents`, { method: "POST", headers: { Authorization: pb.authStore.token, "X-Jornal-Protocol": "3" }, body: form }); const response = await upload.json() as { document: ServerDocument; duplicate: ServerDocument | null; message?: string }; if (!upload.ok) throw new Error(response.message || "Dokumen gagal diunggah"); await clearPersistentCachePrefix(documentCachePrefix()); return { local: await markLocalDocumentUploaded(draft, response.document.id), server: response } }
 

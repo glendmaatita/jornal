@@ -95,7 +95,7 @@ export function InvoiceDetailPage({
   const selectedEnabledAccountId = accountId && enabledAccounts.some((account) => account.id === accountId)
     ? accountId
     : "";
-  const defaultAccountId = settings.data?.settings.defaultAccountId || "";
+  const defaultAccountId = settings.data?.settings?.defaultAccountId || "";
   const effectiveAccountId = selectedEnabledAccountId
     || (enabledAccounts.some((account) => account.id === defaultAccountId) ? defaultAccountId : "");
   const snapshotLogoId = String(
@@ -135,7 +135,7 @@ export function InvoiceDetailPage({
   const relatedExpenses = transactions.filter((transaction) => transaction.direction === "MONEY_OUT" && transaction.relatedInvoiceId === invoice.id)
     .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate) || b.createdAt.localeCompare(a.createdAt));
   const remainingAmount = invoice.remainingAmount ?? invoice.grandTotal - (invoice.paidAmount ?? 0);
-  const enteredAmount = paymentAmount ? Number(paymentAmount.replace(/\D/g, "")) : remainingAmount;
+  const enteredAmount = paymentAmount ? parseAmountInput(paymentAmount) : remainingAmount;
   const displayedInvoiceNumber = formatInvoiceNumber(
     invoice.invoiceNumber,
     invoice.sequence,
@@ -394,7 +394,7 @@ export function InvoiceDetailPage({
             <p className="text-sm text-muted-foreground">Saat ini dibayar {formatRupiah(invoice.paidAmount ?? 0)}. Isi 0 untuk kembali ke belum bayar, atau jumlah lebih kecil untuk dibayar sebagian. Transaksi pemasukan terkait akan ikut dikoreksi.</p>
             <TextField label="Total sudah dibayar setelah koreksi" type="amount" prefix="Rp" value={correctedPaidAmount} onChange={setCorrectedPaidAmount} placeholder="0 untuk belum bayar" />
             <TextField label="Alasan perubahan pembayaran" value={paymentCorrectionReason} onChange={setPaymentCorrectionReason} placeholder="Contoh: nominal transfer keliru" />
-            <Button variant="outline" disabled={busy || !correctedPaidAmount.trim() || !paymentCorrectionReason.trim() || parseAmountInput(correctedPaidAmount) >= (invoice.paidAmount ?? 0)} onClick={() => void run(async () => {
+            <Button variant="outline" disabled={busy || !correctedPaidAmount.trim() || !Number.isSafeInteger(parseAmountInput(correctedPaidAmount)) || parseAmountInput(correctedPaidAmount) < 0 || !paymentCorrectionReason.trim() || parseAmountInput(correctedPaidAmount) >= (invoice.paidAmount ?? 0)} onClick={() => void run(async () => {
               await setInvoicePaidAmount(invoice, parseAmountInput(correctedPaidAmount), paymentCorrectionReason.trim())
               setCorrectedPaidAmount(""); setPaymentCorrectionReason("")
             })}><Undo2 aria-hidden="true" />Simpan koreksi pembayaran</Button>

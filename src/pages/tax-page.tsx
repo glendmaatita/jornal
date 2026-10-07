@@ -25,13 +25,14 @@ export function TaxPage() {
 
   const overview = useMemo(() => {
     if (!profile) return null
+    const currentTransactions = transactions.filter((transaction) => transaction.transactionDate <= todayIsoDate())
     return computeTaxOverview({
       scheme: profile.taxScheme,
       businessType: profile.businessType,
       onDate: todayIsoDate(),
-      revenueYTD: revenueYTD(transactions, profile.fiscalYear),
-      businessExpenseYTD: businessExpenseYTD(transactions, profile.fiscalYear),
-      taxPaid: taxPaidYTD(transactions, profile.fiscalYear, profile.taxScheme),
+      revenueYTD: revenueYTD(currentTransactions, profile.fiscalYear),
+      businessExpenseYTD: businessExpenseYTD(currentTransactions, profile.fiscalYear),
+      taxPaid: taxPaidYTD(currentTransactions, profile.fiscalYear, profile.taxScheme),
       monthsElapsed: monthsElapsedThisYear(),
     })
   }, [profile, transactions])
@@ -47,7 +48,9 @@ export function TaxPage() {
   const additionalNeeded = Math.max(0, overview.recommendedTaxReserve - alreadyReserved)
 
   const saveConfirmed = () => {
-    saveProfile({ ...profile, taxReserveConfirmed: parseAmountInput(confirmed ?? String(alreadyReserved)) })
+    const amount = parseAmountInput(confirmed ?? String(alreadyReserved))
+    if (!Number.isSafeInteger(amount) || amount < 0) return
+    saveProfile({ ...profile, taxReserveConfirmed: amount })
     void queryClient.invalidateQueries({ queryKey: queryKeys.profile })
   }
 

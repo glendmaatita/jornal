@@ -61,15 +61,16 @@ export function computeUmkmMonthlyLiability(input: UmkmMonthInput): TaxAmountRes
   }
 
   const monthRevenue = Math.max(0, input.currentMonthRevenue + adjustments)
+  if (!Number.isSafeInteger(input.currentMonthRevenue + adjustments) || !Number.isSafeInteger(input.cumulativeRevenueBefore + monthRevenue) || !Number.isSafeInteger(thirdParty + payments)) throw new Error("Tax calculation exceeds the safe integer range")
   const allowance = input.subjectType === "INDIVIDUAL" ? UMKM_INDIVIDUAL_FREE_REVENUE : 0
   const beforeTaxable = Math.max(0, input.cumulativeRevenueBefore - allowance)
   const afterTaxable = Math.max(0, input.cumulativeRevenueBefore + monthRevenue - allowance)
   const taxableBase = afterTaxable - beforeTaxable
-  const liabilityAmount = Math.round(taxableBase * UMKM_RATE)
+  const liabilityAmount = Math.floor(taxableBase / 200) + (taxableBase % 200 >= 100 ? 1 : 0)
   const settlements = thirdParty + payments
   const remainingPayable = Math.max(0, liabilityAmount - settlements)
   const overpaidAmount = Math.max(0, settlements - liabilityAmount)
-  const paymentStatus: TaxPaymentStatus = liabilityAmount === 0
+  const paymentStatus: TaxPaymentStatus = settlements > liabilityAmount ? "OVERPAID" : liabilityAmount === 0
     ? "NOT_REQUIRED"
     : settlements === 0
       ? "UNPAID"
@@ -98,7 +99,7 @@ export function computeConfirmedBalance(
   assertMoney(liabilityAmount, "liabilityAmount")
   const remainingPayable = Math.max(0, liabilityAmount - compatibleSettlements)
   const overpaidAmount = Math.max(0, compatibleSettlements - liabilityAmount)
-  const paymentStatus: TaxPaymentStatus = liabilityAmount === 0
+  const paymentStatus: TaxPaymentStatus = compatibleSettlements > liabilityAmount ? "OVERPAID" : liabilityAmount === 0
     ? "NOT_REQUIRED"
     : compatibleSettlements === 0
       ? "UNPAID"

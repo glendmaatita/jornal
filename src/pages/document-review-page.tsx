@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { DateField } from "@/components/ui/date-field"
 import { SelectField } from "@/components/ui/select-field"
 import { TextField } from "@/components/ui/text-field"
-import { formatInvoiceNumber } from "@/lib/format"
+import { formatInvoiceNumber, formatNumberInput, parseAmountInput } from "@/lib/format"
 import { archiveDocument, confirmDocument, extractDocument, getAiJob, getDocument, listDocumentInvoiceCandidates, unlinkDocument } from "@/lib/document-client"
 import type { DocumentExtraction } from "@/lib/document-types"
 import { todayIsoDate } from "@/lib/format"
@@ -19,7 +19,7 @@ export function DocumentReviewPage({ documentId }: { documentId: string }) {
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState(""); const [unlinkReason, setUnlinkReason] = useState(""); const [invoiceId, setInvoiceId] = useState("")
   const extraction = detail.data?.extraction?.result || job?.result || null
   const [review, setReview] = useState({ amount: "", transactionDate: todayIsoDate(), direction: "MONEY_OUT" as "MONEY_IN" | "MONEY_OUT", description: "" })
-  const parsedAmount = Math.round(Number(review.amount.replace(/[^0-9.]/g, "")))
+  const parsedAmount = parseAmountInput(review.amount)
   const invoiceCandidates = useQuery({ queryKey: ["documents", documentId, "invoice-candidates", parsedAmount], queryFn: () => listDocumentInvoiceCandidates(documentId, parsedAmount), enabled: parsedAmount > 0 && detail.data?.document.status !== "LINKED" })
   const previewUrl = useMemo(() => detail.data?.contentBase64 ? `data:${detail.data.document.mimeType};base64,${detail.data.contentBase64}` : "", [detail.data])
 
@@ -28,12 +28,12 @@ export function DocumentReviewPage({ documentId }: { documentId: string }) {
   useEffect(() => { if (!jobId || ["SUCCEEDED", "FAILED", "UNKNOWN", "CANCELLED"].includes(job?.status || "")) return; const timer = window.setInterval(() => void getAiJob(jobId).then((result) => { setJob(result.job); if (result.job.status === "SUCCEEDED") void detail.refetch() }), 2_000); return () => clearInterval(timer) }, [jobId, job?.status])
   // A newly arrived extraction seeds the editable review draft once.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { if (!extraction) return; setReview({ amount: extraction.amount || "", transactionDate: extraction.transactionDate || todayIsoDate(), direction: extraction.directionHint === "MONEY_IN" ? "MONEY_IN" : "MONEY_OUT", description: extraction.description || extraction.merchantName || "" }) }, [extraction])
+  useEffect(() => { if (!extraction) return; setReview({ amount: formatNumberInput((extraction.amount || "").replace(".", ",")), transactionDate: extraction.transactionDate || todayIsoDate(), direction: extraction.directionHint === "MONEY_IN" ? "MONEY_IN" : "MONEY_OUT", description: extraction.description || extraction.merchantName || "" }) }, [extraction])
   if (detail.isLoading) return <p>Memuat dokumen…</p>
   if (!detail.data) return <p className="text-red-700">{String(detail.error || "Dokumen tidak ditemukan")}</p>
   const document = detail.data.document
   const scan = async () => { setBusy(true); setMessage(""); try { const result = await extractDocument(document.id); setJobId(result.job.id); setJob({ status: result.job.status, result: null, errorCode: null }); setMessage("Dokumen masuk antrean AI. Anda boleh meninggalkan halaman ini.") } catch (cause) { setMessage(String(cause)) } finally { setBusy(false) } }
-  const confirm = async () => { if (!parsedAmount || !review.transactionDate || !review.description.trim()) { setMessage("Nominal, tanggal, dan deskripsi wajib diperiksa sebelum disimpan."); return }; const invoice = invoiceCandidates.data?.items.find((item) => item.id === invoiceId); setBusy(true); setMessage(""); try { await confirmDocument(document, invoice ? { mode: "MATCH_INVOICE", invoiceId: invoice.id, expectedInvoiceRevision: invoice.revision, direction: "MONEY_IN", amount: parsedAmount, transactionDate: review.transactionDate, description: review.description.trim() } : { direction: review.direction, amount: parsedAmount, transactionDate: review.transactionDate, description: review.description.trim() }); setMessage(invoice ? "Pembayaran invoice dan transaksi tersimpan." : "Transaksi tersimpan dan dokumen sudah ditautkan."); await detail.refetch() } catch (cause) { setMessage(String(cause)) } finally { setBusy(false) } }
+  const confirm = async () => { if (!Number.isSafeInteger(parsedAmount) || parsedAmount <= 0 || !review.transactionDate || !review.description.trim()) { setMessage("Nominal, tanggal, dan deskripsi wajib diperiksa sebelum disimpan."); return }; const invoice = invoiceCandidates.data?.items.find((item) => item.id === invoiceId); setBusy(true); setMessage(""); try { await confirmDocument(document, invoice ? { mode: "MATCH_INVOICE", invoiceId: invoice.id, expectedInvoiceRevision: invoice.revision, direction: "MONEY_IN", amount: parsedAmount, transactionDate: review.transactionDate, description: review.description.trim() } : { direction: review.direction, amount: parsedAmount, transactionDate: review.transactionDate, description: review.description.trim() }); setMessage(invoice ? "Pembayaran invoice dan transaksi tersimpan." : "Transaksi tersimpan dan dokumen sudah ditautkan."); await detail.refetch() } catch (cause) { setMessage(String(cause)) } finally { setBusy(false) } }
 
   return <div className="space-y-4 pb-8">
     <header><h1 className="flex items-center gap-2 text-2xl"><ScanSearch className="size-5 text-primary" aria-hidden="true" />Review Dokumen</h1><p className="text-sm text-muted-foreground">{document.filename} · {document.status}</p></header>

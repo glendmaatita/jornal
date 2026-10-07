@@ -174,7 +174,7 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
     body: JSON.stringify({ requests: [{
       method: "POST", url: "/api/collections/jornal_records/records",
       headers: { "X-Jornal-Protocol": "3", "X-Jornal-Company": String(companyA.id) },
-      body: { business_id: owner.id, company_id: companyB.id, data_epoch: 1, entity: "transactions", app_id: "batch-cross", revision: 1, payload: { id: "batch-cross", classification: "REVENUE", accountId: "account-b", updatedAt: new Date().toISOString() } },
+      body: { business_id: owner.id, company_id: companyB.id, data_epoch: 1, entity: "transactions", app_id: "batch-cross", revision: 1, payload: { id: "batch-cross", classification: "REVENUE", amount: 100, accountId: "account-b", updatedAt: new Date().toISOString() } },
     }] }),
   })
   expect(batchBypass.response.status).toBe(403)
@@ -203,17 +203,25 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   expect((scaleRecordsPage3.data.items as unknown[]).length).toBe(21)
   const crossReference = await send("/api/collections/jornal_records/records", {
     method: "POST", headers: recordHeaders(owner.token, companyA.id),
-    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "cross", revision: 1, payload: { id: "cross", classification: "REVENUE", accountId: "account-b", updatedAt: new Date().toISOString() } }),
+    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "cross", revision: 1, payload: { id: "cross", classification: "REVENUE", amount: 100, accountId: "account-b", updatedAt: new Date().toISOString() } }),
   })
   expect(crossReference.response.status).toBe(400)
   const payloadScopeMismatch = await send("/api/collections/jornal_records/records", {
     method: "POST", headers: recordHeaders(owner.token, companyA.id),
-    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "payload-cross", revision: 1, payload: { id: "payload-cross", businessId: owner.id, companyId: companyB.id, classification: "REVENUE", accountId: "account-a", updatedAt: new Date().toISOString() } }),
+    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "payload-cross", revision: 1, payload: { id: "payload-cross", businessId: owner.id, companyId: companyB.id, classification: "REVENUE", amount: 100, accountId: "account-a", updatedAt: new Date().toISOString() } }),
   })
   expect(payloadScopeMismatch.response.status).toBe(400)
+  for (const amount of [null, "100", -1, 0, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    const invalid = await send("/api/collections/jornal_records/records", {
+      method: "POST", headers: recordHeaders(owner.token, companyA.id),
+      body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: `invalid-number-${String(amount)}`, revision: 1, payload: { id: "invalid", classification: "REVENUE", amount, accountId: "account-a" } }),
+    })
+    expect(invalid.response.status).toBe(400)
+    expect(String(invalid.data.message)).toContain("rupiah")
+  }
   const referencedTransaction = await send("/api/collections/jornal_records/records", {
     method: "POST", headers: recordHeaders(owner.token, companyA.id),
-    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "references-account", revision: 1, payload: { id: "references-account", businessId: owner.id, companyId: companyA.id, classification: "REVENUE", accountId: "account-a", updatedAt: new Date().toISOString() } }),
+    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "references-account", revision: 1, payload: { id: "references-account", businessId: owner.id, companyId: companyA.id, classification: "REVENUE", amount: 100, accountId: "account-a", updatedAt: new Date().toISOString() } }),
   })
   expect(referencedTransaction.response.status).toBe(200)
   const companyARecords = await listRecords(owner.token, companyA.id)
@@ -224,7 +232,7 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   expect(referencedDelete.response.status).toBe(409)
 
   const attachment = new FormData()
-  for (const [key, value] of Object.entries({ business_id: owner.id, company_id: String(companyA.id), data_epoch: "1", entity: "transactions", app_id: "attachment", revision: "1", payload: JSON.stringify({ id: "attachment", classification: "REVENUE", accountId: "account-a", updatedAt: new Date().toISOString() }) })) attachment.append(key, value)
+  for (const [key, value] of Object.entries({ business_id: owner.id, company_id: String(companyA.id), data_epoch: "1", entity: "transactions", app_id: "attachment", revision: "1", payload: JSON.stringify({ id: "attachment", classification: "REVENUE", amount: 100, accountId: "account-a", updatedAt: new Date().toISOString() }) })) attachment.append(key, value)
   attachment.append("attachment", new File(["proof"], "proof.txt", { type: "text/plain" }))
   const fileRecord = await send("/api/collections/jornal_records/records", {
     method: "POST", headers: { ...authHeader(owner.token), "X-Jornal-Protocol": "3", "X-Jornal-Company": String(companyA.id) }, body: attachment,
@@ -234,7 +242,7 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   expect(oldView.response.status).toBe(426)
   const staleRevision = await send(`/api/collections/jornal_records/records/${fileRecord.data.id}`, {
     method: "PATCH", headers: recordHeaders(owner.token, companyA.id),
-    body: JSON.stringify({ revision: 9, payload: { id: "attachment", classification: "REVENUE", accountId: "account-a", updatedAt: new Date().toISOString() } }),
+    body: JSON.stringify({ revision: 9, payload: { id: "attachment", classification: "REVENUE", amount: 100, accountId: "account-a", updatedAt: new Date().toISOString() } }),
   })
   expect(staleRevision.response.status).toBe(409)
   const ownerFileToken = await send(`/api/jornal/companies/${companyA.id}/file-token`, { method: "POST", headers: authHeader(owner.token) })
@@ -253,7 +261,7 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   expect(archive.response.status).toBe(200)
   const lateWrite = await send("/api/collections/jornal_records/records", {
     method: "POST", headers: recordHeaders(owner.token, companyA.id),
-    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "late", revision: 1, payload: { id: "late", classification: "REVENUE", accountId: "account-a", updatedAt: new Date().toISOString() } }),
+    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "late", revision: 1, payload: { id: "late", classification: "REVENUE", amount: 100, accountId: "account-a", updatedAt: new Date().toISOString() } }),
   })
   expect(lateWrite.response.status).toBe(409)
   const restore = await send(`/api/jornal/companies/${companyA.id}`, {
@@ -266,7 +274,7 @@ integrationTest("PocketBase enforces multi-company isolation and lifecycle", asy
   expect((await listRecords(owner.token, companyB.id)).data.totalItems).toBe(3)
   const staleEpoch = await send("/api/collections/jornal_records/records", {
     method: "POST", headers: recordHeaders(owner.token, companyA.id),
-    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "stale", revision: 1, payload: { id: "stale", classification: "REVENUE", accountId: null, updatedAt: new Date().toISOString() } }),
+    body: JSON.stringify({ business_id: owner.id, company_id: companyA.id, data_epoch: 1, entity: "transactions", app_id: "stale", revision: 1, payload: { id: "stale", classification: "REVENUE", amount: 100, accountId: null, updatedAt: new Date().toISOString() } }),
   })
   expect(staleEpoch.response.status).toBe(409)
 }, 30_000)

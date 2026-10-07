@@ -49,7 +49,7 @@ export function TransactionTemplatesPage() {
           options={[{ value: "MONEY_OUT", label: "Uang keluar" }, { value: "MONEY_IN", label: "Uang masuk" }]}
         />
         <Button
-          disabled={!form.name.trim() || !form.description.trim()}
+          disabled={!form.name.trim() || !form.description.trim() || Boolean(form.amount && (!Number.isSafeInteger(parseAmountInput(form.amount)) || parseAmountInput(form.amount) <= 0))}
           onClick={() => {
             save([...items, { id: crypto.randomUUID(), name: form.name.trim(), description: form.description.trim(), direction: form.direction, amount: form.amount ? parseAmountInput(form.amount) : null }])
             setForm(emptyForm)

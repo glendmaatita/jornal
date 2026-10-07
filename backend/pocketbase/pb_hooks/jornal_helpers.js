@@ -19,6 +19,9 @@ function validatePayloadReferences(event, companyId) {
   const entity = event.record.getString("entity")
   let payload = event.record.get("payload") || {}
   try { payload = JSON.parse(event.record.getString("payload")) } catch { /* JSONMap fallback */ }
+  try {
+    require(`${__hooks}/financial_validation.js`).validateFinancialRecord(entity, payload)
+  } catch (error) { throw new ApiError(400, String(error.message || error)) }
   const value = (object, key) => typeof object.get === "function" ? object.get(key) : object[key]
   if (value(payload, "companyId") && String(value(payload, "companyId")) !== companyId) {
     throw new ApiError(400, "Payload company is outside the record scope")

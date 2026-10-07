@@ -27,7 +27,7 @@ export function MoreMenu({
   userEmail: string | null
   onLogout: () => void
   /** Install call to action. Shown inside the menu on phones only; wider
-   * screens keep the text button in the header. */
+   * screens keep the icon button in the header. */
   onInstall?: (() => void) | null
 }) {
   const [open, setOpen] = useState(false)

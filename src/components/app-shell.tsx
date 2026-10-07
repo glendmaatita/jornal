@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowLeftRight, BarChart3, FilePlus2, Home as HomeIcon, Plus, ReceiptText, RefreshCw, Search, UserPlus, Wallet, X } from "lucide-react"
+import { ArrowLeftRight, BarChart3, Download, FilePlus2, Home as HomeIcon, Plus, ReceiptText, RefreshCw, Search, UserPlus, Wallet, X } from "lucide-react"
 
 import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
@@ -121,12 +121,24 @@ export function AppShell() {
               <button
                 type="button"
                 onClick={() => void install()}
-                className="hidden whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)] sm:block"
+                aria-label="Pasang aplikasi"
+                title="Pasang aplikasi"
+                className="hidden size-9 place-items-center rounded-full text-[var(--link)] transition-colors hover:bg-white sm:grid"
               >
-                Pasang aplikasi
+                <Download className="size-[18px]" aria-hidden="true" />
               </button>
             )}
-            {isIos && !isInstalled && !canInstall && <button type="button" onClick={() => setShowIosInstall(true)} className="hidden whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--link)] sm:block">Pasang aplikasi</button>}
+            {isIos && !isInstalled && !canInstall && (
+              <button
+                type="button"
+                onClick={() => setShowIosInstall(true)}
+                aria-label="Pasang aplikasi"
+                title="Pasang aplikasi"
+                className="hidden size-9 place-items-center rounded-full text-[var(--link)] transition-colors hover:bg-white sm:grid"
+              >
+                <Download className="size-[18px]" aria-hidden="true" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => { setRefreshing(true); void hardReloadApp() }}

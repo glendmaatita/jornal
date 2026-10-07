@@ -22,7 +22,7 @@ function isoDate(value, label) {
   return result
 }
 function int(value, label, min, max) {
-  const result = Number(value)
+  const result = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN
   if (!Number.isSafeInteger(result) || result < min || result > max) throw new ApiError(400, `${label} tidak valid`)
   return result
 }
@@ -181,6 +181,28 @@ function roundHalfUp(numerator, divisor) {
   if (!Number.isSafeInteger(numerator) || numerator < 0 || !Number.isSafeInteger(divisor) || divisor <= 0 || numerator > Number.MAX_SAFE_INTEGER - Math.floor(divisor / 2)) throw new ApiError(400, "Nilai invoice terlalu besar")
   return Math.floor((numerator + Math.floor(divisor / 2)) / divisor)
 }
+/** Exact a*b/divisor without constructing an unsafe intermediate product.
+ * PocketBase's JS runtime does not require BigInt support for this helper. */
+function proportionalAmount(a, b, divisor) {
+  int(a, "Nominal", 0, MAX_TOTAL)
+  int(b, "Nominal", 0, MAX_TOTAL)
+  int(divisor, "Total", 1, MAX_TOTAL)
+  let quotient = 0; let remainder = 0
+  let termQuotient = Math.floor(a / divisor); let termRemainder = a % divisor
+  while (b > 0) {
+    if (b % 2 === 1) {
+      quotient = add(quotient, termQuotient)
+      remainder += termRemainder
+      if (remainder >= divisor) { quotient = add(quotient, 1); remainder -= divisor }
+    }
+    b = Math.floor(b / 2)
+    if (b === 0) break
+    termQuotient = add(termQuotient, termQuotient)
+    termRemainder *= 2
+    if (termRemainder >= divisor) { termQuotient = add(termQuotient, 1); termRemainder -= divisor }
+  }
+  return remainder >= Math.ceil(divisor / 2) ? add(quotient, 1) : quotient
+}
 function multiply(a, b) {
   if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || a < 0 || b < 0 || (a && b > Math.floor(Number.MAX_SAFE_INTEGER / a))) throw new ApiError(400, "Nilai invoice terlalu besar")
   return a * b
@@ -203,9 +225,9 @@ function calculateItems(rawItems) {
 function calculateInvoice(body) {
   const items = calculateItems(body.items)
   const subtotal = items.reduce((sum, item) => add(sum, item.lineTotal), 0)
-  const discountAmount = int(body.discountAmount || 0, "Diskon", 0, MAX_TOTAL)
-  const shippingAmount = int(body.shippingAmount || 0, "Ongkir", 0, MAX_TOTAL)
-  const taxRateBps = int(body.taxRateBps || 0, "Tarif pajak", 0, 10_000)
+  const discountAmount = int(body.discountAmount === undefined ? 0 : body.discountAmount, "Diskon", 0, MAX_TOTAL)
+  const shippingAmount = int(body.shippingAmount === undefined ? 0 : body.shippingAmount, "Ongkir", 0, MAX_TOTAL)
+  const taxRateBps = int(body.taxRateBps === undefined ? 0 : body.taxRateBps, "Tarif pajak", 0, 10_000)
   if (discountAmount > subtotal) throw new ApiError(400, "Diskon tidak boleh melebihi subtotal")
   const baseAmount = add(subtotal - discountAmount, shippingAmount)
   const taxAmount = roundHalfUp(multiply(baseAmount, taxRateBps), 10_000)
@@ -263,4 +285,4 @@ function ensureSettings(tx, tenantId, companyId, epoch, senderName) {
   return settings
 }
 
-module.exports = { DEFAULT_UNITS, activePaymentInstructions, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceNumberForDisplay, invoiceRecordedTax, invoiceResponse, invoiceResponseWithContactFallback, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentInstructionsInput, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }
+module.exports = { int, proportionalAmount, DEFAULT_UNITS, activePaymentInstructions, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceNumberForDisplay, invoiceRecordedTax, invoiceResponse, invoiceResponseWithContactFallback, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentInstructionsInput, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }

@@ -45,7 +45,7 @@ expect(formatRupiah(0)).toContain("0")
     expect(parseAmountInput("")).toBe(0)
     expect(parseAmountInput("   ")).toBe(0)
     expect(parseAmountInput("Rp1.500.000")).toBe(1_500_000)
-    expect(parseAmountInput("abc")).toBe(0)
+    expect(parseAmountInput("abc")).toBeNaN()
   })
 
   test("formatNumberInput", () => {
