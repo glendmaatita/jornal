@@ -31,7 +31,7 @@ function validatePayloadReferences(event, companyId) {
   }
   if (entity !== "transactions" && entity !== "recurringRules") return
   if (entity === "transactions") {
-    if (["invoiceId", "invoicePaymentId", "invoiceNumber", "customerId", "invoiceRevenueAmount", "invoiceTaxAmount"].some((key) => value(payload, key) !== null && value(payload, key) !== undefined && value(payload, key) !== "")) {
+    if (["invoiceId", "invoicePaymentId", "invoiceNumber", "customerId", "invoiceRevenueAmount", "invoiceTaxAmount", "invoiceOverpaidAmount"].some((key) => value(payload, key) !== null && value(payload, key) !== undefined && value(payload, key) !== "")) {
       throw new ApiError(409, "Invoice metadata can only be changed through invoice commands")
     }
     if (value(payload, "documentId")) throw new ApiError(409, "Document linkage can only be changed through document commands")

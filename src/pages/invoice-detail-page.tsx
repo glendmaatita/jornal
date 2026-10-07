@@ -164,7 +164,7 @@ export function InvoiceDetailPage({
                 {displayedInvoiceNumber || "Draft Invoice"}
               </h1>
               <p className="text-sm text-muted-foreground">
-                {invoice.status === "UNPAID" && (invoice.paidAmount ?? 0) > 0 ? "Dibayar sebagian" : INVOICE_STATUS_LABELS[invoice.status]} · revisi {invoice.revision}
+                {(invoice.overpaidAmount ?? Math.max(0, (invoice.paidAmount ?? 0) - invoice.grandTotal)) > 0 ? "Lebih bayar" : invoice.status === "UNPAID" && (invoice.paidAmount ?? 0) > 0 ? "Dibayar sebagian" : INVOICE_STATUS_LABELS[invoice.status]} · revisi {invoice.revision}
               </p>
             </div>
             {invoice.status !== "VOID" && (
@@ -353,6 +353,7 @@ export function InvoiceDetailPage({
                 <CircleCheck className="size-4" aria-hidden="true" />
                 Invoice lunas
               </h2>
+              {(invoice.overpaidAmount ?? Math.max(0, (invoice.paidAmount ?? 0) - invoice.grandTotal)) > 0 && <p className="text-sm font-medium text-amber-800">Terbayar {formatRupiah(invoice.paidAmount ?? 0)} dari total {formatRupiah(invoice.grandTotal)} · Lebih bayar {formatRupiah(invoice.overpaidAmount ?? (invoice.paidAmount ?? 0) - invoice.grandTotal)}</p>}
               <p className="text-sm text-emerald-900">
                 Jika hasil pembayaran invoice ini dipakai untuk membayar supplier, catat transfer uang keluarnya sekarang.
               </p>

@@ -75,3 +75,11 @@ test("invoice document renders payment confirmation phone and email", () => {
   expect(html).toContain("+62 857-6401-1028");
   expect(html).toContain("marketing@dropify.id");
 });
+
+test("invoice document shows excess payment separately from the invoice total", () => {
+  const html = renderToStaticMarkup(<InvoiceDocument invoice={{ ...invoice, status: "PAID", paidAmount: 12_000, overpaidAmount: 2_000 }} />);
+  expect(html).toContain("Lebih bayar");
+  expect(html).toContain("12.000");
+  expect(html).toContain("2.000");
+  expect(html).not.toContain("Sisa tagihan");
+});

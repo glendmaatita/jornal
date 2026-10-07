@@ -56,6 +56,8 @@ describe("persistence rejects invalid numeric data", () => {
       ...[NaN, Infinity, -1, 0, 1.5, Number.MAX_SAFE_INTEGER + 1, "1000", null].map((amount): [string, unknown] => ["transactions", transaction({ amount: amount as number })]),
       ["transactions", transaction({ classificationConfidence: 1.1 })],
       ["transactions", transaction({ invoiceRevenueAmount: 450, invoiceTaxAmount: 100 })],
+      ["transactions", transaction({ invoiceRevenueAmount: 400, invoiceTaxAmount: 0, invoiceOverpaidAmount: 50 })],
+      ["transactions", transaction({ invoiceRevenueAmount: 400, invoiceTaxAmount: 0, invoiceOverpaidAmount: -100 })],
       ["accounts", { ...account("a"), openingBalance: NaN }],
       ["profile", { ...emptyProfile(), fiscalYear: 2026.5 }],
       ["reserves", { amount: -5 }],
@@ -69,6 +71,7 @@ describe("persistence rejects invalid numeric data", () => {
     }
     for (const validate of [validateFinancialRecord, backend.validateFinancialRecord]) {
       expect(() => validate("transactions", transaction())).not.toThrow()
+      expect(() => validate("transactions", transaction({ invoiceRevenueAmount: 400, invoiceTaxAmount: 0, invoiceOverpaidAmount: 100 }))).not.toThrow()
       expect(() => validate("accounts", { ...account("a"), openingBalance: -100 })).not.toThrow()
       expect(() => validate("profile", { ...emptyProfile(), lastCheckedBalance: 0 })).not.toThrow()
     }

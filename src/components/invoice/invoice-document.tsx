@@ -136,7 +136,11 @@ export function InvoiceDocument({ invoice, customer, logoDataUrl }: { invoice: I
       {(invoice.paidAmount ?? 0) > 0 && (
         <section className="invoice-payment-balance">
           <span>Sudah dibayar</span><span>{formatInvoicePrice(invoice.paidAmount ?? 0)}</span>
-          <strong>Sisa tagihan</strong><strong>{formatInvoicePrice(invoice.remainingAmount ?? invoice.grandTotal - (invoice.paidAmount ?? 0))}</strong>
+          {(invoice.paidAmount ?? 0) > invoice.grandTotal ? (
+            <><strong>Lebih bayar</strong><strong>{formatInvoicePrice((invoice.paidAmount ?? 0) - invoice.grandTotal)}</strong></>
+          ) : (
+            <><strong>Sisa tagihan</strong><strong>{formatInvoicePrice(invoice.remainingAmount ?? invoice.grandTotal - (invoice.paidAmount ?? 0))}</strong></>
+          )}
         </section>
       )}
 

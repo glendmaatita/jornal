@@ -43,7 +43,7 @@ import {
   type InvoiceDraftInput,
 } from "@/lib/invoice-client";
 import { formatRupiah, parseAmountInput, todayIsoDate } from "@/lib/format";
-import { MAX_INVOICE_ITEMS, type Invoice, type InvoiceItemInput } from "@/lib/invoice-types";
+import { MAX_INVOICE_ITEMS, MAX_INVOICE_TOTAL, type Invoice, type InvoiceItemInput } from "@/lib/invoice-types";
 import { activeCompany } from "@/lib/companies";
 import { clearMirroredState, mirrorState, restoreState } from "@/lib/local-db";
 import { getDataScope } from "@/lib/store";
@@ -303,15 +303,16 @@ export function InvoiceFormPage({
     const currentPaid = invoice.paidAmount ?? 0;
     const nextPaid = parseAmountInput(correctedPaidAmount);
     return <div className="space-y-4 pb-8">
-      <header><h1 className="flex items-center gap-2 text-2xl"><FilePen className="size-5 text-primary" aria-hidden="true" />Koreksi total terbayar</h1><p className="text-sm text-muted-foreground">Sesuaikan jumlah yang sudah dibayar untuk kembali ke belum bayar atau dibayar sebagian.</p></header>
+      <header><h1 className="flex items-center gap-2 text-2xl"><FilePen className="size-5 text-primary" aria-hidden="true" />Koreksi total terbayar</h1><p className="text-sm text-muted-foreground">Sesuaikan jumlah yang sudah dibayar, termasuk bila pembayaran melebihi total invoice.</p></header>
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <Card><CardContent className="grid gap-3 p-4">
         <p className="text-sm">Total invoice: <strong>{formatRupiah(invoice.grandTotal)}</strong></p>
         <p className="text-sm">Sudah dibayar: <strong>{formatRupiah(currentPaid)}</strong></p>
         <TextField label="Total sudah dibayar setelah koreksi" type="amount" prefix="Rp" value={correctedPaidAmount} onChange={setCorrectedPaidAmount} placeholder="0 untuk belum bayar" />
         <TextField label="Alasan perubahan pembayaran" value={paymentCorrectionReason} onChange={setPaymentCorrectionReason} placeholder="Contoh: nominal transfer keliru" />
+        {Number.isSafeInteger(nextPaid) && nextPaid > invoice.grandTotal && nextPaid <= MAX_INVOICE_TOTAL && <p className="text-sm font-medium text-amber-800">Lebih bayar {formatRupiah(nextPaid - invoice.grandTotal)}. Total invoice tetap {formatRupiah(invoice.grandTotal)}.</p>}
         <p className="text-xs text-muted-foreground">Transaksi pemasukan yang dikoreksi akan ikut berubah. Isi 0 untuk membuka revisi isi invoice.</p>
-        <Button disabled={busy || !correctedPaidAmount.trim() || !paymentCorrectionReason.trim() || !Number.isSafeInteger(nextPaid) || nextPaid < 0 || nextPaid >= currentPaid} onClick={() => void (async () => {
+        <Button disabled={busy || !correctedPaidAmount.trim() || !paymentCorrectionReason.trim() || !Number.isSafeInteger(nextPaid) || nextPaid < 0 || nextPaid > MAX_INVOICE_TOTAL || nextPaid === currentPaid} onClick={() => void (async () => {
           setBusy(true); setError("");
           try {
             const result = await setInvoicePaidAmount(invoice, nextPaid, paymentCorrectionReason.trim());

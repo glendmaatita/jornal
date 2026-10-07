@@ -116,7 +116,7 @@ function invoiceResponse(record) {
     issueDate: record.getString("issue_date"), dueDate: record.getString("due_date"), timezone: record.getString("timezone"),
     customerSnapshot: json(record, "customer_snapshot", null), senderSnapshot: json(record, "sender_snapshot", null), paymentInstructionsSnapshot: json(record, "payment_instructions_snapshot", null),
     items: json(record, "items", []), shippingMethod: record.getString("shipping_method") || null, subtotal: record.getInt("subtotal"), discountAmount: record.getInt("discount_amount"),
-    shippingAmount: record.getInt("shipping_amount"), taxRateBps: record.getInt("tax_rate_bps"), taxAmount: record.getInt("tax_amount"), grandTotal: record.getInt("grand_total"), paidAmount: record.getInt("paid_amount"), remainingAmount: Math.max(0, record.getInt("grand_total") - record.getInt("paid_amount")),
+    shippingAmount: record.getInt("shipping_amount"), taxRateBps: record.getInt("tax_rate_bps"), taxAmount: record.getInt("tax_amount"), grandTotal: record.getInt("grand_total"), paidAmount: record.getInt("paid_amount"), remainingAmount: Math.max(0, record.getInt("grand_total") - record.getInt("paid_amount")), overpaidAmount: Math.max(0, record.getInt("paid_amount") - record.getInt("grand_total")),
     currency: record.getString("currency"), paidAt: record.getString("paid_at") || null, voidReason: record.getString("void_reason") || null, replacedInvoiceId: record.getString("replaced_invoice_id") || null,
     revision: record.getInt("revision"), createdAt: record.getString("created"), updatedAt: record.getString("updated"),
   }
@@ -167,6 +167,30 @@ function settingsResponse(record) {
 function paymentResponse(record) {
   return { id: record.id, invoiceId: record.getString("invoice_id"), amount: record.getInt("amount"), paidOn: record.getString("paid_on"), accountId: record.getString("account_id") || null, ledgerTransactionId: record.getString("ledger_transaction_id"), origin: record.getString("origin"), status: record.getString("status"), reference: record.getString("reference") || null, revision: record.getInt("revision") }
 }
+function reallocateInvoicePayments(tx, h, scope, invoice, now, changes) {
+  const payments = h.findAllRecords(tx, "invoice_payments", "tenant_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && invoice_id = {:invoice} && status = 'ACTIVE'", "paid_on,created", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, invoice: invoice.id })
+  const invoiceTotal = invoice.getInt("grand_total"); let cumulative = 0
+  for (const payment of payments) {
+    const appliedBefore = Math.min(cumulative, invoiceTotal)
+    const beforeTax = h.proportionalAmount(appliedBefore, invoice.getInt("tax_amount"), invoiceTotal)
+    cumulative += payment.getInt("amount")
+    const appliedAfter = Math.min(cumulative, invoiceTotal)
+    const taxAmount = h.proportionalAmount(appliedAfter, invoice.getInt("tax_amount"), invoiceTotal) - beforeTax
+    const overpaidAmount = payment.getInt("amount") - (appliedAfter - appliedBefore)
+    let ledger
+    try { ledger = tx.findFirstRecordByFilter("jornal_records", "business_id = {:tenant} && company_id = {:company} && data_epoch = {:epoch} && entity = 'transactions' && app_id = {:id} && deleted_at = ''", { tenant: scope.tenantId, company: scope.companyId, epoch: scope.epoch, id: payment.getString("ledger_transaction_id") }) }
+    catch { throw new ApiError(409, "Transaksi pembayaran tidak ditemukan") }
+    const transaction = h.json(ledger, "payload", {})
+    if (transaction.invoiceId !== invoice.id || transaction.invoicePaymentId !== payment.id || Number(transaction.amount) !== payment.getInt("amount")) throw new ApiError(409, "Transaksi pembayaran tidak sesuai dengan invoice")
+    const updated = { ...transaction, invoiceTaxAmount: taxAmount, invoiceRevenueAmount: appliedAfter - appliedBefore - taxAmount, invoiceOverpaidAmount: overpaidAmount, updatedAt: now }
+    if (transaction.invoiceTaxAmount !== updated.invoiceTaxAmount || transaction.invoiceRevenueAmount !== updated.invoiceRevenueAmount || transaction.invoiceOverpaidAmount !== updated.invoiceOverpaidAmount) {
+      ledger.set("payload", updated); ledger.set("revision", ledger.getInt("revision") + 1); tx.save(ledger)
+      changes.set(payment.getString("ledger_transaction_id"), { transaction: updated, ledgerRevision: ledger.getInt("revision"), ledgerDeleted: false })
+    }
+  }
+  return cumulative
+}
+
 function invoiceRecordedTax(app, invoice) {
   const payments = findAllRecords(app, "invoice_payments", "invoice_id = {:invoice} && status = 'ACTIVE'", "", { invoice: invoice.id })
   return payments.reduce((sum, payment) => {
@@ -285,4 +309,4 @@ function ensureSettings(tx, tenantId, companyId, epoch, senderName) {
   return settings
 }
 
-module.exports = { int, proportionalAmount, DEFAULT_UNITS, activePaymentInstructions, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceNumberForDisplay, invoiceRecordedTax, invoiceResponse, invoiceResponseWithContactFallback, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentInstructionsInput, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }
+module.exports = { int, proportionalAmount, DEFAULT_UNITS, activePaymentInstructions, audit, calculateInvoice, commandHash, customerInput, customerResponse, ensureSettings, findAllRecords, findCommand, invoiceDraftData, invoiceInput, invoiceNumberForDisplay, invoiceRecordedTax, reallocateInvoicePayments, invoiceResponse, invoiceResponseWithContactFallback, isoDate, json, jsonBody, normalize, normalizePhone, ownedCompany, ownedRecord, paymentInstructionsInput, paymentResponse, replayCommand, requestScope, requireCommand, requireText, saveCommand, settingsResponse, stableStringify, unitResponse }

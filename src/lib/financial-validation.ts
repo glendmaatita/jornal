@@ -25,12 +25,12 @@ export function validateFinancialRecord(entity: string, candidate: unknown): voi
   }
   if (entity === "transactions") {
     if (value.classificationConfidence != null && (typeof value.classificationConfidence !== "number" || !Number.isFinite(value.classificationConfidence) || value.classificationConfidence < 0 || value.classificationConfidence > 1)) throw new Error("Keyakinan klasifikasi tidak valid")
-    for (const key of ["invoiceRevenueAmount", "invoiceTaxAmount"]) {
+    for (const key of ["invoiceRevenueAmount", "invoiceTaxAmount", "invoiceOverpaidAmount"]) {
       if (value[key] == null) continue
       assertMoney(value[key], key)
       if ((value[key] as number) > (value.amount as number)) throw new Error("Alokasi invoice melebihi nominal transaksi")
     }
-    if (value.invoiceRevenueAmount != null && value.invoiceTaxAmount != null && (value.invoiceRevenueAmount as number) + (value.invoiceTaxAmount as number) !== value.amount) throw new Error("Alokasi invoice tidak sama dengan nominal transaksi")
+    if (value.invoiceRevenueAmount != null && value.invoiceTaxAmount != null && (value.invoiceRevenueAmount as number) + (value.invoiceTaxAmount as number) + (Number(value.invoiceOverpaidAmount) || 0) !== value.amount) throw new Error("Alokasi invoice tidak sama dengan nominal transaksi")
   }
   if (entity === "recurringRules") {
     if (!Number.isInteger(value.dayOfMonth) || (value.dayOfMonth as number) < 1 || (value.dayOfMonth as number) > 28) throw new Error("Tanggal transaksi berulang tidak valid")

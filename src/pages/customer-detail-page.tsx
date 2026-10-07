@@ -43,7 +43,7 @@ export function CustomerDetailPage({ customerId }: { customerId: string }) {
       {invoices.map((invoice) => (
         <Link key={invoice.id} to="/invoices/$invoiceId" params={{ invoiceId: invoice.id }} className="flex items-center gap-3 rounded-xl border bg-white p-3">
           <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="flex-1">{formatInvoiceNumber(invoice.invoiceNumber, invoice.sequence, invoice.issueDate) || "Draft"} · {invoice.status === "UNPAID" && (invoice.paidAmount ?? 0) > 0 ? "Dibayar sebagian" : invoice.status}</span>
+          <span className="flex-1">{formatInvoiceNumber(invoice.invoiceNumber, invoice.sequence, invoice.issueDate) || "Draft"} · {(invoice.paidAmount ?? 0) > invoice.grandTotal ? `Lebih bayar ${formatRupiah((invoice.paidAmount ?? 0) - invoice.grandTotal)}` : invoice.status === "UNPAID" && (invoice.paidAmount ?? 0) > 0 ? "Dibayar sebagian" : invoice.status}</span>
           <strong className="tabular-nums">{formatRupiah(invoice.status === "UNPAID" ? invoice.remainingAmount ?? invoice.grandTotal : invoice.grandTotal)}</strong>
         </Link>
       ))}

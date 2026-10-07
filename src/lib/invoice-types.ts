@@ -121,6 +121,7 @@ export interface Invoice {
   grandTotal: number
   paidAmount?: number
   remainingAmount?: number
+  overpaidAmount?: number
   currency: typeof INVOICE_CURRENCY
   paidAt: string | null
   voidReason: string | null

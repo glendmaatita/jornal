@@ -39,14 +39,14 @@ function validateFinancialRecord(entity, candidate) {
     if (entity === "transactions") {
         if (value.classificationConfidence != null && (typeof value.classificationConfidence !== "number" || !Number.isFinite(value.classificationConfidence) || value.classificationConfidence < 0 || value.classificationConfidence > 1))
             throw new Error("Keyakinan klasifikasi tidak valid");
-        for (const key of ["invoiceRevenueAmount", "invoiceTaxAmount"]) {
+        for (const key of ["invoiceRevenueAmount", "invoiceTaxAmount", "invoiceOverpaidAmount"]) {
             if (value[key] == null)
                 continue;
             assertMoney(value[key], key);
             if (value[key] > value.amount)
                 throw new Error("Alokasi invoice melebihi nominal transaksi");
         }
-        if (value.invoiceRevenueAmount != null && value.invoiceTaxAmount != null && value.invoiceRevenueAmount + value.invoiceTaxAmount !== value.amount)
+        if (value.invoiceRevenueAmount != null && value.invoiceTaxAmount != null && value.invoiceRevenueAmount + value.invoiceTaxAmount + (Number(value.invoiceOverpaidAmount) || 0) !== value.amount)
             throw new Error("Alokasi invoice tidak sama dengan nominal transaksi");
     }
     if (entity === "recurringRules") {

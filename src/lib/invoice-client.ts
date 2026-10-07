@@ -547,6 +547,7 @@ export async function correctInvoicePayment(
     ledgerTransaction: Transaction;
     ledgerRevision: number;
     ledgerDeleted: boolean;
+    ledgerChanges?: Array<{ transaction: Transaction; ledgerRevision: number; ledgerDeleted: boolean }>;
   }>(
     `/api/jornal/invoicing/payments/${encodeURIComponent(payment.id)}/correct`,
     {
@@ -563,6 +564,11 @@ export async function correctInvoicePayment(
     reconcileServerTransactionDeletion(result.ledgerTransaction);
   else reconcileServerTransaction(result.ledgerTransaction);
   acceptServerTransactionRevision(result.ledgerTransaction.id, result.ledgerRevision);
+  for (const change of result.ledgerChanges ?? []) {
+    if (change.ledgerDeleted) reconcileServerTransactionDeletion(change.transaction);
+    else reconcileServerTransaction(change.transaction);
+    acceptServerTransactionRevision(change.transaction.id, change.ledgerRevision);
+  }
   return result;
 }
 
