@@ -21,6 +21,7 @@ export interface PromptDialogOptions extends ConfirmDialogOptions {
   inputLabel: string
   placeholder?: string
   requiredValue?: string
+  required?: boolean
 }
 
 export interface DialogApi {

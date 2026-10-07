@@ -38,7 +38,6 @@ import {
   issueInvoice,
   listInvoicePaymentCandidates,
   markInvoicePaid,
-  setInvoicePaidAmount,
   voidInvoice,
 } from "@/lib/invoice-client";
 import {
@@ -87,8 +86,6 @@ export function InvoiceDetailPage({
   );
   const [candidateId, setCandidateId] = useState("");
   const [reason, setReason] = useState("");
-  const [correctedPaidAmount, setCorrectedPaidAmount] = useState("");
-  const [paymentCorrectionReason, setPaymentCorrectionReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const enabledAccounts = accounts.filter(isAccountEnabled);
@@ -144,6 +141,18 @@ export function InvoiceDetailPage({
   const candidate = candidates.data?.items.find(
     (item) => item.transaction.id === candidateId,
   );
+  const correctPayment = async (payment: (typeof payments)[number]) => {
+    const correctionReason = await dialog.prompt({
+      title: "Batalkan catatan pembayaran?",
+      description: `Pembayaran ${formatRupiah(payment.amount)} pada ${formatDateLong(payment.paidOn)} akan dibatalkan. Catatan pemasukan terkait ikut dikoreksi.`,
+      inputLabel: "Alasan koreksi pembayaran",
+      placeholder: "Contoh: nominal transfer keliru",
+      confirmLabel: "Batalkan pembayaran",
+      required: true,
+    });
+    if (!correctionReason?.trim()) return;
+    await run(() => correctInvoicePayment(payment, correctionReason.trim()));
+  };
   return (
     <div className={previewOnly ? "pb-8" : "space-y-4 pb-8"}>
       {!previewOnly && (
@@ -165,7 +174,7 @@ export function InvoiceDetailPage({
                 className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--link)]"
               >
                 <Pencil className="size-4" aria-hidden="true" />
-                {invoice.status === "DRAFT" ? "Edit" : "Revisi"}
+                {invoice.status === "DRAFT" ? "Edit" : (invoice.paidAmount ?? 0) > 0 ? "Koreksi total terbayar" : "Revisi"}
               </Link>
             )}
           </header>
@@ -368,37 +377,21 @@ export function InvoiceDetailPage({
                 <CircleCheck className="size-4" aria-hidden="true" />
                 Riwayat pembayaran
               </p>
-              <TextField
-                label="Alasan koreksi pembayaran"
-                icon={MessageSquare}
-                value={reason}
-                onChange={setReason}
-              />
               {payments.map((payment) => (
                 <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm">
                   <Link to="/transactions/$transactionId" params={{ transactionId: payment.ledgerTransactionId }} className="font-medium text-[var(--link)] underline">{formatDateLong(payment.paidOn)} · {formatRupiah(payment.amount)}</Link>
                   <Button
                     variant="outline"
-                    disabled={busy || !reason.trim()}
-                    onClick={() => void run(() => correctInvoicePayment(payment, reason))}
+                    disabled={busy}
+                    onClick={() => void correctPayment(payment)}
                   >
                     <Undo2 aria-hidden="true" />
-                    Koreksi
+                    Batalkan pembayaran
                   </Button>
                 </div>
               ))}
             </section>
           )}
-          {(invoice.paidAmount ?? 0) > 0 && <section id="payment-correction" className="grid gap-3 rounded-xl border bg-white p-4">
-            <h2 className="flex items-center gap-2 font-semibold"><Pencil className="size-4 text-primary" aria-hidden="true" />Ubah status pembayaran</h2>
-            <p className="text-sm text-muted-foreground">Saat ini dibayar {formatRupiah(invoice.paidAmount ?? 0)}. Isi 0 untuk kembali ke belum bayar, atau jumlah lebih kecil untuk dibayar sebagian. Transaksi pemasukan terkait akan ikut dikoreksi.</p>
-            <TextField label="Total sudah dibayar setelah koreksi" type="amount" prefix="Rp" value={correctedPaidAmount} onChange={setCorrectedPaidAmount} placeholder="0 untuk belum bayar" />
-            <TextField label="Alasan perubahan pembayaran" value={paymentCorrectionReason} onChange={setPaymentCorrectionReason} placeholder="Contoh: nominal transfer keliru" />
-            <Button variant="outline" disabled={busy || !correctedPaidAmount.trim() || !Number.isSafeInteger(parseAmountInput(correctedPaidAmount)) || parseAmountInput(correctedPaidAmount) < 0 || !paymentCorrectionReason.trim() || parseAmountInput(correctedPaidAmount) >= (invoice.paidAmount ?? 0)} onClick={() => void run(async () => {
-              await setInvoicePaidAmount(invoice, parseAmountInput(correctedPaidAmount), paymentCorrectionReason.trim())
-              setCorrectedPaidAmount(""); setPaymentCorrectionReason("")
-            })}><Undo2 aria-hidden="true" />Simpan koreksi pembayaran</Button>
-          </section>}
           <section className="grid gap-3 rounded-xl border bg-white p-4">
             <h2 className="flex items-center gap-2 font-semibold"><ArrowUpRight className="size-4 text-primary" aria-hidden="true" />Uang keluar terkait</h2>
             {relatedExpenses.length ? <>

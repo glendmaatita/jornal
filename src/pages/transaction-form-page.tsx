@@ -121,7 +121,7 @@ export function TransactionFormPage() {
           relatedInvoiceId: string | null
         }> | null) => {
       if (!draft || !active) return
-      if (draft.mode) setMode(draft.mode)
+      if (draft.mode && !supplierInvoiceIdFromUrl) setMode(draft.mode)
       if (typeof draft.amount === "string") setAmount(draft.amount)
       if (typeof draft.description === "string") setDescription(draft.description)
       if (typeof draft.transactionDate === "string") setTransactionDate(draft.transactionDate)
@@ -136,7 +136,7 @@ export function TransactionFormPage() {
       if ("attachmentDataUrl" in draft) setAttachmentDataUrl(draft.attachmentDataUrl ?? null)
       if ("classificationOverride" in draft) setClassificationOverride(draft.classificationOverride ?? null)
       if ("receivableDueDate" in draft) setReceivableDueDate(draft.receivableDueDate ?? null)
-      if ("relatedInvoiceId" in draft) setRelatedInvoiceId(draft.relatedInvoiceId ?? null)
+      if ("relatedInvoiceId" in draft && !supplierInvoiceIdFromUrl) setRelatedInvoiceId(draft.relatedInvoiceId ?? null)
     }
     void (async () => {
       try {
@@ -150,7 +150,7 @@ export function TransactionFormPage() {
       }
     })()
     return () => { active = false }
-  }, [draftKey])
+  }, [draftKey, supplierInvoiceIdFromUrl])
   /* eslint-disable react-hooks/set-state-in-effect -- prefill a repayment from its selected receivable */
   useEffect(() => {
     if (!repaymentSource || editing) return
@@ -248,12 +248,12 @@ export function TransactionFormPage() {
   const invoiceCandidates = useQuery({
     queryKey: ["invoice", "expense-linkable", invoiceSearch],
     queryFn: () => listInvoices({ search: invoiceSearch, expenseLinkable: true, perPage: 100 }),
-    enabled: direction === "MONEY_OUT" && mode !== "transfer",
+    enabled: direction === "MONEY_OUT" && mode !== "transfer" && !supplierInvoiceIdFromUrl,
   })
   const selectedInvoice = useQuery({
-    queryKey: ["invoice", "detail", relatedInvoiceId],
-    queryFn: () => getInvoice(relatedInvoiceId!),
-    enabled: Boolean(relatedInvoiceId),
+    queryKey: ["invoice", "detail", supplierInvoiceIdFromUrl || relatedInvoiceId],
+    queryFn: () => getInvoice((supplierInvoiceIdFromUrl || relatedInvoiceId)!),
+    enabled: Boolean(supplierInvoiceIdFromUrl || relatedInvoiceId),
   })
   const invoiceOptions = [selectedInvoice.data?.invoice, ...(invoiceCandidates.data?.items ?? [])]
     .filter((invoice): invoice is Invoice => Boolean(invoice))
@@ -370,7 +370,7 @@ export function TransactionFormPage() {
         reviewStatus,
         receivableTransactionId: isReceivablePayment ? (repaymentSource?.id ?? editing?.receivableTransactionId ?? null) : null,
         receivableDueDate: isReceivableCreation ? receivableDueDate : null,
-        relatedInvoiceId: direction === "MONEY_OUT" && mode !== "transfer" ? relatedInvoiceId : null,
+        relatedInvoiceId: direction === "MONEY_OUT" && mode !== "transfer" ? supplierInvoiceIdFromUrl || relatedInvoiceId : null,
       } as const
 
       if (editing) {
@@ -546,7 +546,8 @@ export function TransactionFormPage() {
 
       {supplierInvoiceIdFromUrl && !editing && (
         <div className="mb-4 rounded-[10px] border border-[#16579d]/25 bg-[#f1f5fd] p-3 text-sm text-[#16579d]">
-          Catat uang keluar untuk supplier setelah invoice lunas. Isi nominal dan nama supplier, lalu periksa rekening asal sebelum menyimpan. <Link to="/invoices/$invoiceId" params={{ invoiceId: supplierInvoiceIdFromUrl }} className="font-semibold underline">Lihat invoice</Link>
+          <p>Catat uang keluar untuk supplier setelah invoice lunas. Isi nominal dan nama supplier, lalu periksa rekening asal sebelum menyimpan.</p>
+          <p className="mt-2">Invoice terkait: <Link to="/invoices/$invoiceId" params={{ invoiceId: supplierInvoiceIdFromUrl }} className="font-semibold underline">{selectedInvoice.data?.invoice ? formatInvoiceNumber(selectedInvoice.data.invoice.invoiceNumber, selectedInvoice.data.invoice.sequence, selectedInvoice.data.invoice.issueDate) || "Lihat invoice" : "Lihat invoice"}</Link>{selectedInvoice.data?.invoice && <> · Total invoice <strong>{formatRupiah(selectedInvoice.data.invoice.grandTotal)}</strong></>}</p>
         </div>
       )}
 
@@ -624,7 +625,7 @@ export function TransactionFormPage() {
             onChange={setTransactionDate}
           />
 
-          {direction === "MONEY_OUT" && mode !== "transfer" && (
+          {direction === "MONEY_OUT" && mode !== "transfer" && !supplierInvoiceIdFromUrl && (
             <div className="space-y-3 rounded-[10px] border border-border bg-[#f1f5fd] p-3">
               <p className="flex items-center gap-2 text-sm font-semibold"><FileText className="size-4 text-primary" aria-hidden="true" />Invoice terkait (opsional)</p>
               <TextField label="Cari invoice terkait" value={invoiceSearch} onChange={setInvoiceSearch} placeholder="Nomor invoice atau pelanggan" />

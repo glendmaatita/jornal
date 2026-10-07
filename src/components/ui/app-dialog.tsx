@@ -109,7 +109,10 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   }, [dismissCurrent, request])
 
   const tone = request?.tone ?? "default"
-  const isPromptValid = request?.kind !== "prompt" || request.requiredValue === undefined || inputValue === request.requiredValue
+  const isPromptValid = request?.kind !== "prompt" || (
+    (!request.required || inputValue.trim().length > 0)
+    && (request.requiredValue === undefined || inputValue === request.requiredValue)
+  )
   const Icon = tone === "destructive" ? ShieldAlert : request?.kind === "alert" ? Info : AlertTriangle
 
   return (

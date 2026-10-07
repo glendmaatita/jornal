@@ -303,7 +303,7 @@ export function InvoiceFormPage({
     const currentPaid = invoice.paidAmount ?? 0;
     const nextPaid = parseAmountInput(correctedPaidAmount);
     return <div className="space-y-4 pb-8">
-      <header><h1 className="flex items-center gap-2 text-2xl"><FilePen className="size-5 text-primary" aria-hidden="true" />Revisi Invoice</h1><p className="text-sm text-muted-foreground">Koreksi pembayaran untuk kembali ke belum bayar atau dibayar sebagian.</p></header>
+      <header><h1 className="flex items-center gap-2 text-2xl"><FilePen className="size-5 text-primary" aria-hidden="true" />Koreksi total terbayar</h1><p className="text-sm text-muted-foreground">Sesuaikan jumlah yang sudah dibayar untuk kembali ke belum bayar atau dibayar sebagian.</p></header>
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <Card><CardContent className="grid gap-3 p-4">
         <p className="text-sm">Total invoice: <strong>{formatRupiah(invoice.grandTotal)}</strong></p>
