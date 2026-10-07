@@ -295,18 +295,17 @@ export function TransactionFormPage() {
       : undefined
   const descriptionError = mode !== "transfer" && !description.trim() ? "Keterangan wajib diisi." : undefined
   const debtorError = isReceivableCreation && !supplierCustomer.trim() ? "Masukkan nama orang yang meminjam." : undefined
-  const supplierError = supplierInvoiceIdFromUrl && !supplierCustomer.trim() ? "Nama supplier wajib diisi." : undefined
   const supplierAccountError = supplierInvoiceIdFromUrl && !selectedAccountId ? "Pilih rekening asal transfer." : undefined
   const repaymentError = isReceivablePayment && repaymentRemaining !== null && amountValue > repaymentRemaining
     ? `Pembayaran melebihi sisa piutang (${formatNumberInput(repaymentRemaining)}).`
     : undefined
-  const canSave = !amountError && !transferError && !descriptionError && !debtorError && !supplierError && !supplierAccountError && !repaymentError
+  const canSave = !amountError && !transferError && !descriptionError && !debtorError && !supplierAccountError && !repaymentError
 
   useEffect(() => {
     if (!showErrors) return
     const firstInvalid = document.querySelector<HTMLElement>('[aria-invalid="true"]')
     firstInvalid?.focus()
-  }, [showErrors, amountError, transferError, descriptionError, supplierError, supplierAccountError])
+  }, [showErrors, amountError, transferError, descriptionError, supplierAccountError])
 
   const applySmartInput = () => {
     const parsed = parseTransactionInput(smartText)
@@ -546,7 +545,7 @@ export function TransactionFormPage() {
 
       {supplierInvoiceIdFromUrl && !editing && (
         <div className="mb-4 rounded-[10px] border border-[#16579d]/25 bg-[#f1f5fd] p-3 text-sm text-[#16579d]">
-          <p>Catat uang keluar untuk supplier setelah invoice lunas. Isi nominal dan nama supplier, lalu periksa rekening asal sebelum menyimpan.</p>
+          <p>Catat uang keluar untuk supplier setelah invoice lunas. Isi nominal dan periksa rekening asal sebelum menyimpan. Nama supplier boleh dikosongkan.</p>
           <p className="mt-2">Invoice terkait: <Link to="/invoices/$invoiceId" params={{ invoiceId: supplierInvoiceIdFromUrl }} className="font-semibold underline">{selectedInvoice.data?.invoice ? formatInvoiceNumber(selectedInvoice.data.invoice.invoiceNumber, selectedInvoice.data.invoice.sequence, selectedInvoice.data.invoice.issueDate) || "Lihat invoice" : "Lihat invoice"}</Link>{selectedInvoice.data?.invoice && <> · Total invoice <strong>{formatRupiah(selectedInvoice.data.invoice.grandTotal)}</strong></>}</p>
         </div>
       )}
@@ -742,13 +741,12 @@ export function TransactionFormPage() {
                 ))}
               </datalist>
               <TextField
-                label={supplierInvoiceIdFromUrl ? "Nama supplier" : "Supplier / Customer"}
+                label={supplierInvoiceIdFromUrl ? "Nama supplier (opsional)" : "Supplier / Customer"}
                 icon={User}
                 value={supplierCustomer}
                 onChange={setSupplierCustomer}
                 placeholder={isReceivableCreation ? "Nama orang yang meminjam" : supplierInvoiceIdFromUrl ? "Nama supplier" : "Nama supplier atau pelanggan"}
                 list={supplierCustomerListId}
-                error={showErrors ? supplierError : undefined}
               />
               {showErrors && debtorError && <p className="field-error">{debtorError}</p>}
               <datalist id={supplierCustomerListId}>
