@@ -7,6 +7,7 @@ import {
   createRecurringRule,
   createReserve,
   createTransaction,
+  createTransactions,
   deleteAccount,
   deleteCorrection,
   deleteRecurringRule,
@@ -156,6 +157,39 @@ describe("accounts", () => {
 })
 
 describe("transactions", () => {
+  test("saves multiple supplier payments for one invoice as separate expenses", () => {
+    const account = upsertAccount({ name: "BCA", type: "BANK", openingBalance: 0, includedInCash: true })
+    const input = makeInput({ direction: "MONEY_OUT", classification: "OPERATING_EXPENSE", taxClassification: "OPERATING_EXPENSE", relatedInvoiceId: "invoice-1", accountId: account.id })
+    const saved = createTransactions([
+      { ...input, supplierCustomer: "Supplier A", amount: 50_000 },
+      { ...input, supplierCustomer: "Supplier B", amount: 30_000 },
+    ])
+    expect(new Set(saved.map((transaction) => transaction.id)).size).toBe(2)
+    expect(loadTransactions().map((transaction) => [transaction.supplierCustomer, transaction.amount, transaction.relatedInvoiceId])).toEqual([
+      ["Supplier A", 50_000, "invoice-1"], ["Supplier B", 30_000, "invoice-1"],
+    ])
+    expect(loadTransactionHistory()).toHaveLength(2)
+    updateTransaction(saved[0].id, { amount: 45_000 })
+    deleteTransaction(saved[1].id)
+    expect(loadTransactions()).toHaveLength(1)
+    expect(loadTransactions()[0].amount).toBe(45_000)
+    expect(loadTransactions()[0].relatedInvoiceId).toBe("invoice-1")
+  })
+
+  test("rejects an invalid batch before saving any supplier payment", () => {
+    const existing = createTransaction(makeInput())
+    const expense = makeInput({ direction: "MONEY_OUT", classification: "OPERATING_EXPENSE", taxClassification: "OPERATING_EXPENSE", relatedInvoiceId: "invoice-1" })
+    const events: string[] = []
+    const unsubscribe = subscribeFinancialEvents((event) => events.push(event))
+    for (const invalid of [{ amount: 0 }, { amount: NaN }, { accountId: "other-company-account" }, { direction: "MONEY_IN" as const }]) {
+      expect(() => createTransactions([expense, { ...expense, ...invalid }])).toThrow()
+      expect(loadTransactions().map((transaction) => transaction.id)).toEqual([existing.id])
+      expect(loadTransactionHistory()).toHaveLength(1)
+    }
+    unsubscribe()
+    expect(events).toHaveLength(0)
+  })
+
   test("keeps an invoice relation on money-out edits and rejects it on money-in or transfers", () => {
     const expense = createTransaction(makeInput({
       direction: "MONEY_OUT", classification: "OPERATING_EXPENSE", taxClassification: "OPERATING_EXPENSE",

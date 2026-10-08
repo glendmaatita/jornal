@@ -464,32 +464,47 @@ export function reconcileServerTransactionDeletion(transaction: Transaction): bo
 }
 
 function createTransactionRecord(input: NewTransaction, stableId: string = newId()): Transaction {
+  return createTransactionBatch([{ input, id: stableId }])[0]
+}
+
+/** Validate every entry before saving a group of related payments. */
+export function createTransactions(inputs: NewTransaction[]): Transaction[] {
+  return createTransactionBatch(inputs.map((input) => ({ input, id: newId() })))
+}
+
+function createTransactionBatch(entries: { input: NewTransaction; id: string }[]): Transaction[] {
   assertCompanyWritable()
-  validateTransactionLinks(input)
+  if (!entries.length) return []
   const timestamp = nowIso()
-  const transaction: Transaction = {
-    ...input,
-    taxClassification: input.taxClassification ?? input.classification,
-    attachmentDataUrl: input.attachmentDataUrl ?? null,
-    id: stableId,
-    businessId: currentBusinessId(),
-    companyId: currentCompanyId(),
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-  persistTransactions([transaction, ...loadTransactions()])
-  appendTransactionVersion(transaction)
-  if (transaction.classificationSource === "USER" && transaction.description.trim()) {
-    recordCorrection(
-      transaction.description,
-      transaction.categoryId,
-      transaction.classification,
-      transaction.direction,
-    )
+  const transactions = entries.map(({ input, id }): Transaction => {
+    validateFinancialRecord("transactions", input)
+    validateTransactionLinks(input)
+    return {
+      ...input,
+      taxClassification: input.taxClassification ?? input.classification,
+      attachmentDataUrl: input.attachmentDataUrl ?? null,
+      id,
+      businessId: currentBusinessId(),
+      companyId: currentCompanyId(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+  })
+  persistTransactions([...transactions, ...loadTransactions()])
+  for (const transaction of transactions) {
+    appendTransactionVersion(transaction)
+    if (transaction.classificationSource === "USER" && transaction.description.trim()) {
+      recordCorrection(
+        transaction.description,
+        transaction.categoryId,
+        transaction.classification,
+        transaction.direction,
+      )
+    }
   }
   emitFinancialEvent("TRANSACTION_CREATED")
   schedulePocketBaseSync()
-  return transaction
+  return transactions
 }
 
 export function updateTransaction(id: string, patch: Partial<NewTransaction>): Transaction | null {

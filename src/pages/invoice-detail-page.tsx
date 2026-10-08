@@ -27,6 +27,7 @@ import { useAppDialog } from "@/components/ui/app-dialog-context";
 import { DateField } from "@/components/ui/date-field";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
 import { InvoicePaperFit } from "@/components/invoice/invoice-paper-fit";
+import { InvoiceSupplierPayments } from "@/components/invoice/invoice-supplier-payments";
 import { SelectField } from "@/components/ui/select-field";
 import { TextField } from "@/components/ui/text-field";
 import {
@@ -366,24 +367,9 @@ export function InvoiceDetailPage({
                 Invoice lunas
               </h2>
               {(invoice.overpaidAmount ?? Math.max(0, (invoice.paidAmount ?? 0) - invoice.grandTotal)) > 0 && <p className="text-sm font-medium text-amber-800">Terbayar {formatRupiah(invoice.paidAmount ?? 0)} dari total {formatRupiah(invoice.grandTotal)} · Lebih bayar {formatRupiah(invoice.overpaidAmount ?? (invoice.paidAmount ?? 0) - invoice.grandTotal)}</p>}
-              <p className="text-sm text-emerald-900">
-                Jika hasil pembayaran invoice ini dipakai untuk membayar supplier, catat transfer uang keluarnya sekarang.
-              </p>
-              <Link
-                to="/add"
-                search={{
-                  supplierInvoiceId: invoice.id,
-                  direction: "MONEY_OUT",
-                  description: `Bayar supplier untuk invoice ${displayedInvoiceNumber || invoice.id}`,
-                  account: payments[payments.length - 1]?.accountId || undefined,
-                }}
-                className="inline-flex min-h-10 w-fit items-center gap-2 rounded-[10px] bg-[var(--main-dark)] px-4 py-2 text-sm font-semibold text-white"
-              >
-                <ArrowUpRight className="size-4" aria-hidden="true" />
-                Catat transfer ke supplier
-              </Link>
             </section>
           )}
+          {invoice.status === "PAID" && <InvoiceSupplierPayments key={invoice.id} invoice={invoice} accounts={accounts} defaultAccountId={payments[payments.length - 1]?.accountId || effectiveAccountId} />}
           {payments.length > 0 && (
             <section className="grid gap-3 rounded-xl border bg-white p-4">
               <p className="flex items-center gap-2 font-semibold text-emerald-700">
@@ -405,12 +391,15 @@ export function InvoiceDetailPage({
               ))}
             </section>
           )}
-          <section className="grid gap-3 rounded-xl border bg-white p-4">
+          <section className="grid gap-3 rounded-xl border bg-white p-4" aria-label="Uang keluar terkait">
             <h2 className="flex items-center gap-2 font-semibold"><ArrowUpRight className="size-4 text-primary" aria-hidden="true" />Uang keluar terkait</h2>
             {relatedExpenses.length ? <>
               <p className="text-sm text-muted-foreground">{relatedExpenses.length} transaksi · Total {formatRupiah(relatedExpenses.reduce((sum, transaction) => sum + transaction.amount, 0))}</p>
               {relatedExpenses.map((transaction) => <Link key={transaction.id} to="/transactions/$transactionId" params={{ transactionId: transaction.id }} className="flex items-center justify-between gap-3 border-t pt-3 text-sm text-[var(--link)]">
-                <span className="min-w-0 truncate">{formatDateShort(transaction.transactionDate)} · {transaction.description || "Uang keluar"}</span>
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{transaction.supplierCustomer || transaction.description || "Uang keluar"}</span>
+                  <span className="block text-xs text-muted-foreground">{formatDateShort(transaction.transactionDate)} · {accounts.find((account) => account.id === transaction.accountId)?.name || "Tanpa rekening"}</span>
+                </span>
                 <strong className="shrink-0 tabular-nums">{formatRupiah(transaction.amount)}</strong>
               </Link>)}
             </> : <p className="text-sm text-muted-foreground">Belum ada uang keluar yang dikaitkan ke invoice ini.</p>}

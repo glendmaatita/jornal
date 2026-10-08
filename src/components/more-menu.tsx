@@ -1,13 +1,13 @@
 import { useEffect, useId, useState } from "react"
 import { createPortal } from "react-dom"
 import { Link } from "@tanstack/react-router"
-import { Download, Eye, EyeOff, FileText, Inbox, LogOut, Menu, Settings, Users, Wallet, X } from "lucide-react"
+import { Download, Eye, EyeOff, Inbox, LogOut, Menu, Settings, Users, Wallet, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 const links = [
   { to: "/customers", label: "Pelanggan", icon: Users },
-  { to: "/invoices", label: "Invoice", icon: FileText },
+  { to: "/tax", label: "Pajak", icon: Wallet },
   { to: "/inbox", label: "Inbox dokumen", icon: Inbox },
   { to: "/accounts", label: "Rekening", icon: Wallet },
   { to: "/settings", label: "Pengaturan", icon: Settings },

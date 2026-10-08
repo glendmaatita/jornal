@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test"
 
 const backend = "http://127.0.0.1:8090"
-test("pays an invoice and offers a supplier money-out transfer", async ({ page, request }) => {
+test("pays an invoice and records multiple supplier payments", async ({ page, request }, testInfo) => {
   await page.setViewportSize({ width: 360, height: 800 })
   const adminAuth = await request.post(`${backend}/api/collections/_superusers/auth-with-password`, { data: { identity: "e2e-admin@jornal.test", password: "StrongPass123!" } }); expect(adminAuth.ok()).toBeTruthy(); const admin = await adminAuth.json() as { token: string }
   const email = `invoice-e2e-${Date.now()}@example.com`; const createdUser = await request.post(`${backend}/api/collections/users/records`, { headers: { Authorization: admin.token }, data: { email, verified: true, password: "UserPass123!", passwordConfirm: "UserPass123!" } }); expect(createdUser.ok()).toBeTruthy(); const user = await createdUser.json() as { id: string; email: string; verified: boolean; collectionId: string; collectionName: string }; const impersonated = await request.post(`${backend}/api/collections/users/impersonate/${user.id}`, { headers: { Authorization: admin.token } }); const auth = await impersonated.json() as { token: string }
@@ -147,10 +147,55 @@ test("pays an invoice and offers a supplier money-out transfer", async ({ page, 
   await expect(partialCard.locator("strong").filter({ hasText: "Rp100.000" })).toBeVisible()
   await partialCard.click()
   await expect(page.getByText("Dibayar sebagian · revisi", { exact: false })).toBeVisible()
+  await expect(page.getByRole("region", { name: "Pembayaran supplier", exact: true })).toHaveCount(0)
   await expect(page.getByRole("heading", { name: "Ubah status pembayaran" })).toHaveCount(0)
   await page.getByRole("combobox", { name: "Rekening" }).click()
   await page.getByRole("option", { name: /BCA Operasional/ }).click()
   await page.getByRole("button", { name: "Catat pembayaran" }).click()
+  await expect(page.getByRole("heading", { name: "Invoice lunas" })).toBeVisible()
+  const paidInvoiceId = new URL(page.url()).pathname.split("/").pop()!
+  const suppliers = page.getByRole("region", { name: "Pembayaran supplier", exact: true })
+  const expenses = page.getByRole("region", { name: "Uang keluar terkait" })
+  await suppliers.getByRole("button", { name: "Tambah pembayaran supplier" }).click()
+  const firstSupplier = suppliers.getByRole("group", { name: "Pembayaran supplier 1" })
+  await firstSupplier.getByLabel("Nama supplier (opsional)").fill("Supplier bahan")
+  await firstSupplier.getByLabel("Nominal pembayaran supplier").fill("50000")
+  await expect(firstSupplier.getByRole("combobox", { name: "Rekening asal" })).toContainText("BCA")
+  await suppliers.getByRole("button", { name: "Tambah supplier / pembayaran" }).click()
+  const secondSupplier = suppliers.getByRole("group", { name: "Pembayaran supplier 2" })
+  await secondSupplier.getByLabel("Nama supplier (opsional)").fill("Supplier kemasan")
+  await secondSupplier.getByRole("combobox", { name: "Rekening asal" }).click()
+  await page.getByRole("option", { name: /Mandiri Operasional/ }).click()
+  await suppliers.getByRole("button", { name: "Simpan pembayaran supplier" }).click()
+  await expect(secondSupplier.getByText("Masukkan nominal rupiah utuh yang lebih dari nol.")).toBeVisible()
+  await expect(expenses.getByText("Belum ada uang keluar yang dikaitkan ke invoice ini.")).toBeVisible()
+  await secondSupplier.getByLabel("Nominal pembayaran supplier").fill("30000")
+  await suppliers.getByRole("button", { name: "Tambah supplier / pembayaran" }).click()
+  await suppliers.getByRole("button", { name: "Hapus pembayaran supplier 3" }).click()
+  await expect(suppliers.getByText("2 pembayaran baru")).toBeVisible()
+  await expect(suppliers.getByText("Total Rp80.000", { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await suppliers.screenshot({ path: testInfo.outputPath("multiple-suppliers-mobile.png") })
+  await suppliers.getByRole("button", { name: "Simpan pembayaran supplier" }).click()
+  await expect(suppliers.getByRole("status")).toContainText("2 pembayaran supplier tersimpan")
+  await expect(expenses.getByText("2 transaksi · Total Rp80.000")).toBeVisible()
+  await expect(expenses.getByRole("link").filter({ hasText: "Supplier bahan" })).toContainText("BCA Operasional")
+  await expect(expenses.getByRole("link").filter({ hasText: "Supplier kemasan" })).toContainText("Mandiri Operasional")
+  await suppliers.getByRole("button", { name: "Tambah pembayaran supplier" }).click()
+  await firstSupplier.getByLabel("Nama supplier (opsional)").fill("Supplier bahan")
+  await firstSupplier.getByLabel("Nominal pembayaran supplier").fill("10000")
+  await suppliers.getByRole("button", { name: "Simpan pembayaran supplier" }).click()
+  await expect(expenses.getByText("3 transaksi · Total Rp90.000")).toBeVisible()
+  await expect.poll(async () => {
+    const response = await request.get(`${backend}/api/collections/jornal_records/records`, {
+      headers: { Authorization: auth.token, "X-Jornal-Protocol": "3", "X-Jornal-Company": company.id },
+      params: { filter: `company_id = '${company.id}' && entity = 'transactions'`, perPage: 100 },
+    })
+    const body = await response.json() as { items?: Array<{ payload: { relatedInvoiceId?: string; amount: number; supplierCustomer: string; accountId: string } }> }
+    return body.items?.filter((item) => item.payload.relatedInvoiceId === paidInvoiceId).map((item) => [item.payload.supplierCustomer, item.payload.amount, item.payload.accountId]).sort()
+  }, { timeout: 15_000 }).toEqual([["Supplier bahan", 10_000, "browser-bca"], ["Supplier bahan", 50_000, "browser-bca"], ["Supplier kemasan", 30_000, "browser-mandiri"]])
+  await page.reload()
+  await expect(expenses.getByText("3 transaksi · Total Rp90.000")).toBeVisible()
   await expect(page.getByRole("heading", { name: "Invoice lunas" })).toBeVisible()
   await page.getByRole("link", { name: "Catat transfer ke supplier" }).click()
   await expect(page).toHaveURL(/\/add/)

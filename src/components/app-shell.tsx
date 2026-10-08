@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowLeftRight, BarChart3, Download, FilePlus2, Home as HomeIcon, Plus, ReceiptText, RefreshCw, Search, UserPlus, Wallet, X } from "lucide-react"
+import { ArrowLeftRight, BarChart3, Download, FilePlus2, FileText, Home as HomeIcon, Plus, ReceiptText, RefreshCw, Search, UserPlus, X } from "lucide-react"
 
 import { BrandMark } from "@/components/brand-mark"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,7 @@ const DeferredEffects = lazy(() =>
 const tabs = [
   { to: "/", label: "Home", icon: HomeIcon, exact: true },
   { to: "/transactions", label: "Transaksi", icon: ReceiptText, exact: false },
-  { to: "/tax", label: "Pajak", icon: Wallet, exact: false },
+  { to: "/invoices", label: "Invoice", icon: FileText, exact: false },
   { to: "/insights", label: "Insights", icon: BarChart3, exact: false },
 ] as const
 
