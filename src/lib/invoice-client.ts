@@ -170,6 +170,14 @@ export function getInvoiceSettings() {
     ),
   );
 }
+export function getInvoiceSettingsForEditing() {
+  return staleWhileRevalidate("invoice", cacheKey("settings"), () =>
+    send<{ settings: InvoiceSettings; units: InvoiceUnit[] }>(
+      `/api/jornal/invoicing/settings?${query(scope())}`,
+    ),
+    { requireFresh: true },
+  );
+}
 export function updateInvoiceSettings(input: InvoiceSettings) {
   return send<{ settings: InvoiceSettings }>("/api/jornal/invoicing/settings", {
     method: "PUT",

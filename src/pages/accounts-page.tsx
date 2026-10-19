@@ -24,7 +24,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { SelectField } from "@/components/ui/select-field"
 import { TextField } from "@/components/ui/text-field"
 import { currentAccountBalance } from "@/lib/account-balance"
-import { formatDateShort, formatRupiah, formatSignedRupiah, parseAmountInput } from "@/lib/format"
+import { formatDateShort, formatNumberInput, formatRupiah, formatSignedRupiah, parseAmountInput } from "@/lib/format"
 import { queryKeys, useAccounts, useProfile, useTransactions } from "@/lib/queries"
 import { deleteAccount, isCompanyWritable, upsertAccount } from "@/lib/store"
 import { isAccountEnabled, type Account, type AccountType } from "@/lib/types"
@@ -64,7 +64,7 @@ function draftFrom(account: Account): AccountDraft {
     bankName: account.bankName || "",
     accountHolder: account.accountHolder || "",
     accountNumber: account.accountNumber || "",
-    openingBalance: account.openingBalance ? String(account.openingBalance) : "",
+    openingBalance: formatNumberInput(account.openingBalance),
     enabled: isAccountEnabled(account),
   }
 }
@@ -93,6 +93,16 @@ export function AccountsPage() {
   const selected = requested && visibleAccounts.some((account) => account.id === requested.id)
     ? requested
     : visibleAccounts[0] ?? null
+  const editingAccount = accounts.find((account) => account.id === editingId)
+  const editingBalance = useMemo(
+    () => editingAccount ? currentAccountBalance(editingAccount, transactions) : 0,
+    [editingAccount, transactions],
+  )
+  const editingNetMovement = editingAccount ? editingBalance - editingAccount.openingBalance : 0
+  const draftOpeningBalance = parseAmountInput(draft.openingBalance)
+  const openingBalanceChanged = editingAccount
+    && Number.isSafeInteger(draftOpeningBalance)
+    && draftOpeningBalance !== editingAccount.openingBalance
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.accounts })
@@ -175,8 +185,25 @@ export function AccountsPage() {
             <TextField label={draft.type === "EWALLET" ? "Penyedia" : "Nama bank"} icon={Building2} value={draft.bankName} onChange={(bankName) => setDraft((current) => ({ ...current, bankName }))} placeholder={draft.type === "EWALLET" ? "Contoh: GoPay" : "Contoh: BCA"} />
             <TextField label="Nomor rekening" icon={Landmark} value={draft.accountNumber} onChange={(accountNumber) => setDraft((current) => ({ ...current, accountNumber }))} placeholder="Nomor rekening / e-wallet" />
             <TextField label="Nama pemilik rekening" icon={UserRound} value={draft.accountHolder} onChange={(accountHolder) => setDraft((current) => ({ ...current, accountHolder }))} placeholder="Sesuai nama pada rekening" />
-            <TextField label="Saldo awal" type="amount" prefix="Rp" value={draft.openingBalance} onChange={(openingBalance) => setDraft((current) => ({ ...current, openingBalance }))} hint="Saldo sebelum mutasi pertama." />
+            <TextField label="Saldo awal" type="amount" prefix="Rp" value={draft.openingBalance} onChange={(openingBalance) => setDraft((current) => ({ ...current, openingBalance }))} hint="Saldo sebelum mutasi pertama. Perubahan saldo awal ikut mengubah saldo saat ini." />
           </div>
+          {editingAccount && (
+            <div className="space-y-2 rounded-xl border bg-slate-50 p-4 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold">Saldo saat ini · {editingAccount.name}</span>
+                <span className="font-semibold tabular-nums">{formatRupiah(editingBalance)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Saldo awal tersimpan {formatRupiah(editingAccount.openingBalance)} + mutasi bersih hingga hari ini ({formatSignedRupiah(editingNetMovement)}).
+              </p>
+              {openingBalanceChanged && (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                  <span>Saldo setelah perubahan disimpan</span>
+                  <span className="font-semibold tabular-nums">{formatRupiah(draftOpeningBalance + editingNetMovement)}</span>
+                </div>
+              )}
+            </div>
+          )}
           {editingId && (
             <button type="button" onClick={() => setDraft((current) => ({ ...current, enabled: !current.enabled }))} className="flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left">
               <span><span className="block text-sm font-semibold">Rekening aktif</span><span className="block text-xs text-muted-foreground">Rekening aktif tersedia untuk transaksi baru.</span></span>

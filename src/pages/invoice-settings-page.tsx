@@ -34,7 +34,7 @@ import { TextField } from "@/components/ui/text-field";
 import {
   createInvoiceUnit,
   exportInvoiceBackup,
-  getInvoiceSettings,
+  getInvoiceSettingsForEditing,
   previewInvoiceBackup,
   restoreInvoiceBackup,
   updateInvoiceSettings,
@@ -77,7 +77,7 @@ export function InvoiceSettingsPage() {
   const [savedFingerprint, setSavedFingerprint] = useState("");
   const restoreInput = useRef<HTMLInputElement>(null);
   const load = async () => {
-    const result = await getInvoiceSettings();
+    const result = await getInvoiceSettingsForEditing();
     setSettings(result.settings);
     setUnits(result.units);
   };

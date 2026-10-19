@@ -63,8 +63,13 @@ function refresh<T>(namespace: string, key: string, load: () => Promise<T>) {
 }
 
 /** Return durable data immediately and refresh it without blocking the UI. */
-export async function staleWhileRevalidate<T>(namespace: string, key: string, load: () => Promise<T>): Promise<T> {
+export async function staleWhileRevalidate<T>(namespace: string, key: string, load: () => Promise<T>, options: { requireFresh?: boolean } = {}): Promise<T> {
   const cached = await readPersistentCache<T>(key)
+  // Editable settings must start from the server revision, not a snapshot
+  // that can remain in form state after the background refresh finishes.
+  if (options.requireFresh && (typeof navigator === "undefined" || navigator.onLine !== false)) {
+    return refresh(namespace, key, load)
+  }
   if (cached !== undefined) {
     if (typeof navigator === "undefined" || navigator.onLine !== false) {
       void refresh(namespace, key, load).catch(() => undefined)
