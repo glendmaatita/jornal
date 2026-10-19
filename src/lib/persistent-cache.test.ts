@@ -7,6 +7,23 @@ import { clearPersistentCache, clearPersistentCachePrefix, staleWhileRevalidate,
 beforeEach(() => resetStorage())
 
 describe("persistent stale-while-revalidate cache", () => {
+  test("loads current payment instructions before initializing an editable form", async () => {
+    const key = "cache.invoice.settings"
+    await writePersistentCache(key, { paymentInstructions: [] })
+    const fresh = { paymentInstructions: [{ name: "BCA", accountNumber: "123", accountHolder: "Toko" }] }
+    const result = await staleWhileRevalidate("invoice", key, async () => fresh, { requireFresh: true })
+    expect(result).toEqual(fresh)
+    expect(JSON.parse(localStorageShim.getItem(key)!)).toEqual(fresh)
+  })
+
+  test("does not present stale settings as current when the server request fails", async () => {
+    const key = "cache.invoice.settings-error"
+    await writePersistentCache(key, { paymentInstructions: [] })
+    await expect(staleWhileRevalidate("invoice", key, async () => {
+      throw new Error("Server unavailable")
+    }, { requireFresh: true })).rejects.toThrow("Server unavailable")
+  })
+
   test("returns the local snapshot before a slow refresh finishes", async () => {
     await writePersistentCache("cache.invoice.summary", { total: 10 })
     let finish!: (value: { total: number }) => void

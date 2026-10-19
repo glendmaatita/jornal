@@ -5,9 +5,9 @@
   "type": "module",
   "packageManager": "bun@1.4.0",
   "scripts": {
-    "dev": "vite",
+    "dev": "node init && vite",
     "icons": "bun scripts/generate-icons.ts",
-    "build": "tsc -b && vite build",
+    "build": "node init && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "bun run server.ts",
     "test": "bun test --path-ignore-patterns='**/*.integration.test.ts'",
